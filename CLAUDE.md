@@ -37,20 +37,53 @@
 
 ## Plugin Marketplace Distribution
 
-SCC is distributed as a Claude Code plugin marketplace. Users can add it with:
+SCC is distributed as a Claude Code plugin marketplace.
+
+### First-Time Installation
+
+**Important:** After cloning, run the setup script once:
+
+```bash
+git clone https://github.com/avenir/sketchup-claude-code.git
+cd sketchup-claude-code
+./setup.sh
+```
+
+The setup script will:
+1. Install `uv` (if not present)
+2. Install Python dependencies for the MCP server
+3. Guide you through SketchUp Ruby plugin installation
+
+### Adding the Plugin to Claude Code
 
 ```bash
 /plugin marketplace add https://github.com/avenir/sketchup-claude-code
 /plugin install sketchup-claude-code@sketchup-claude-code
 ```
 
-**Installation requirements:**
-1. **Ruby SketchUp plugin** (`su_bridge/`): Must be installed in SketchUp's Plugins folder
-   - Copy `su_bridge/` to SketchUp's `Plugins/` directory
-   - Restart SketchUp to load the plugin
-2. **Python MCP server**: Loaded automatically when the Claude Code plugin is enabled
-   - Requires `uv` in PATH for running the MCP server
-   - Socket bridge connects to SketchUp via `/tmp/su_bridge.sock`
+### SketchUp Ruby Plugin Installation
+
+The Ruby plugin must be installed manually in SketchUp:
+
+1. Find your SketchUp Plugins folder:
+   - macOS: `~/Library/Application Support/SketchUp/SketchUp 2024/SketchUp/Plugins/`
+   - Windows: `C:\Users\YourName\AppData\Roaming\SketchUp\SketchUp 2024\SketchUp\Plugins\`
+
+2. Copy the `su_bridge/` folder to the Plugins folder
+
+3. Restart SketchUp
+
+4. In SketchUp Ruby Console, run:
+   ```ruby
+   load 'su_bridge/lib/su_bridge.rb'
+   SuBridge.start
+   ```
+
+### Updating
+
+```bash
+git pull && ./setup.sh
+```
 
 **Plugin components:**
 - `mcpServers.sketchup-mcp`: Python FastMCP server for Claude Code tools
@@ -61,6 +94,7 @@ SCC is distributed as a Claude Code plugin marketplace. Users can add it with:
 ```
 sketchup-claude-code/
 ├── CLAUDE.md                          # Project constitution (this file)
+├── setup.sh                           # First-time setup script
 ├── .claude-plugin/                    # Claude Code plugin marketplace
 │   ├── marketplace.json               # Marketplace catalog for /plugin marketplace add
 │   └── plugin.json                    # Plugin manifest with MCP server config
