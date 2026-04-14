@@ -1,0 +1,23 @@
+{
+  "name": "sketchup-claude-code",
+  "version": "0.1.0",
+  "description": "Natural language SketchUp modeling with Claude Code. Create walls, boxes, furniture, apply materials, set camera views, capture designs, and search Sketchfab for 3D models using conversational commands.",
+  "author": {
+    "name": "avenir",
+    "url": "https://github.com/avenir/sketchup-claude-code"
+  },
+  "homepage": "https://github.com/avenir/sketchup-claude-code",
+  "repository": "https://github.com/avenir/sketchup-claude-code",
+  "license": "MIT",
+  "keywords": ["sketchup", "3d-modeling", "interior-design", "architecture", "design", "sketchfab"],
+
+  "skills": "./skills/",
+
+  "mcpServers": {
+    "sketchup-mcp": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "mcp_server.server"],
+      "cwd": "${CLAUDE_PLUGIN_ROOT}/mcp_server"
+    }
+  }
+}
