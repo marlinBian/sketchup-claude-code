@@ -1,101 +1,86 @@
 # SCC (SketchUp-Claude-Code)
 
-SCC enables bidirectional communication between Claude Code and SketchUp, allowing interior designers to create 3D models using natural language commands.
+让室内设计师使用自然语言在 SketchUp 中创建 3D 模型。
 
-## Features
+---
 
-- **Natural Language Interface**: Control SketchUp using natural language (e.g., "add a 2m x 3m window on the south wall")
-- **Foundation Modeling**: Create basic geometric elements (faces, walls, boxes, doors, windows, stairs)
-- **Component Library**: Search and place furniture from built-in or custom component libraries
-- **Semantic Positioning**: Position objects relative to each other (e.g., "lamp above dining table")
-- **Style Presets**: Apply design styles (Scandinavian, Modern Industrial, Japandi, etc.)
-- **Design Export**: Export to glTF and IFC formats
-
-## Requirements
-
-- **SketchUp** (2021 or later)
-- **Python** 3.11+
-- **Ruby** 3.2+
-
-## Quick Start
+## 设计师安装（推荐方式）
 
 ```bash
-# 1. Clone repository
-git clone https://github.com/avenir/sketchup-claude-code.git
-cd sketchup-claude-code
+# 1. 通过 Claude Code 安装插件
+/plugin marketplace add https://github.com/marlinBian/sketchup-claude-code
+/plugin install sketchup-claude-code
 
-# 2. Install Python dependencies
-cd mcp_server && pip install uv && uv sync && cd ..
+# 2. 复制 SketchUp 插件（一次性操作）
+cp -r ~/.claude/plugins/sketchup-claude-code/su_bridge ~/Library/Application\ Support/SketchUp/SketchUp\ 2024/SketchUp/Plugins/
 
-# 3. Copy su_bridge to SketchUp plugins folder
-# macOS: ~/Library/Application Support/SketchUp/SketchUp 2024/SketchUp/Plugins/
-# Windows: C:\Users\<You>\AppData\Roaming\SketchUp\SketchUp 2024\SketchUp\Plugins\
-
-# 4. Start MCP server
-cd mcp_server && uv run python -m mcp_server.server
-
-# 5. In SketchUp Ruby Console:
-load 'su_bridge/lib/su_bridge.rb'
+# 3. 在 SketchUp Ruby 控制台运行一次
+load '~/Library/Application Support/SketchUp/SketchUp 2024/SketchUp/Plugins/su_bridge/lib/su_bridge.rb'
 SuBridge.start
+
+# 4. 创建设计项目目录并开始
+mkdir ~/Design/my-room && cd ~/Design/my-room
+claude
+
+# 5. 开始设计！
+# "创建一个 4米 x 5米的客厅，层高 2.4米"
 ```
 
-## Usage Example
+---
 
-```
-You: Create a 4m x 5m living room with 2.4m ceiling height
-You: Add a three-seater sofa against the north wall
-You: Place a coffee table 600mm in front of the sofa
-You: Apply the Scandinavian style
-```
+## 快速开始
 
-## MCP Tools
+### 在 SketchUp 中加载插件
 
-### Foundation Modeling
-- `create_face`, `create_box`, `create_wall`, `create_group`
-- `create_door`, `create_window`, `create_stairs`
-- `move_entity`, `rotate_entity`, `scale_entity`, `copy_entity`
-- `apply_material`, `apply_style`
+1. 确保 `su_bridge` 已复制到 SketchUp 插件目录
+2. 重启 SketchUp
+3. 在 SketchUp Ruby 控制台中运行：
+   ```ruby
+   SuBridge.start
+   ```
 
-### Component Search
-- `search_local_library`, `search_sketchfab_models`, `place_component`
+### 开始设计
 
-### Export
-- `export_gltf`, `export_ifc`
+在 Claude Code 中切换到项目目录，然后说：
+- "创建一个 4米 x 5米的客厅，层高 2.4米"
+- "添加一套北欧风格的沙发"
+- "在餐桌上方 1.2米 放置吊灯"
 
-## Project Structure
+---
 
-```
-sketchup-claude-code/
-├── CLAUDE.md              # Project constitution
-├── LICENSE                # MIT License
-├── README.md              # This file
-├── mcp_server/            # Python MCP server
-│   ├── mcp_server/
-│   │   ├── server.py      # FastMCP entry point
-│   │   ├── tools/         # MCP tools
-│   │   └── resources/     # Design model resources
-│   └── tests/             # Python tests
-├── su_bridge/             # Ruby SketchUp plugin
-│   ├── lib/su_bridge/     # Main bridge code
-│   └── spec/              # Ruby tests
-├── skills/                # LLM instruction sets
-└── specs/                 # Protocol definitions
-```
+## 常用指令
 
-## Testing
+| 指令 | 功能 |
+|------|------|
+| 开始新项目 | 初始化新设计 |
+| 添加 [家具类型] | 放置家具 |
+| 移动 [物体] 到 [位置] | 调整布局 |
+| 应用 [风格名称] | 应用设计风格 |
+| 帮我拍几张照 | 多角度截图 |
 
-```bash
-# Python tests
-cd mcp_server && uv run pytest tests/ -v
+---
 
-# Ruby tests
-cd su_bridge && bundle exec rspec spec/
+## 设计风格
 
-# Syntax check
-ruby -c su_bridge/lib/su_bridge.rb
-python3 -m py_compile mcp_server/mcp_server/server.py
-```
+- 奶油风（日式+北欧）
+- 北欧风
+- 工业风
+- 地中海风
+- 波西米亚风
+- 现代极简
 
-## License
+---
 
-MIT License - see [LICENSE](LICENSE)
+## 系统要求
+
+- SketchUp 2021+
+- Python 3.11+
+- Ruby 3.2+
+
+---
+
+## 更多信息
+
+- [设计师快速上手](./QUICKSTART.md) - 更详细的操作指南
+- [完整安装指南](./INSTALLATION.md) - 开发者贡献指南
+- [开发文档](./DEVELOPMENT.md) - 项目架构和技术细节

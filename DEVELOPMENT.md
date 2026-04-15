@@ -1,59 +1,5 @@
 # SCC (SketchUp-Claude-Code) Project Constitution
 
----
-
-## ⚠️ CRITICAL: Two Independent Perspectives
-
-This project serves TWO completely different use cases. You MUST understand both:
-
-### 👤 Designer Perspective (End User)
-
-**Designer NEVER clones this repository!**
-
-Designers install via Claude Code plugin marketplace:
-```bash
-# 1. Install plugin via Claude Code
-/plugin marketplace add https://github.com/marlinBian/sketchup-claude-code
-/plugin install sketchup-claude-code
-
-# 2. Create a clean project directory
-mkdir ~/Design/my-room && cd ~/Design/my-room
-claude
-
-# 3. Start designing - that's it!
-# "Create a 4m x 5m living room with Scandinavian style"
-```
-
-Designer's working directory contains ONLY:
-```
-~/Design/my-room/
-├── design_model.json   ← AI reads/writes this
-└── model.skp          ← SketchUp file
-```
-
-Designers NEVER see: `skills/`, `rules/`, `mcp_server/`, `su_bridge/`, `specs/`
-
-### 👨‍💻 Developer Perspective (You)
-
-You work in the **repository directory**:
-```
-~/Code/sketchup-claude-code/   ← Full source code
-├── skills/                   ← Modify to improve designer experience
-├── rules/                   ← Modify to add constraints
-├── mcp_server/              ← Modify MCP tools
-├── su_bridge/               ← Modify Ruby SketchUp plugin
-├── specs/                   ← Protocol documentation
-└── .claude-plugin/          ← Plugin configuration
-```
-
-When developing:
-- Modify skills/rules to improve AI behavior
-- Test changes locally
-- Push to GitHub when ready
-- Designers get updates via marketplace
-
----
-
 ## Overview
 
 **SCC** enables bidirectional communication between an LLM (Claude Code) and SketchUp for interior design automation. Designers issue natural language commands like "add a 2m x 3m window on the south wall" and receive confirmation with spatial feedback.
@@ -240,44 +186,35 @@ Hooks are **automation triggers** on events:
 
 ## Plugin Marketplace Distribution
 
-SCC is distributed as a Claude Code plugin marketplace. **Designers do NOT clone the repository!**
+SCC is distributed as a Claude Code plugin marketplace.
 
-### For Designers: Installation
+### First-Time Installation
 
 ```bash
-# 1. Install SCC plugin via Claude Code
-/plugin marketplace add https://github.com/marlinBian/sketchup-claude-code
-/plugin install sketchup-claude-code
-
-# 2. Copy SketchUp plugin (one-time)
-/plugin install sketchup-claude-code@sketchup-claude-code --setup
-
-# 3. In SketchUp Ruby Console, run once:
-load '~/Library/Application Support/SketchUp/SketchUp 2024/SketchUp/Plugins/su_bridge/lib/su_bridge.rb'
-SuBridge.start
-
-# 4. Create your design project
-mkdir ~/Design/my-room && cd ~/Design/my-room
-claude
-
-# 5. Start designing!
+git clone https://github.com/avenir/sketchup-claude-code.git
+cd sketchup-claude-code
+./setup.sh
 ```
 
-### For Developers: Local Testing
+### Adding the Plugin to Claude Code
 
 ```bash
-# Clone to local plugin directory for testing
-git clone https://github.com/marlinBian/sketchup-claude-code ~/.claude/plugins/sketchup-claude-code
+/plugin marketplace add https://github.com/avenir/sketchup-claude-code
+/plugin install sketchup-claude-code@sketchup-claude-code
+```
 
-# Copy su_bridge to SketchUp plugins folder
-cp -r ~/.claude/plugins/sketchup-claude-code/su_bridge ~/Library/Application\ Support/SketchUp/SketchUp\ 2024/SketchUp/Plugins/
+### SketchUp Ruby Plugin Installation
 
-# Run setup
-cd ~/.claude/plugins/sketchup-claude-code && ./setup.sh
+```bash
+# Find SketchUp Plugins folder
+# macOS: ~/Library/Application Support/SketchUp/SketchUp 2024/SketchUp/Plugins/
+# Windows: C:\Users\YourName\AppData\Roaming\SketchUp\SketchUp 2024\SketchUp\Plugins\
 
-# Test in a clean project directory
-mkdir ~/Design/test && cd ~/Design/test
-claude
+# Copy su_bridge/ folder to Plugins folder
+
+# In SketchUp Ruby Console:
+load 'su_bridge/lib/su_bridge.rb'
+SuBridge.start
 ```
 
 ---

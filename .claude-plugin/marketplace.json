@@ -1,8 +1,8 @@
 {
   "name": "sketchup-claude-code",
   "owner": {
-    "name": "avenir",
-    "email": "avenir@example.com"
+    "name": "marlinBian",
+    "email": "bianxu5555@gmail.com"
   },
   "metadata": {
     "description": "Natural language SketchUp modeling with Claude Code - design interior spaces using conversational AI"
@@ -14,7 +14,7 @@
       "description": "Natural language SketchUp modeling. Create walls, boxes, furniture placement, materials, lighting, camera views, and design captures using conversational commands.",
       "version": "0.1.0",
       "author": {
-        "name": "avenir"
+        "name": "marlinBian"
       },
       "keywords": ["sketchup", "3d-modeling", "interior-design", "architecture", "design"]
     }
