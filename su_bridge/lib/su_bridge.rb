@@ -26,9 +26,7 @@ module SuBridge
   end
 
   def self.start
-    # Initialize DesignModelSync and register observer
     design_sync.register_observer
-
     ServerListener.new.start
   end
 end

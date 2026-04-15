@@ -168,9 +168,9 @@ module SuBridge
     #
     # @return [Hash] Result with counts of synced entities
     def sync_to_file!
-      return { error: "Model not available" } unless sketchup.active_model
+      return { error: "Model not available" } unless ::Sketchup.active_model
 
-      model = sketchup.active_model
+      model = ::Sketchup.active_model
       data = load || create_empty_model
 
       # Update timestamp
@@ -193,10 +193,10 @@ module SuBridge
     #
     # @return [Hash] Result with counts of synced entities
     def sync_from_file!
-      return { error: "Model not available" } unless sketchup.active_model
+      return { error: "Model not available" } unless ::Sketchup.active_model
       return { error: "design_model.json not found" } unless File.exist?(@design_model_path)
 
-      model = sketchup.active_model
+      model = ::Sketchup.active_model
       data = load
 
       return { error: "Failed to load design_model.json" } unless data
@@ -212,10 +212,10 @@ module SuBridge
     def register_observer
       return @observer if @observer
 
-      model = sketchup.active_model
+      model = ::Sketchup.active_model
       return nil unless model
 
-      @observer = Hooks::EntityObserver.new(self)
+      @observer = EntityObserver.new(self)
       model.add_observer(@observer)
       @observer
     end
@@ -224,7 +224,7 @@ module SuBridge
     def unregister_observer
       return unless @observer
 
-      model = sketchup.active_model
+      model = ::Sketchup.active_model
       model.remove_observer(@observer) if model
       @observer = nil
     end
@@ -234,7 +234,7 @@ module SuBridge
     # Get default project path based on current model
     # @return [String] Default project path
     def default_project_path
-      model = sketchup.active_model
+      model = ::Sketchup.active_model
       if model && model.path && !model.path.empty?
         File.dirname(model.path)
       else
@@ -367,7 +367,7 @@ module SuBridge
       return false unless AI_LAYERS.include?(entity.layer.name)
 
       # Only track groups and component instances for now
-      entity.is_a?((sketchup)::Group) || entity.is_a?((sketchup)::ComponentInstance)
+      entity.is_a?(::Sketchup::Group) || entity.is_a?(::Sketchup::ComponentInstance)
     end
 
     # Apply components from design model to SketchUp model
@@ -425,7 +425,7 @@ module SuBridge
 
   # SketchUp Entity Observer for automatic design model sync
   # Uses debounced sync to batch changes and avoid excessive file I/O
-  class EntityObserver < (sketchup)::ModelObserver
+  class EntityObserver < (::Sketchup)::ModelObserver
     def initialize(sync_manager)
       @sync_manager = sync_manager
       @pending_changes = []
@@ -514,7 +514,7 @@ module SuBridge
     def onEntityChange(model, entity)
       return unless Hooks.enabled?
       return unless should_track?(entity)
-      return unless entity.is_a?(sketchup::Group) || entity.is_a?(sketchup::ComponentInstance)
+      return unless entity.is_a?(::Sketchup::Group) || entity.is_a?(::Sketchup::ComponentInstance)
 
       @lock.synchronize do
         @pending_changes << {
