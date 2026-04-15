@@ -66,14 +66,16 @@ ehthumbs.db
 # Design projects (user data)
 designs/
 
-# Import/export files
-*.gltf
-*.glb
-*.ifc
-*.obj
-*.fbx
+# Private/sensitive files
+Readme_For_Wife.md
+README_For_Wife.md
+*.md.bak
+private/
 
 # Environment
 .env
 .env.local
 .env.*.local
+
+# Python lock files (platform-specific)
+uv.lock
