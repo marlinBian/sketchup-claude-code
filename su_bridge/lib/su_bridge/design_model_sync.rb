@@ -163,9 +163,9 @@ module SuBridge
     #
     # @return [Hash] Result with counts of synced entities
     def sync_to_file!
-      return { error: "Model not available" } unless SketchUp.active_model
+      return { error: "Model not available" } unless ::SketchUp.active_model
 
-      model = SketchUp.active_model
+      model = ::SketchUp.active_model
       data = load || create_empty_model
 
       # Update timestamp
@@ -188,10 +188,10 @@ module SuBridge
     #
     # @return [Hash] Result with counts of synced entities
     def sync_from_file!
-      return { error: "Model not available" } unless SketchUp.active_model
+      return { error: "Model not available" } unless ::SketchUp.active_model
       return { error: "design_model.json not found" } unless File.exist?(@design_model_path)
 
-      model = SketchUp.active_model
+      model = ::SketchUp.active_model
       data = load
 
       return { error: "Failed to load design_model.json" } unless data
@@ -207,7 +207,7 @@ module SuBridge
     def register_observer
       return @observer if @observer
 
-      model = SketchUp.active_model
+      model = ::SketchUp.active_model
       return nil unless model
 
       @observer = Hooks::EntityObserver.new(self)
@@ -219,7 +219,7 @@ module SuBridge
     def unregister_observer
       return unless @observer
 
-      model = SketchUp.active_model
+      model = ::SketchUp.active_model
       model.remove_observer(@observer) if model
       @observer = nil
     end
@@ -229,7 +229,7 @@ module SuBridge
     # Get default project path based on current model
     # @return [String] Default project path
     def default_project_path
-      model = SketchUp.active_model
+      model = ::SketchUp.active_model
       if model && model.path && !model.path.empty?
         File.dirname(model.path)
       else
