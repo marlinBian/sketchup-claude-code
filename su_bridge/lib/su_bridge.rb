@@ -13,13 +13,22 @@ require "su_bridge/entities/component_manager"
 require "su_bridge/entities/group_builder"
 require "su_bridge/entities/material_applier"
 require "su_bridge/protocol/json_rpc_handler"
+require "su_bridge/design_model_sync"
 
 module SuBridge
   class Error < StandardError; end
 
   # SOCKET_PATH is now in version.rb to ensure it's defined before other files load
 
+  # @return [DesignModelSync] Singleton instance for design model sync
+  def self.design_sync
+    @design_sync ||= DesignModelSync.new
+  end
+
   def self.start
+    # Initialize DesignModelSync and register observer
+    design_sync.register_observer
+
     ServerListener.new.start
   end
 end

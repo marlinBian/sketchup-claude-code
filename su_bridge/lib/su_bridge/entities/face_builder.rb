@@ -89,8 +89,12 @@ module SuBridge
       end
 
       def self.apply_material(entity, material_id)
-        # Material resolution would happen here
-        # For now, materials are looked up by ID
+        return unless material_id
+
+        material = sketchup.active_model.materials[material_id]
+        return unless material
+
+        entity.material = material
       end
 
       private

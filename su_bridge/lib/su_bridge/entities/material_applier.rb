@@ -182,6 +182,42 @@ module SuBridge
             { "id" => "industrial_metal_black", "color" => "#2A2A2A", "criteria" => { "type" => "furniture" } },
           ]
         },
+        "scandinavian" => {
+          "name" => "Scandinavian",
+          "materials" => [
+            { "id" => "scandi_wall_white", "color" => "#FAFAFA", "criteria" => { "type" => "wall" } },
+            { "id" => "scandi_floor_light_wood", "color" => "#E8DCC8", "criteria" => { "type" => "floor" } },
+            { "id" => "scandi_wood_oak", "color" => "#D4B896", "criteria" => { "type" => "furniture" } },
+            { "id" => "scandi_trim_white", "color" => "#FFFFFF", "criteria" => { "type" => "trim" } },
+          ]
+        },
+        "mediterranean" => {
+          "name" => "Mediterranean",
+          "materials" => [
+            { "id" => "mediterr_wall_terracotta", "color" => "#D4A574", "criteria" => { "type" => "wall" } },
+            { "id" => "mediterr_floor_tile", "color" => "#C17F59", "criteria" => { "type" => "floor" } },
+            { "id" => "mediterr_wood_warm", "color" => "#8B5A2B", "criteria" => { "type" => "furniture" } },
+            { "id" => "mediterr_blue_accent", "color" => "#5B7C99", "criteria" => { "type" => "trim" } },
+          ]
+        },
+        "bohemian" => {
+          "name" => "Bohemian",
+          "materials" => [
+            { "id" => "boho_wall_cream", "color" => "#F5E6D3", "criteria" => { "type" => "wall" } },
+            { "id" => "boho_floor_terracotta", "color" => "#C67B5C", "criteria" => { "type" => "floor" } },
+            { "id" => "boho_wood_walnut", "color" => "#5D4037", "criteria" => { "type" => "furniture" } },
+            { "id" => "boho_pattern_accent", "color" => "#D4A574", "criteria" => { "type" => "trim" } },
+          ]
+        },
+        "contemporary_minimalist" => {
+          "name" => "Contemporary Minimalist",
+          "materials" => [
+            { "id" => "minimal_wall_pure_white", "color" => "#F5F5F5", "criteria" => { "type" => "wall" } },
+            { "id" => "minimal_floor_concrete", "color" => "#9E9E9E", "criteria" => { "type" => "floor" } },
+            { "id" => "minimal_metal_chrome", "color" => "#757575", "criteria" => { "type" => "furniture" } },
+            { "id" => "minimal_trim_matte", "color" => "#EEEEEE", "criteria" => { "type" => "trim" } },
+          ]
+        },
       }.freeze
 
       class ValidationError < StandardError; end

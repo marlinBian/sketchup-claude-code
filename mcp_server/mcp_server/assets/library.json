@@ -1,0 +1,374 @@
+{
+  "version": "1.0.0",
+  "description": "SCC Component Library for Interior Design",
+  "components": [
+    {
+      "id": "sofa_modern_2seat",
+      "name": "现代双人沙发",
+      "name_en": "Modern 2-Seat Sofa",
+      "skp_path": "${SKETCHUP_ASSETS}/furniture/sofa_2seat_modern.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [1800, 900, 850]
+      },
+      "insertion_point": {
+        "offset": [900, 450, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["sofa", "沙发", "living_room", "客厅", "seating", "2-seat"]
+    },
+    {
+      "id": "sofa_modern_3seat",
+      "name": "现代三人沙发",
+      "name_en": "Modern 3-Seat Sofa",
+      "skp_path": "${SKETCHUP_ASSETS}/furniture/sofa_3seat_modern.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [2400, 900, 850]
+      },
+      "insertion_point": {
+        "offset": [1200, 450, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["sofa", "沙发", "living_room", "客厅", "seating", "3-seat"]
+    },
+    {
+      "id": "coffee_table_rect",
+      "name": "长方形茶几",
+      "name_en": "Rectangular Coffee Table",
+      "skp_path": "${SKETCHUP_ASSETS}/furniture/coffee_table_rect.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [1200, 600, 450]
+      },
+      "insertion_point": {
+        "offset": [600, 300, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["coffee_table", "茶几", "living_room", "客厅", "table"]
+    },
+    {
+      "id": "dining_table_4seat",
+      "name": "四人餐桌",
+      "name_en": "4-Seat Dining Table",
+      "skp_path": "${SKETCHUP_ASSETS}/furniture/dining_table_4.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [1600, 900, 750]
+      },
+      "insertion_point": {
+        "offset": [800, 450, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["dining_table", "餐桌", "dining_room", "餐厅", "table", "4-seat"]
+    },
+    {
+      "id": "dining_table_6seat",
+      "name": "六人餐桌",
+      "name_en": "6-Seat Dining Table",
+      "skp_path": "${SKETCHUP_ASSETS}/furniture/dining_table_6.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [2000, 1000, 750]
+      },
+      "insertion_point": {
+        "offset": [1000, 500, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["dining_table", "餐桌", "dining_room", "餐厅", "table", "6-seat"]
+    },
+    {
+      "id": "dining_chair",
+      "name": "餐椅",
+      "name_en": "Dining Chair",
+      "skp_path": "${SKETCHUP_ASSETS}/furniture/dining_chair.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [450, 500, 900]
+      },
+      "insertion_point": {
+        "offset": [225, 250, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["chair", "餐椅", "dining_room", "餐厅", "seating"]
+    },
+    {
+      "id": "bed_single",
+      "name": "单人床",
+      "name_en": "Single Bed",
+      "skp_path": "${SKETCHUP_ASSETS}/furniture/bed_single.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [1000, 2000, 500]
+      },
+      "insertion_point": {
+        "offset": [500, 1000, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["bed", "床", "bedroom", "卧室", "single"]
+    },
+    {
+      "id": "bed_double",
+      "name": "双人床",
+      "name_en": "Double Bed",
+      "skp_path": "${SKETCHUP_ASSETS}/furniture/bed_double.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [1500, 2000, 500]
+      },
+      "insertion_point": {
+        "offset": [750, 1000, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["bed", "床", "bedroom", "卧室", "double"]
+    },
+    {
+      "id": "bed_queen",
+      "name": "大床",
+      "name_en": "Queen Bed",
+      "skp_path": "${SKETCHUP_ASSETS}/furniture/bed_queen.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [1800, 2000, 550]
+      },
+      "insertion_point": {
+        "offset": [900, 1000, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["bed", "床", "bedroom", "卧室", "queen"]
+    },
+    {
+      "id": "nightstand",
+      "name": "床头柜",
+      "name_en": "Nightstand",
+      "skp_path": "${SKETCHUP_ASSETS}/furniture/nightstand.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [500, 400, 600]
+      },
+      "insertion_point": {
+        "offset": [250, 200, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["nightstand", "床头柜", "bedroom", "卧室", "storage"]
+    },
+    {
+      "id": "wardrobe",
+      "name": "衣柜",
+      "name_en": "Wardrobe",
+      "skp_path": "${SKETCHUP_ASSETS}/furniture/wardrobe.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [1800, 600, 2100]
+      },
+      "insertion_point": {
+        "offset": [900, 300, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["wardrobe", "衣柜", "bedroom", "卧室", "storage"]
+    },
+    {
+      "id": "desk",
+      "name": "书桌",
+      "name_en": "Desk",
+      "skp_path": "${SKETCHUP_ASSETS}/furniture/desk.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [1200, 600, 750]
+      },
+      "insertion_point": {
+        "offset": [600, 300, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["desk", "书桌", "study", "书房", "office", "办公"]
+    },
+    {
+      "id": "office_chair",
+      "name": "办公椅",
+      "name_en": "Office Chair",
+      "skp_path": "${SKETCHUP_ASSETS}/furniture/office_chair.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [600, 600, 1200]
+      },
+      "insertion_point": {
+        "offset": [300, 300, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["chair", "办公椅", "office", "办公室", "seating"]
+    },
+    {
+      "id": "bookshelf",
+      "name": "书架",
+      "name_en": "Bookshelf",
+      "skp_path": "${SKETCHUP_ASSETS}/furniture/bookshelf.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [800, 300, 2000]
+      },
+      "insertion_point": {
+        "offset": [400, 150, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["bookshelf", "书架", "living_room", "客厅", "study", "书房", "storage"]
+    },
+    {
+      "id": "tv_stand",
+      "name": "电视柜",
+      "name_en": "TV Stand",
+      "skp_path": "${SKETCHUP_ASSETS}/furniture/tv_stand.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [1800, 450, 500]
+      },
+      "insertion_point": {
+        "offset": [900, 225, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["tv_stand", "电视柜", "living_room", "客厅", "media"]
+    },
+    {
+      "id": "floor_lamp",
+      "name": "落地灯",
+      "name_en": "Floor Lamp",
+      "skp_path": "${SKETCHUP_ASSETS}/lighting/floor_lamp.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [400, 400, 1700]
+      },
+      "insertion_point": {
+        "offset": [200, 200, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["floor_lamp", "落地灯", "lighting", "灯"]
+    },
+    {
+      "id": "table_lamp",
+      "name": "台灯",
+      "name_en": "Table Lamp",
+      "skp_path": "${SKETCHUP_ASSETS}/lighting/table_lamp.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [300, 300, 500]
+      },
+      "insertion_point": {
+        "offset": [150, 150, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["table_lamp", "台灯", "lighting", "灯"]
+    },
+    {
+      "id": "chandelier",
+      "name": "吊灯",
+      "name_en": "Chandelier",
+      "skp_path": "${SKETCHUP_ASSETS}/lighting/chandelier.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [800, 800, 600]
+      },
+      "insertion_point": {
+        "offset": [400, 400, 600],
+        "description": "Top center (ceiling mount)"
+      },
+      "tags": ["chandelier", "吊灯", "lighting", "灯", "ceiling"]
+    },
+    {
+      "id": "spotlight",
+      "name": "射灯",
+      "name_en": "Spotlight",
+      "skp_path": "${SKETCHUP_ASSETS}/lighting/spotlight.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [150, 150, 100]
+      },
+      "insertion_point": {
+        "offset": [75, 75, 0],
+        "description": "Center"
+      },
+      "tags": ["spotlight", "射灯", "lighting", "灯", "ceiling"]
+    },
+    {
+      "id": "rug_large",
+      "name": "大地毯",
+      "name_en": "Large Rug",
+      "skp_path": "${SKETCHUP_ASSETS}/decor/rug_large.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [3000, 2000, 20]
+      },
+      "insertion_point": {
+        "offset": [1500, 1000, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["rug", "地毯", "living_room", "客厅", "decor", "装饰"]
+    },
+    {
+      "id": "rug_medium",
+      "name": "中等地毯",
+      "name_en": "Medium Rug",
+      "skp_path": "${SKETCHUP_ASSETS}/decor/rug_medium.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [2000, 1500, 15]
+      },
+      "insertion_point": {
+        "offset": [1000, 750, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["rug", "地毯", "living_room", "客厅", "bedroom", "卧室", "decor", "装饰"]
+    },
+    {
+      "id": "plant_large",
+      "name": "大型绿植",
+      "name_en": "Large Plant",
+      "skp_path": "${SKETCHUP_ASSETS}/decor/plant_large.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [600, 600, 1500]
+      },
+      "insertion_point": {
+        "offset": [300, 300, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["plant", "绿植", "decor", "装饰", "living_room", "客厅"]
+    },
+    {
+      "id": "plant_medium",
+      "name": "中型绿植",
+      "name_en": "Medium Plant",
+      "skp_path": "${SKETCHUP_ASSETS}/decor/plant_medium.skp",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [400, 400, 800]
+      },
+      "insertion_point": {
+        "offset": [200, 200, 0],
+        "description": "Center bottom"
+      },
+      "tags": ["plant", "绿植", "decor", "装饰", "table"]
+    }
+  ],
+  "placement_rules": {
+    "min_clearance": 600,
+    "min_door_clearance": 900,
+    "min_passage_width": 800,
+    "description": "Default placement rules in millimeters"
+  },
+  "categories": {
+    "furniture": {
+      "name": "家具",
+      "name_en": "Furniture",
+      "subcategories": ["seating", "tables", "storage", "beds"]
+    },
+    "lighting": {
+      "name": "灯具",
+      "name_en": "Lighting",
+      "subcategories": ["ceiling", "floor", "table"]
+    },
+    "decor": {
+      "name": "装饰",
+      "name_en": "Decor",
+      "subcategories": ["rugs", "plants", "art"]
+    }
+  }
+}

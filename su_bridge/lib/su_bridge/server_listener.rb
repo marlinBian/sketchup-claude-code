@@ -19,6 +19,7 @@ module SuBridge
     def initialize
       @socket = nil
       @running = false
+      @stopped = false  # Added to prevent reconnect attempts after cleanup
       @connected_clients = []
       @last_ping_time = nil
       @reconnect_attempts = 0
@@ -38,6 +39,7 @@ module SuBridge
 
     def stop
       @running = false
+      @stopped = true  # Prevent any reconnect attempts
       @socket_valid = false
       @connected_clients.each(&:close)
       @connected_clients.clear
@@ -83,9 +85,10 @@ module SuBridge
     end
 
     def schedule_polling
+      return if @stopped  # Don't schedule if stopped
       UI.start_timer(TIMER_INTERVAL, false) do
         poll_socket
-        schedule_polling if @running
+        schedule_polling if @running && !@stopped
       end
     end
 
@@ -137,6 +140,7 @@ module SuBridge
     end
 
     def handle_socket_disconnect
+      return if @stopped  # Don't reconnect if stopped
       @socket_valid = false
       close_socket
 
@@ -146,7 +150,7 @@ module SuBridge
 
         # Schedule reconnect with delay
         UI.start_timer(RECONNECT_DELAY, false) do
-          attempt_reconnect
+          attempt_reconnect unless @stopped
         end
       elsif @reconnect_attempts >= MAX_RECONNECT_ATTEMPTS
         puts "[su_bridge] Max reconnect attempts reached. Run .start to restart."
@@ -154,6 +158,7 @@ module SuBridge
     end
 
     def attempt_reconnect
+      return if @stopped  # Don't reconnect if stopped
       return unless @running
 
       begin
@@ -254,14 +259,19 @@ module SuBridge
       payload = params["payload"] || {}
       rollback_on_failure = params.fetch("rollback_on_failure", true)
 
-      handler = CommandDispatcher.new.dispatch_operation(
+      result = CommandDispatcher.new.dispatch_operation(
         operation_id,
         operation_type,
         payload,
         rollback_on_failure
       )
 
-      SuBridge::JsonRpcHandler.success_response(handler, id)
+      # Check if dispatch_operation returned an error (unknown operation type)
+      if result["jsonrpc"] == "2.0" && result.key?("error")
+        return result  # Return error directly
+      end
+
+      SuBridge::JsonRpcHandler.success_response(result, id)
     rescue => e
       rollback_status = rollback_on_failure ? "completed" : "skipped"
       error_code = error_code_for(e)

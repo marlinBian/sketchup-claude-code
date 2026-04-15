@@ -8,6 +8,8 @@ from mcp.server.fastmcp import FastMCP
 from mcp_server.tools import model_tools, query_tools, placement_tools
 from mcp_server.bridge.socket_bridge import SocketBridge
 from mcp_server.protocol.jsonrpc import JsonRpcRequest
+from mcp_server.resources import design_model_mcp
+from mcp_server.tools.local_library_search import search_library, get_categories, format_search_results
 
 # Create FastMCP server
 mcp = FastMCP("sketchup-mcp")
@@ -33,9 +35,9 @@ async def get_scene_info() -> TextContent:
         )
         response = bridge.send(request.to_dict())
         if "error" in response:
-            return TextContent(text=f"Error: {response['error']['message']}")
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
         result = response.get("result", {})
-        return TextContent(text=str(result.get("scene_info", {})))
+        return TextContent(type="text", text=str(result.get("scene_info", {})))
     finally:
         bridge.disconnect()
 
@@ -84,8 +86,8 @@ async def create_wall(
         )
         response = bridge.send(request.to_dict())
         if "error" in response:
-            return TextContent(text=f"Error: {response['error']['message']}")
-        return TextContent(text=str(response.get("result", {})))
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
+        return TextContent(type="text", text=str(response.get("result", {})))
     finally:
         bridge.disconnect()
 
@@ -107,8 +109,8 @@ async def create_face(vertices: list[list[float]], layer: str | None = None) -> 
         )
         response = bridge.send(request.to_dict())
         if "error" in response:
-            return TextContent(text=f"Error: {response['error']['message']}")
-        return TextContent(text=str(response.get("result", {})))
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
+        return TextContent(type="text", text=str(response.get("result", {})))
     finally:
         bridge.disconnect()
 
@@ -142,8 +144,8 @@ async def create_box(
         )
         response = bridge.send(request.to_dict())
         if "error" in response:
-            return TextContent(text=f"Error: {response['error']['message']}")
-        return TextContent(text=str(response.get("result", {})))
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
+        return TextContent(type="text", text=str(response.get("result", {})))
     finally:
         bridge.disconnect()
 
@@ -172,7 +174,7 @@ async def place_component(
         # First find the component in library
         component = placement_tools.find_component_by_name(component_name)
         if not component:
-            return TextContent(text=f"Error: Component not found: {component_name}")
+            return TextContent(type="text", text=f"Error: Component not found: {component_name}")
 
         request = JsonRpcRequest(
             method="execute_operation",
@@ -191,8 +193,8 @@ async def place_component(
         )
         response = bridge.send(request.to_dict())
         if "error" in response:
-            return TextContent(text=f"Error: {response['error']['message']}")
-        return TextContent(text=str(response.get("result", {})))
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
+        return TextContent(type="text", text=str(response.get("result", {})))
     finally:
         bridge.disconnect()
 
@@ -238,8 +240,8 @@ async def apply_material(
         )
         response = bridge.send(request.to_dict())
         if "error" in response:
-            return TextContent(text=f"Error: {response['error']['message']}")
-        return TextContent(text=str(response.get("result", {})))
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
+        return TextContent(type="text", text=str(response.get("result", {})))
     finally:
         bridge.disconnect()
 
@@ -276,8 +278,8 @@ async def apply_style(
         )
         response = bridge.send(request.to_dict())
         if "error" in response:
-            return TextContent(text=f"Error: {response['error']['message']}")
-        return TextContent(text=str(response.get("result", {})))
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
+        return TextContent(type="text", text=str(response.get("result", {})))
     finally:
         bridge.disconnect()
 
@@ -322,8 +324,8 @@ async def place_lighting(
         )
         response = bridge.send(request.to_dict())
         if "error" in response:
-            return TextContent(text=f"Error: {response['error']['message']}")
-        return TextContent(text=str(response.get("result", {})))
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
+        return TextContent(type="text", text=str(response.get("result", {})))
     finally:
         bridge.disconnect()
 
@@ -367,8 +369,8 @@ async def set_camera_view(
         )
         response = bridge.send(request.to_dict())
         if "error" in response:
-            return TextContent(text=f"Error: {response['error']['message']}")
-        return TextContent(text=str(response.get("result", {}).get("view_info", {})))
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
+        return TextContent(type="text", text=str(response.get("result", {}).get("view_info", {})))
     finally:
         bridge.disconnect()
 
@@ -414,7 +416,7 @@ async def capture_design(
         )
         response = bridge.send(request.to_dict())
         if "error" in response:
-            return TextContent(text=f"Error: {response['error']['message']}")
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
 
         result = response.get("result", {})
         capture_info = result.get("capture_info", {})
@@ -429,7 +431,7 @@ async def capture_design(
             except Exception as e:
                 capture_info["image_base64_error"] = str(e)
 
-        return TextContent(text=str(capture_info))
+        return TextContent(type="text", text=str(capture_info))
     finally:
         bridge.disconnect()
 
@@ -467,17 +469,211 @@ async def cleanup_model(
         )
         response = bridge.send(request.to_dict())
         if "error" in response:
-            return TextContent(text=f"Error: {response['error']['message']}")
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
 
         result = response.get("result", {})
         cleanup_info = result.get("cleanup_info", {})
 
-        return TextContent(text=str(cleanup_info))
+        return TextContent(type="text", text=str(cleanup_info))
     finally:
         bridge.disconnect()
 
 
+@mcp.tool()
+async def create_door(
+    wall_id: str,
+    position_x: float,
+    position_y: float = 0,
+    width: float = 900,
+    height: float = 2100,
+    swing_direction: str = "left",
+) -> TextContent:
+    """Create a door in a SketchUp wall with frame and swing panel.
+
+    Args:
+        wall_id: Entity ID of the wall to place door in
+        position_x: Position along the wall from start in mm
+        position_y: Position from wall face in mm (default 0)
+        width: Door width in mm (default 900mm)
+        height: Door height in mm (default 2100mm)
+        swing_direction: "left" or "right" swing
+
+    Returns:
+        JSON string with entity_id and spatial_delta of created door.
+    """
+    bridge = SocketBridge()
+    try:
+        bridge.connect()
+        request = JsonRpcRequest(
+            method="execute_operation",
+            params={
+                "operation_id": f"door_{id(create_door)}",
+                "operation_type": "create_door",
+                "payload": {
+                    "wall_id": wall_id,
+                    "position_x": position_x,
+                    "position_y": position_y,
+                    "width": width,
+                    "height": height,
+                    "swing_direction": swing_direction,
+                },
+                "rollback_on_failure": True,
+            }
+        )
+        response = bridge.send(request.to_dict())
+        if "error" in response:
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
+        return TextContent(type="text", text=str(response.get("result", {})))
+    finally:
+        bridge.disconnect()
+
+
+@mcp.tool()
+async def create_window(
+    wall_id: str,
+    position_x: float,
+    position_y: float = 0,
+    width: float = 1200,
+    height: float = 1000,
+    sill_height: float = 900,
+) -> TextContent:
+    """Create a window in a SketchUp wall with frame and glass.
+
+    Args:
+        wall_id: Entity ID of the wall to place window in
+        position_x: Position along the wall from start in mm
+        position_y: Position from wall face in mm (default 0)
+        width: Window width in mm (default 1200mm)
+        height: Window height in mm (default 1000mm)
+        sill_height: Height from floor to windowsill in mm (default 900mm)
+
+    Returns:
+        JSON string with entity_id and spatial_delta of created window.
+    """
+    bridge = SocketBridge()
+    try:
+        bridge.connect()
+        request = JsonRpcRequest(
+            method="execute_operation",
+            params={
+                "operation_id": f"window_{id(create_window)}",
+                "operation_type": "create_window",
+                "payload": {
+                    "wall_id": wall_id,
+                    "position_x": position_x,
+                    "position_y": position_y,
+                    "width": width,
+                    "height": height,
+                    "sill_height": sill_height,
+                },
+                "rollback_on_failure": True,
+            }
+        )
+        response = bridge.send(request.to_dict())
+        if "error" in response:
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
+        return TextContent(type="text", text=str(response.get("result", {})))
+    finally:
+        bridge.disconnect()
+
+
+@mcp.tool()
+async def create_stairs(
+    start_x: float,
+    start_y: float,
+    start_z: float,
+    end_x: float,
+    end_y: float,
+    end_z: float,
+    width: float = 1000,
+    num_steps: int | None = None,
+) -> TextContent:
+    """Create a staircase between two levels in SketchUp.
+
+    Args:
+        start_x, start_y, start_z: Start position (bottom of stairs) in mm
+        end_x, end_y, end_z: End position (top of stairs) in mm
+        width: Stair width in mm (default 1000mm)
+        num_steps: Number of steps (calculated from rise if not provided)
+
+    Returns:
+        JSON string with entity_id, spatial_delta, and stairs_info of created stairs.
+    """
+    bridge = SocketBridge()
+    try:
+        bridge.connect()
+        request = JsonRpcRequest(
+            method="execute_operation",
+            params={
+                "operation_id": f"stairs_{id(create_stairs)}",
+                "operation_type": "create_stairs",
+                "payload": {
+                    "start_x": start_x,
+                    "start_y": start_y,
+                    "start_z": start_z,
+                    "end_x": end_x,
+                    "end_y": end_y,
+                    "end_z": end_z,
+                    "width": width,
+                    "num_steps": num_steps,
+                },
+                "rollback_on_failure": True,
+            }
+        )
+        response = bridge.send(request.to_dict())
+        if "error" in response:
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
+        return TextContent(type="text", text=str(response.get("result", {})))
+    finally:
+        bridge.disconnect()
+
+
+@mcp.tool()
+async def search_local_library(
+    query: str,
+    category: str | None = None,
+    limit: int = 10,
+) -> TextContent:
+    """Search local component library for matching components.
+
+    Use this to find furniture, fixtures, and lighting from the user's
+    local SketchUp component library before using place_component.
+
+    Args:
+        query: Search query (e.g., "sofa", "dining table", "北欧风格")
+        category: Optional category filter - "furniture", "fixtures", "lighting"
+        limit: Maximum number of results (default 10)
+
+    Returns:
+        List of matching components with IDs and paths for place_component.
+    """
+    try:
+        results = search_library(query, category=category, limit=limit)
+        formatted = format_search_results(results)
+        return TextContent(type="text", text=formatted)
+    except Exception as e:
+        return TextContent(type="text", text=f"Search failed: {str(e)}")
+
+
+@mcp.tool()
+async def list_local_library_categories() -> TextContent:
+    """List all available categories in the local component library.
+
+    Returns:
+        List of categories like "furniture", "fixtures", "lighting".
+    """
+    try:
+        categories = get_categories()
+        if not categories:
+            return TextContent(type="text", text="No categories found in library.")
+        return TextContent(type="text", text="Available categories:\n- " + "\n- ".join(categories))
+    except Exception as e:
+        return TextContent(type="text", text=f"Failed to load categories: {str(e)}")
+
+
 if __name__ == "__main__":
+    # Mount design model resources
+    mcp.mount(design_model_mcp)
     mcp.run()
 
 
@@ -496,9 +692,9 @@ async def generate_report(project_name: str, project_dir: str = "./designs") -> 
         from mcp_server.tools.report_tools import generate_design_report
 
         result = generate_design_report(project_name, project_dir)
-        return TextContent(text=str(result))
+        return TextContent(type="text", text=str(result))
     except Exception as e:
-        return TextContent(text=f"Error generating report: {str(e)}")
+        return TextContent(type="text", text=f"Error generating report: {str(e)}")
 
 
 @mcp.tool()
@@ -565,7 +761,7 @@ async def save_version(
     with open(metadata_path, "w", encoding="utf-8") as f:
         json.dump(metadata, f, ensure_ascii=False, indent=2)
 
-    return TextContent(text=f"Version saved: {version_path}")
+    return TextContent(type="text", text=f"Version saved: {version_path}")
 
 
 @mcp.tool()
@@ -584,7 +780,7 @@ async def list_versions(project_name: str, project_dir: str = "./designs") -> Te
 
     project_path = Path(project_dir) / project_name
     if not project_path.exists():
-        return TextContent(text="No project found")
+        return TextContent(type="text", text="No project found")
 
     versions = []
     for v_dir in sorted(project_path.iterdir()):
@@ -598,7 +794,7 @@ async def list_versions(project_name: str, project_dir: str = "./designs") -> Te
 
             versions.append(info)
 
-    return TextContent(text=str(versions))
+    return TextContent(type="text", text=str(versions))
 
 
 @mcp.tool()
@@ -628,9 +824,9 @@ async def search_sketchfab_models(
             count=count,
             sort=sort,
         )
-        return TextContent(text=str(results))
+        return TextContent(type="text", text=str(results))
     except Exception as e:
-        return TextContent(text=f"Search failed: {str(e)}")
+        return TextContent(type="text", text=f"Search failed: {str(e)}")
 
 
 @mcp.tool()
@@ -647,9 +843,9 @@ async def get_sketchfab_model(model_uid: str) -> TextContent:
 
     try:
         info = get_model_info(model_uid)
-        return TextContent(text=str(info))
+        return TextContent(type="text", text=str(info))
     except Exception as e:
-        return TextContent(text=f"Failed to get model info: {str(e)}")
+        return TextContent(type="text", text=f"Failed to get model info: {str(e)}")
 
 
 @mcp.tool()
@@ -681,9 +877,9 @@ async def download_sketchfab_model(
             format_hint=format_hint,
             output_dir=output_path,
         )
-        return TextContent(text=str(result))
+        return TextContent(type="text", text=str(result))
     except Exception as e:
-        return TextContent(text=f"Download failed: {str(e)}")
+        return TextContent(type="text", text=f"Download failed: {str(e)}")
 
 
 @mcp.tool()
@@ -711,6 +907,240 @@ async def search_and_download_sketchfab(
             query=query,
             format_hint=format_hint,
         )
-        return TextContent(text=str(result))
+        return TextContent(type="text", text=str(result))
     except Exception as e:
-        return TextContent(text=f"Search and download failed: {str(e)}")
+        return TextContent(type="text", text=f"Search and download failed: {str(e)}")
+
+
+@mcp.tool()
+async def search_warehouse(query: str) -> TextContent:
+    """Get a SketchUp 3D Warehouse search URL.
+
+    Opens the 3D Warehouse search page in your browser where you can
+    browse and download 3D models.
+
+    Note: 3D Warehouse does not have a public API, so this tool provides
+    a search URL that you can open in your browser.
+
+    Args:
+        query: Search query (e.g., "modern sofa", "floor lamp")
+
+    Returns:
+        URL to open in browser for searching 3D Warehouse.
+    """
+    from mcp_server.tools.warehouse_tool import search_warehouse_url
+
+    url = search_warehouse_url(query)
+    return TextContent(type="text", text=f"Open this URL in your browser to search 3D Warehouse:\n\n{url}")
+
+
+@mcp.tool()
+async def download_from_warehouse(warehouse_url: str) -> TextContent:
+    """Get guidance for downloading a model from SketchUp 3D Warehouse URL.
+
+    Note: 3D Warehouse does not have a public API. This tool provides
+    guidance for the manual download process.
+
+    Args:
+        warehouse_url: Full URL to a 3D Warehouse model page
+                       (e.g., https://3dwarehouse.sketchup.com/model/abc123/...)
+
+    Returns:
+        Instructions for downloading the model.
+    """
+    from mcp_server.tools.warehouse_tool import download_from_warehouse
+
+    result = download_from_warehouse(warehouse_url)
+    return TextContent(type="text", text=result.message)
+
+
+@mcp.tool()
+async def get_warehouse_model_info(warehouse_url: str) -> TextContent:
+    """Extract model information from a SketchUp 3D Warehouse URL.
+
+    Note: 3D Warehouse does not have a public API. This tool does
+    best-effort extraction of model ID from the URL pattern.
+
+    Args:
+        warehouse_url: Full URL to a 3D Warehouse model page
+
+    Returns:
+        Model ID and URL extracted from the link.
+    """
+    from mcp_server.tools.warehouse_tool import get_model_info_from_url
+
+    info = get_model_info_from_url(warehouse_url)
+    return TextContent(type="text", text=str(info))
+
+
+@mcp.tool()
+async def move_entity(
+    entity_ids: list[str],
+    delta_x: float,
+    delta_y: float,
+    delta_z: float,
+) -> TextContent:
+    """Move entities by a delta in mm.
+
+    Args:
+        entity_ids: List of entity IDs to move
+        delta_x: Delta X in mm
+        delta_y: Delta Y in mm
+        delta_z: Delta Z in mm
+
+    Returns:
+        JSON string with entity_ids and status of moved entities.
+    """
+    bridge = SocketBridge()
+    try:
+        bridge.connect()
+        request = JsonRpcRequest(
+            method="execute_operation",
+            params={
+                "operation_id": f"move_{id(move_entity)}",
+                "operation_type": "move_entity",
+                "payload": {
+                    "entity_ids": entity_ids,
+                    "delta": [delta_x, delta_y, delta_z],
+                },
+                "rollback_on_failure": True,
+            }
+        )
+        response = bridge.send(request.to_dict())
+        if "error" in response:
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
+        return TextContent(type="text", text=str(response.get("result", {})))
+    finally:
+        bridge.disconnect()
+
+
+@mcp.tool()
+async def rotate_entity(
+    entity_ids: list[str],
+    center_x: float,
+    center_y: float,
+    center_z: float,
+    axis: str,
+    angle: float,
+) -> TextContent:
+    """Rotate entities around a center point and axis.
+
+    Args:
+        entity_ids: List of entity IDs to rotate
+        center_x: Center X coordinate in mm
+        center_y: Center Y coordinate in mm
+        center_z: Center Z coordinate in mm
+        axis: Rotation axis - "+x", "-x", "+y", "-y", "+z", "-z"
+        angle: Rotation angle in degrees
+
+    Returns:
+        JSON string with entity_ids and status of rotated entities.
+    """
+    bridge = SocketBridge()
+    try:
+        bridge.connect()
+        request = JsonRpcRequest(
+            method="execute_operation",
+            params={
+                "operation_id": f"rotate_{id(rotate_entity)}",
+                "operation_type": "rotate_entity",
+                "payload": {
+                    "entity_ids": entity_ids,
+                    "center": [center_x, center_y, center_z],
+                    "axis": axis,
+                    "angle": angle,
+                },
+                "rollback_on_failure": True,
+            }
+        )
+        response = bridge.send(request.to_dict())
+        if "error" in response:
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
+        return TextContent(type="text", text=str(response.get("result", {})))
+    finally:
+        bridge.disconnect()
+
+
+@mcp.tool()
+async def scale_entity(
+    entity_ids: list[str],
+    center_x: float,
+    center_y: float,
+    center_z: float,
+    scale: float | list[float],
+) -> TextContent:
+    """Scale entities uniformly or non-uniformly around a center point.
+
+    Args:
+        entity_ids: List of entity IDs to scale
+        center_x: Center X coordinate in mm
+        center_y: Center Y coordinate in mm
+        center_z: Center Z coordinate in mm
+        scale: Uniform scale factor (float) or [sx, sy, sz] for non-uniform scaling
+
+    Returns:
+        JSON string with entity_ids and status of scaled entities.
+    """
+    bridge = SocketBridge()
+    try:
+        bridge.connect()
+        request = JsonRpcRequest(
+            method="execute_operation",
+            params={
+                "operation_id": f"scale_{id(scale_entity)}",
+                "operation_type": "scale_entity",
+                "payload": {
+                    "entity_ids": entity_ids,
+                    "center": [center_x, center_y, center_z],
+                    "scale": scale,
+                },
+                "rollback_on_failure": True,
+            }
+        )
+        response = bridge.send(request.to_dict())
+        if "error" in response:
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
+        return TextContent(type="text", text=str(response.get("result", {})))
+    finally:
+        bridge.disconnect()
+
+
+@mcp.tool()
+async def copy_entity(
+    entity_ids: list[str],
+    delta_x: float,
+    delta_y: float,
+    delta_z: float,
+) -> TextContent:
+    """Create copies of entities and translate them by delta.
+
+    Args:
+        entity_ids: List of entity IDs to copy
+        delta_x: Delta X in mm
+        delta_y: Delta Y in mm
+        delta_z: Delta Z in mm
+
+    Returns:
+        JSON string with entity_ids of the new copies.
+    """
+    bridge = SocketBridge()
+    try:
+        bridge.connect()
+        request = JsonRpcRequest(
+            method="execute_operation",
+            params={
+                "operation_id": f"copy_{id(copy_entity)}",
+                "operation_type": "copy_entity",
+                "payload": {
+                    "entity_ids": entity_ids,
+                    "delta": [delta_x, delta_y, delta_z],
+                },
+                "rollback_on_failure": True,
+            }
+        )
+        response = bridge.send(request.to_dict())
+        if "error" in response:
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
+        return TextContent(type="text", text=str(response.get("result", {})))
+    finally:
+        bridge.disconnect()

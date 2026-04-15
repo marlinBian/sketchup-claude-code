@@ -1,0 +1,79 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+*.egg-info/
+*.egg
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.pytype/
+
+# Ruby
+*.gem
+.bundle/
+vendor/bundle/
+*.rb~
+*.swp
+.sass-cache/
+
+# SketchUp
+*.skp
+*.skb
+*.skc
+*.ske
+*.skf
+*.skm
+*.sks
+*.skd
+local_library/
+*.log
+
+# MCP Server socket
+/tmp/su_bridge.sock
+
+# IDE
+.DS_Store
+.vscode/
+.idea/
+*.iml
+
+# Claude Code plugin cache
+.claude-doubao/
+.claude/
+
+# Test coverage
+coverage/
+.coverage
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# OS files
+Thumbs.db
+ehthumbs.db
+
+# Design projects (user data)
+designs/
+
+# Import/export files
+*.gltf
+*.glb
+*.ifc
+*.obj
+*.fbx
+
+# Environment
+.env
+.env.local
+.env.*.local

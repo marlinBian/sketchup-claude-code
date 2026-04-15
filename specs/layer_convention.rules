@@ -1,0 +1,418 @@
+# Layer Convention Rules
+
+## Purpose
+
+Standardized layer usage ensures proper organization and enables
+automated cleanup, style application, and semantic queries.
+
+---
+
+## Layer Definitions
+
+### Walls Layer
+
+| Attribute | Value |
+|-----------|-------|
+| **Contents** | All wall surfaces (interior and exterior) |
+| **Color** | #CCCCCC (light gray) |
+| **Entity Types** | Groups with wall geometry |
+| **Naming** | `wall_{location}_{number}` |
+
+**Examples:**
+- `wall_south_001`
+- `wall_north_002`
+- `wall_interior_living_001`
+
+**Entity Assignment:**
+- All walls created via `create_wall` automatically assigned
+- Wall segments that form rooms
+- Retaining walls and fence walls
+
+---
+
+### Floors Layer
+
+| Attribute | Value |
+|-----------|-------|
+| **Contents** | Floor surfaces at all levels |
+| **Color** | #8B7355 (tan/brown) |
+| **Entity Types** | Face entities with floor material |
+| **Naming** | `floor_{room}_{level}_{number}` |
+
+**Examples:**
+- `floor_living_ground_001`
+- `floor_bedroom_upper_001`
+- `floor_bathroom_ground_001`
+
+**Entity Assignment:**
+- Horizontal floor planes
+- Raised platforms
+- Stair landing floors
+- Balcony floors
+
+---
+
+### Ceilings Layer
+
+| Attribute | Value |
+|-----------|-------|
+| **Contents** | Ceiling surfaces at all levels |
+| **Color** | #FFFFFF (white) |
+| **Entity Types** | Face entities with ceiling material |
+| **Naming** | `ceiling_{room}_{level}_{number}` |
+
+**Examples:**
+- `ceiling_living_ground_001`
+- `ceiling_kitchen_upper_001`
+
+**Entity Assignment:**
+- Horizontal ceiling planes
+- Sloped ceilings
+- Coffered ceilings
+- Ceiling trays
+
+---
+
+### Furniture Layer
+
+| Attribute | Value |
+|-----------|-------|
+| **Contents** | All furniture components |
+| **Color** | #8B4513 (brown) |
+| **Entity Types** | Groups/Components with furniture geometry |
+| **Naming** | `{type}_{style}_{material}_{number}` |
+
+**Examples:**
+- `sofa_modern_grey_001`
+- `chair_vintage_oak_001`
+- `table_dining_oak_1400_001`
+- `bed_queen_wood_001`
+- `cabinet_storage_white_001`
+
+**Entity Assignment:**
+- Seating (sofas, chairs, stools)
+- Tables (dining, coffee, side, desk)
+- Beds (all sizes)
+- Storage (cabinets, shelves, wardrobes)
+- Soft furnishings (rugs, curtains, pillows)
+- Office furniture
+
+---
+
+### Fixtures Layer
+
+| Attribute | Value |
+|-----------|-------|
+| **Contents** | Bathroom and kitchen fixtures |
+| **Color** | #708090 (slate gray) |
+| **Entity Types** | Groups/Components with fixture geometry |
+| **Naming** | `{type}_{location}_{number}` |
+
+**Examples:**
+- `toilet_bathroom_001`
+- `sink_kitchen_001`
+- `bathtub_master_001`
+- `shower_ground_001`
+- `counter_kitchen_001`
+
+**Entity Assignment:**
+- Bathroom fixtures (toilet, bidet, bathtub, shower, sink)
+- Kitchen fixtures (sink, faucet, dishwasher, range hood)
+- Built-in appliances
+- Plumbing fixtures
+
+---
+
+### Lighting Layer
+
+| Attribute | Value |
+|-----------|-------|
+| **Contents** | Light fixtures and light sources |
+| **Color** | #FFD700 (gold/yellow) |
+| **Entity Types** | Groups/Components with lighting geometry |
+| **Naming** | `{type}_{location}_{number}` |
+
+**Examples:**
+- `lamp_floor_living_001`
+- `chandelier_dining_001`
+- `spotlight_ceiling_kitchen_001`
+- `sconce_bedroom_001`
+- `track_light_gallery_001`
+
+**Entity Assignment:**
+- Floor lamps
+- Table lamps
+- Pendant lights
+- Chandeliers
+- Ceiling-mounted fixtures
+- Wall sconces
+- Track lighting
+- Recessed lighting (if represented as geometry)
+
+---
+
+### Electrical Layer
+
+| Attribute | Value |
+|-----------|-------|
+| **Contents** | Electrical outlets, switches, panels |
+| **Color** | #FFA500 (orange) |
+| **Entity Types** | Small groups/components |
+| **Naming** | `{type}_{location}_{number}` |
+
+**Examples:**
+- `outlet_wall_living_001`
+- `switch_entry_001`
+- `panel_breaker_001`
+- `dimmer_bedroom_001`
+
+**Entity Assignment:**
+- Electrical outlets (standard, GFCI, USB)
+- Light switches
+- Dimmer controls
+- Electrical panels
+- Data/telephone outlets
+- Doorbells
+
+---
+
+### Text Layer
+
+| Attribute | Value |
+|-----------|-------|
+| **Contents** | Labels, annotations, dimensions |
+| **Color** | #000000 (black) |
+| **Entity Types** | Text entities |
+| **Naming** | `{type}_{context}_{number}` |
+
+**Examples:**
+- `label_room_living_001`
+- `dimension_wall_south_001`
+- `annotation_note_001`
+- `area_label_kitchen_001`
+
+**Entity Assignment:**
+- Room labels
+- Dimension annotations
+- Area labels
+- Notes and callouts
+- Section markers
+
+---
+
+## Layer Assignment Rules
+
+### Priority Order
+
+When an entity could belong to multiple layers, use this priority:
+
+1. **Lighting** - Light fixtures take precedence over furniture
+2. **Fixtures** - Built-in fixtures over movable furniture
+3. **Electrical** - Only for purely electrical elements
+4. **Walls/Floors/Ceilings** - Architectural elements
+5. **Furniture** - Movable items
+6. **Text** - Annotations only
+
+### Compound Entities
+
+For entities with multiple components:
+
+| Entity | Layer Assignment |
+|--------|------------------|
+| Built-in bookshelves | `Fixtures` (not `Furniture`) |
+| Overhead lights | `Lighting` |
+| Kitchen island | `Fixtures` (counter is fixture) |
+| Island stools | `Furniture` |
+| Ceiling fan | `Lighting` (includes light) |
+
+### Layer Determination Flowchart
+
+```
+Is it a light fixture?
+  YES -> Lighting layer
+  NO
+
+Is it a bathroom/kitchen fixture (built-in)?
+  YES -> Fixtures layer
+  NO
+
+Is it an electrical outlet, switch, or panel?
+  YES -> Electrical layer
+  NO
+
+Is it a wall, floor, or ceiling?
+  YES -> Architectural layer (Walls/Floors/Ceilings)
+  NO
+
+Is it furniture (movable)?
+  YES -> Furniture layer
+  NO
+
+Is it text or annotation?
+  YES -> Text layer
+  NO
+
+DEFAULT -> Furniture layer
+```
+
+---
+
+## Color System
+
+### RGB Hex Colors by Layer
+
+| Layer | Hex Color | RGB |
+|-------|-----------|-----|
+| Walls | #CCCCCC | (204, 204, 204) |
+| Floors | #8B7355 | (139, 115, 85) |
+| Ceilings | #FFFFFF | (255, 255, 255) |
+| Furniture | #8B4513 | (139, 69, 19) |
+| Fixtures | #708090 | (112, 128, 144) |
+| Lighting | #FFD700 | (255, 215, 0) |
+| Electrical | #FFA500 | (255, 165, 0) |
+| Text | #000000 | (0, 0, 0) |
+
+### Color Usage Guidelines
+
+1. **Style Application** - Colors can be overridden by style presets
+2. **Consistency** - Maintain layer colors across all operations
+3. **Visual Distinction** - Colors should be visually distinguishable
+4. **Export** - Colors preserved in GLTF/IFC export
+
+---
+
+## LLM Usage
+
+### When Creating Entities
+
+1. Determine appropriate layer based on entity type
+2. Assign layer via `create_wall`, `place_component`, etc.
+3. Use layer parameter when available
+4. Never mix entity types on same layer
+
+### Example Tool Calls
+
+```python
+# Wall creation - auto-assigns to Walls layer
+create_wall(start_x=0, start_y=0, start_z=0, end_x=3000, end_y=0, end_z=0,
+           height=2400, thickness=150, layer="Walls")
+
+# Furniture placement - explicit layer assignment
+place_component(component_name="sofa_modern_grey_001",
+                position_x=1000, position_y=2000, position_z=0,
+                layer="Furniture")
+
+# Lighting placement
+place_lighting(lighting_type="chandelier",
+               position_x=1500, position_y=2000, position_z=2400,
+               layer="Lighting")
+```
+
+### Query by Layer
+
+```python
+# Get all entities on a specific layer
+query_entities(layer="Furniture")
+
+# Get scene info includes layer breakdown
+get_scene_info()  # Returns entity_counts by layer
+```
+
+### Error Prevention
+
+1. **Never assign architectural elements to Furniture**
+2. **Never mix layers within a group** - flatten or nest appropriately
+3. **Use semantic naming** - layer name embedded in entity name
+4. **Check layer before transform** - moving entities between layers requires reassignment
+
+---
+
+## Layer Operations
+
+### Moving Entities Between Layers
+
+1. Query entity to verify current layer
+2. Recreate entity with new layer parameter
+3. Delete original entity
+4. Update design_model.json
+
+### Bulk Layer Operations
+
+| Operation | Method |
+|-----------|--------|
+| List all furniture | `query_entities(layer="Furniture")` |
+| Count entities by layer | `get_scene_info()` |
+| Move group to layer | Recreate entities with target layer |
+
+---
+
+## Integration with Design Model
+
+### design_model.json Schema
+
+```json
+{
+  "components": {
+    "sofa_living_001": {
+      "type": "sofa",
+      "layer": "Furniture",
+      "position": [3000, 2000, 0],
+      "semantic_anchor": "sofa_center"
+    }
+  }
+}
+```
+
+### Automatic Sync
+
+- Layer assignments stored in design_model.json
+- `on_entity_add` hook records layer automatically
+- `on_transform` maintains layer assignment
+- `on_layer_change` triggers design_model.json update
+
+---
+
+## Validation Rules
+
+1. All named entities must have a valid layer assignment
+2. Layer name must match one of the 8 defined layers
+3. Mixed-layer groups must be flattened before style application
+4. Electrical layer entities must not be scaled non-uniformly
+5. Text layer entities must have legible minimum size
+
+---
+
+## Exceptions
+
+### Decorative Elements
+
+| Element | Layer | Reason |
+|---------|-------|--------|
+| Decorative beams | Ceilings | Architectural decoration |
+| Wainscoting | Walls | Wall surface treatment |
+| Backsplash | Fixtures | Kitchen fixture |
+| Crown molding | Ceilings | Ceiling trim |
+
+### Multi-Function Elements
+
+| Element | Layer | Notes |
+|---------|-------|-------|
+| Ceiling fan | Lighting | Primary function is lighting |
+| Exhaust fan | Fixtures | Primary function is ventilation |
+| Heated towel rack | Fixtures | Primary function is drying |
+| Recessed lighting | Lighting | Light fixture in ceiling |
+
+---
+
+## Summary Table
+
+| Layer | Color | Contents | Naming Pattern |
+|-------|-------|----------|----------------|
+| Walls | #CCCCCC | Wall surfaces | `wall_{location}_{n}` |
+| Floors | #8B7355 | Floor surfaces | `floor_{room}_{n}` |
+| Ceilings | #FFFFFF | Ceiling surfaces | `ceiling_{room}_{n}` |
+| Furniture | #8B4513 | Movable furniture | `{type}_{style}_{n}` |
+| Fixtures | #708090 | Built-in fixtures | `{type}_{location}_{n}` |
+| Lighting | #FFD700 | Light fixtures | `{type}_{location}_{n}` |
+| Electrical | #FFA500 | Outlets, switches | `{type}_{location}_{n}` |
+| Text | #000000 | Labels, annotations | `{type}_{context}_{n}` |

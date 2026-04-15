@@ -1,0 +1,135 @@
+# Unit Conversion Rules
+
+## Purpose
+
+Ensure consistent unit handling between user input, LLM communication, and SketchUp internal units.
+
+## SketchUp Internal Units
+
+**SketchUp uses inches internally.**
+
+All coordinates sent to Ruby bridge must be in **millimeters (mm)**.
+
+## Conversion Factors
+
+| From | To | Multiply By |
+|------|-----|------------|
+| mm | inches | 0.0393701 |
+| inches | mm | 25.4 |
+| cm | mm | 10 |
+| cm | inches | 0.393701 |
+| meters | mm | 1000 |
+| meters | inches | 39.3701 |
+| feet | mm | 304.8 |
+| feet | inches | 12 |
+
+## User Input Handling
+
+### Natural Language Parsing
+
+| User Says | Convert To | Example |
+|-----------|------------|---------|
+| "2m" | 2000 mm | 2 meters → 2000 |
+| "50cm" | 500 mm | 50 centimeters → 500 |
+| "1.5米" | 1500 mm | Chinese meter → 1500 |
+| "3 feet" | 914.4 mm | 3 feet → 914 |
+| "30 inches" | 762 mm | 30 inches → 762 |
+
+### Unit Detection Rules
+
+1. No unit suffix = **millimeters** (protocol standard)
+2. `m` or `meter` = meters → multiply by 1000
+3. `cm` or `centimeter` = centimeters → multiply by 10
+4. `foot` or `feet` = feet → multiply by 304.8
+5. `inch` or `"` = inches → multiply by 25.4
+6. `mm` = millimeters → no conversion needed
+
+## Python Conversion Functions
+
+```python
+def mm_to_inch(mm):
+    """Convert millimeters to SketchUp inches."""
+    return mm / 25.4
+
+def inch_to_mm(inch):
+    """Convert SketchUp inches to millimeters."""
+    return inch * 25.4
+
+def parse_user_distance(value: str) -> float:
+    """Parse user distance input to millimeters."""
+    value = value.strip().lower()
+
+    # Check for unit suffix
+    if value.endswith('m') and not value.endswith('mm'):
+        return float(value[:-1]) * 1000  # meters
+    elif value.endswith('cm'):
+        return float(value[:-2]) * 10  # centimeters
+    elif value.endswith('mm'):
+        return float(value[:-2])  # millimeters
+    elif value.endswith('ft') or value.endswith('foot'):
+        return float(value[:-2]) * 304.8  # feet
+    elif value.endswith('in') or value.endswith('"'):
+        return float(value[:-2]) * 25.4  # inches
+    else:
+        # No unit = assume millimeters
+        return float(value)
+
+def format_distance(mm: float) -> str:
+    """Format millimeters for user display."""
+    if mm >= 1000:
+        return f"{mm/1000:.1f}m"
+    else:
+        return f"{mm:.0f}mm"
+```
+
+## Common Dimensions Reference
+
+| Object | Millimeters | Meters | Feet/Inches |
+|--------|-------------|---------|-------------|
+| Door width | 800-900 | 0.8-0.9 | ~32-36 in |
+| Door height | 2000-2100 | 2.0-2.1 | ~80-84 in |
+| Window width | 600-1800 | 0.6-1.8 | 24-72 in |
+| Window height | 600-1500 | 0.6-1.5 | 24-60 in |
+| Table height | 750 | 0.75 | 30 in |
+| Chair seat | 450-480 | 0.45-0.48 | 18-19 in |
+| Sofa height | 850-900 | 0.85-0.9 | 33-36 in |
+| Counter height | 900 | 0.9 | 36 in |
+| Ceiling height | 2400-2800 | 2.4-2.8 | 95-110 in |
+
+## Room Dimensions
+
+| Room Type | Typical Size (meters) |
+|-----------|----------------------|
+| Small bedroom | 3 x 3 m |
+| Master bedroom | 4 x 5 m |
+| Living room | 4 x 6 m |
+| Kitchen | 3 x 4 m |
+| Bathroom | 2 x 3 m |
+| Dining room | 3 x 4 m |
+
+## Protocol Convention
+
+**All coordinates in JSON-RPC are in millimeters without unit suffixes.**
+
+```json
+{
+  "position": [3000, 2000, 0],
+  "dimensions": {
+    "width": 1400,
+    "depth": 800,
+    "height": 750
+  }
+}
+```
+
+## LLM Prompt Templates
+
+When user says:
+- "2 meters wide" → LLM sends `2000` to protocol
+- "50 centimeters" → LLM sends `500` to protocol
+- "3 feet" → LLM sends `914.4` (rounded to 914) to protocol
+
+When displaying to user:
+- Use human-readable format: "2.0m" or "2000mm"
+- Prefer meters for large values (>1m)
+- Prefer centimeters for small values (<1m)

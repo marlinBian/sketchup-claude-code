@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  ruby-syntax:
+    name: Ruby Syntax Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+
+      - name: Check Ruby syntax
+        run: |
+          for f in su_bridge/lib/su_bridge/**/*.rb su_bridge/spec/**/*.rb; do
+            ruby -c "$f" || exit 1
+          done
+
+  python-syntax:
+    name: Python Syntax Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check Python syntax
+        run: |
+          python3 -m py_compile mcp_server/mcp_server/**/*.py
+          python3 -m py_compile mcp_server/tests/**/*.py
+
+  python-tests:
+    name: Python Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          cd mcp_server
+          pip install uv
+          uv sync
+
+      - name: Run Python tests
+        run: |
+          cd mcp_server
+          uv run pytest tests/ -v --tb=short
+
+  ruby-tests:
+    name: Ruby Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Install dependencies
+        run: |
+          cd su_bridge
+          bundle install
+
+      - name: Run Ruby tests
+        run: |
+          cd su_bridge
+          bundle exec rspec spec/ --format progress
+        continue-on-error: true
+
+  markdown-lint:
+    name: Markdown Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run markdown lint
+        uses: DavidAnson/markdownlint-cli2-action@v13
+        with:
+          globs: |
+            **/*.md
+            !**/node_modules/**
+            !.claude/**
