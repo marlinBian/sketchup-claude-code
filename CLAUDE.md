@@ -4,36 +4,185 @@
 
 **SCC** enables bidirectional communication between an LLM (Claude Code) and SketchUp for interior design automation. Designers issue natural language commands like "add a 2m x 3m window on the south wall" and receive confirmation with spatial feedback.
 
+**Target Users**: Professional interior designers who want to create 3D models using natural language, not programmers.
+
+---
+
 ## Architecture
 
 ```
-                    ┌─────────────────────────────┐
-                    │     Claude Code (LLM)       │
-                    │     User Natural Language   │
-                    └──────────────┬──────────────┘
-                                   │ JSON-RPC 2.0 / STDIO
-                    ┌──────────────▼──────────────┐
-                    │     /mcp_server/            │
-                    │  Python MCP Server         │
-                    │  - FastMCP (mcp-python-sdk) │
-                    │  - Space computation engine │
-                    │  - Protocol serializer      │
-                    └──────────────┬──────────────┘
-                                   │ Unix Socket / Named Pipe
-                    ┌──────────────▼──────────────┐
-                    │     /su_bridge/             │
-                    │  Ruby SketchUp Plugin      │
-                    │  - Non-blocking listener    │
-                    │  - UI.start_timer dispatch  │
-                    │  - Undo transaction wrapper │
-                    └──────────────┬──────────────┘
-                                   │ SketchUp Ruby API
-                    ┌──────────────▼──────────────┐
-                    │     SketchUp Application    │
-                    │  - 3D modeling engine       │
-                    │  - Scene graph              │
-                    └─────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    Claude Code (LLM)                       │
+│         设计师自然语言: "在餐桌上方1.2米挂餐桌灯"            │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+┌─────────────────────▼───────────────────────────────────────┐
+│                 SCC Plugin Layer (ECC)                      │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
+│  │   Skills    │  │   Rules     │  │       Hooks        │ │
+│  │ - designer  │  │ - spatial   │  │ - on_scene_change │ │
+│  │ - geometry  │  │ - naming    │  │ - on_entity_add   │ │
+│  │ - workflow  │  │ - units      │  │ - on_save        │ │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+┌─────────────────────▼───────────────────────────────────────┐
+│              Design Model (抽象状态层)                        │
+│  - design_model.json (LLM 可读写)                            │
+│  - 组件清单、空间布局、材质定义                              │
+│  - 语义位置 (餐桌上方、主卧床头)                             │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+┌─────────────────────▼───────────────────────────────────────┐
+│                   MCP Server Layer                           │
+│  - model_tools (create_*, apply_*)                          │
+│  - query_tools (get_scene_info)                             │
+│  - component_tools (place_component, search)                │
+│  - export_tools (gltf, ifc)                                 │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+┌─────────────────────▼───────────────────────────────────────┐
+│                   Ruby Bridge Layer                          │
+│  - Socket bridge                                            │
+│  - UndoManager                                              │
+│  - Entity builders (Face, Wall, Door, Window, Stairs)       │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+┌─────────────────────▼───────────────────────────────────────┐
+│                    SketchUp                                  │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Three-Layer Capability Architecture
+
+SCC uses a **three-layer approach** to cover all design scenarios:
+
+### Layer 1: Foundation Modeling (Core)
+
+Basic geometric elements that form the foundation of all 3D modeling:
+
+| Tool | Description | Use Case |
+|------|-------------|----------|
+| `create_face` | Create face from vertices | Any polygon surface |
+| `create_wall` | Create wall with alignment | Interior/exterior walls |
+| `create_box` | Create 3D box | Simple furniture, volumes |
+| `create_group` | Group entities | Combine related geometry |
+| `create_door` | Door with frame and swing | Interior door openings |
+| `create_window` | Window with frame and glass | Window openings in walls |
+| `create_stairs` | Staircase between levels | Multi-story access |
+| `move_entity` | Translate entities | Reposition objects |
+| `rotate_entity` | Rotate around axis | Orient objects |
+| `scale_entity` | Scale uniformly/non-uniformly | Resize objects |
+| `copy_entity` | Duplicate entities | Clone for repetition |
+| `apply_material` | Apply color/texture | Surface appearance |
+| `apply_style` | Apply style preset | Whole-model theming |
+
+**Principle**: These are building blocks. LLM combines them to create any object.
+
+### Layer 2: Component Search (Discovery)
+
+Search external 3D model libraries for ready-made components:
+
+| Source | Tool | Description |
+|--------|------|-------------|
+| SketchUp 3D Warehouse | `search_warehouse` | Official SketchUp models |
+| Sketchfab | `search_sketchfab_models` | Creative Commons 3D models |
+| Local Library | `place_component` | User's custom .skp files |
+
+**Workflow**: Search → Download/Place → Position → Adjust
+
+### Layer 3: AI-Generated Geometry (Creation)
+
+When Layer 1 and Layer 2 can't meet the need, use foundation elements to compose any geometry:
+
+```
+User: "Create an L-shaped sofa"
+LLM Decision:
+1. Check local library → No L-shaped sofa
+2. Check Sketchfab → May not have exact match
+3. Compose using foundation elements:
+   - create_group() to create sofa group
+   - create_face() for seat cushions
+   - create_box() for armrests and back
+```
+
+**Key Insight**: Don't enumerate all possible objects. Give LLM foundation tools + context, let it compose.
+
+---
+
+## Design Model (Abstract State Layer)
+
+Design Model is the **shared abstract layer** between LLM and SketchUp. It provides a JSON-based representation that enables high-level semantic operations.
+
+### File Location
+
+```
+designs/{project_name}/
+├── design_model.json      # Main design state (LLM reads/writes)
+├── model.skp              # SketchUp file
+└── snapshots/             # Visual snapshots
+```
+
+### Semantic Positioning
+
+Enables commands like "lamp above dining table":
+
+```json
+{
+  "components": {
+    "dining_table_001": {
+      "semantic_anchor": "dining_table_center",
+      "position": [3000, 2000, 0],
+      "above_position": {
+        "height_offset": 1200,
+        "used_for": ["dining_light_001"]
+      }
+    }
+  }
+}
+```
+
+See `skills/semantic_positioning/SKILL.md` for full documentation.
+
+---
+
+## ECC Plugin Structure
+
+### Skills
+
+Skills are **instruction sets** that guide LLM behavior for specific domains.
+
+| Skill | File | Purpose |
+|-------|------|---------|
+| `geometry_composition` | `skills/geometry_composition/SKILL.md` | Compose furniture from primitives |
+| `designer_workflow` | `skills/designer_workflow/SKILL.md` | Standard design workflow |
+| `semantic_positioning` | `skills/semantic_positioning/SKILL.md` | Relative positioning |
+| `common_operations` | `skills/common_operations/SKILL.md` | Frequent design operations |
+
+### Rules
+
+Rules are **constraints** that guide LLM behavior:
+
+| Rule | File | Purpose |
+|------|------|---------|
+| `spatial_constraints` | `specs/spatial_constraints.md` | Collision, minimum clearances |
+| `naming_convention` | `specs/naming_convention.rules` | Entity naming standards |
+| `unit_conversion` | `specs/unit_conversion.rules` | mm/m/ft conversion |
+
+### Hooks
+
+Hooks are **automation triggers** on events:
+
+| Hook | Trigger | Action |
+|------|---------|--------|
+| `on_entity_add` | Entity created | Update design_model.json |
+| `on_entity_delete` | Entity deleted | Update design_model.json |
+| `on_transform` | Entity moved/rotated/scaled | Update semantic positions |
+| `on_save` | Model saved | Sync design_model.json |
+
+---
 
 ## Plugin Marketplace Distribution
 
@@ -41,18 +190,11 @@ SCC is distributed as a Claude Code plugin marketplace.
 
 ### First-Time Installation
 
-**Important:** After cloning, run the setup script once:
-
 ```bash
 git clone https://github.com/avenir/sketchup-claude-code.git
 cd sketchup-claude-code
 ./setup.sh
 ```
-
-The setup script will:
-1. Install `uv` (if not present)
-2. Install Python dependencies for the MCP server
-3. Guide you through SketchUp Ruby plugin installation
 
 ### Adding the Plugin to Claude Code
 
@@ -63,31 +205,19 @@ The setup script will:
 
 ### SketchUp Ruby Plugin Installation
 
-The Ruby plugin must be installed manually in SketchUp:
-
-1. Find your SketchUp Plugins folder:
-   - macOS: `~/Library/Application Support/SketchUp/SketchUp 2024/SketchUp/Plugins/`
-   - Windows: `C:\Users\YourName\AppData\Roaming\SketchUp\SketchUp 2024\SketchUp\Plugins\`
-
-2. Copy the `su_bridge/` folder to the Plugins folder
-
-3. Restart SketchUp
-
-4. In SketchUp Ruby Console, run:
-   ```ruby
-   load 'su_bridge/lib/su_bridge.rb'
-   SuBridge.start
-   ```
-
-### Updating
-
 ```bash
-git pull && ./setup.sh
+# Find SketchUp Plugins folder
+# macOS: ~/Library/Application Support/SketchUp/SketchUp 2024/SketchUp/Plugins/
+# Windows: C:\Users\YourName\AppData\Roaming\SketchUp\SketchUp 2024\SketchUp\Plugins\
+
+# Copy su_bridge/ folder to Plugins folder
+
+# In SketchUp Ruby Console:
+load 'su_bridge/lib/su_bridge.rb'
+SuBridge.start
 ```
 
-**Plugin components:**
-- `mcpServers.sketchup-mcp`: Python FastMCP server for Claude Code tools
-- Skills for design workflows (in `skills/` directory)
+---
 
 ## Directory Structure
 
@@ -95,59 +225,61 @@ git pull && ./setup.sh
 sketchup-claude-code/
 ├── CLAUDE.md                          # Project constitution (this file)
 ├── setup.sh                           # First-time setup script
+├── designs/                           # Design projects
+│   └── {project_name}/
+│       ├── design_model.json           # Design state (LLM readable)
+│       └── model.skp                  # SketchUp file
 ├── .claude-plugin/                    # Claude Code plugin marketplace
-│   ├── marketplace.json               # Marketplace catalog for /plugin marketplace add
-│   └── plugin.json                    # Plugin manifest with MCP server config
-├── mcp_server/                        # Python logic layer
+│   ├── marketplace.json
+│   └── plugin.json
+├── mcp_server/                        # Python MCP server
 │   ├── pyproject.toml
 │   ├── mcp_server/
-│   │   ├── __init__.py
 │   │   ├── server.py                  # FastMCP entry point
-│   │   ├── tools/
-│   │   │   ├── __init__.py
-│   │   │   ├── model_tools.py         # Entity creation/deletion
-│   │   │   ├── query_tools.py         # Model queries
-│   │   │   └── export_tools.py        # glTF/IFC export
+│   │   ├── tools/                     # MCP tools
+│   │   │   ├── model_tools.py
+│   │   │   ├── query_tools.py
+│   │   │   ├── component_tools.py
+│   │   │   └── export_tools.py
 │   │   ├── resources/
-│   │   │   ├── __init__.py
-│   │   │   ├── model_resource.py      # model://current
-│   │   │   └── entity_resource.py     # entity://{id}
+│   │   │   └── design_model_resource.py
 │   │   ├── protocol/
-│   │   │   ├── __init__.py
-│   │   │   ├── jsonrpc.py             # JSON-RPC 2.0 serialization
-│   │   │   ├── spatial.py            # mm/Z-up coordinate utilities
-│   │   │   └── rollback.py            # Atomic operation with rollback
 │   │   └── bridge/
-│   │       ├── __init__.py
-│   │       └── socket_bridge.py       # Unix socket client to su_bridge
 │   └── tests/
-├── su_bridge/                         # Ruby SketchUp plugin layer
-│   ├── su_bridge.rb                  # Main entry point /loader
-│   ├── su_bridge/
-│   │   ├── __init__.rb
+├── su_bridge/                         # Ruby SketchUp plugin
+│   ├── su_bridge.rb                  # Main entry point
+│   ├── lib/su_bridge/
 │   │   ├── server_listener.rb         # Non-blocking socket server
 │   │   ├── command_dispatcher.rb     # Routes JSON-RPC to Ruby API
 │   │   ├── undo_manager.rb            # Undo transaction wrapper
 │   │   ├── entities/
-│   │   │   ├── __init__.rb
-│   │   │   ├── face_builder.rb        # Face/mesh creation
-│   │   │   ├── group_builder.rb       # Group/component handling
-│   │   │   └── material_applier.rb    # Material/texture assignment
+│   │   │   ├── face_builder.rb
+│   │   │   ├── wall_builder.rb
+│   │   │   ├── door_builder.rb
+│   │   │   ├── window_builder.rb
+│   │   │   ├── stairs_builder.rb
+│   │   │   └── material_applier.rb
 │   │   └── protocol/
-│   │       ├── __init__.rb
-│   │       └── json_rpc_handler.rb    # Parse/validate incoming RPC
 │   └── spec/
-│       └── su_bridge_spec.rb         # RSpec tests
-├── specs/                             # Core protocol definitions
-│   ├── rpc_protocol.md                # JSON-RPC 2.0 interface spec
-│   ├── spatial_constraints.md          # Coordinate system, constraints
-│   └── undo_semantics.md              # Atomic rollback semantics
-└── skills/                            # Designer workflow instruction sets
-    ├── SKILL.md                       # Root skill manifest
-    ├── designer_workflow/              # Interior design command suite
-    │   └── SKILL.md
-    └── common_operations/            # Wall/door/window operations
-        └── SKILL.md
+├── specs/                             # Protocol definitions
+│   ├── rpc_protocol.md
+│   ├── spatial_constraints.md
+│   ├── naming_convention.rules
+│   └── undo_semantics.md
+├── skills/                            # LLM instruction sets
+│   ├── SKILL.md
+│   ├── geometry_composition/
+│   │   └── SKILL.md
+│   ├── designer_workflow/
+│   │   └── SKILL.md
+│   ├── semantic_positioning/
+│   │   └── SKILL.md
+│   └── common_operations/
+│       └── SKILL.md
+├── scripts/                           # Utility scripts
+│   ├── reload_su_bridge.rb
+│   └── cleanup_su_bridge.rb
+└── .gitignore
 ```
 
 ---
@@ -156,432 +288,240 @@ sketchup-claude-code/
 
 ### Principle 1: Bidirectional Communication
 
-All modeling commands MUST return state feedback. No fire-and-forget operations. Every `execute_operation` call returns the affected entity IDs, spatial delta, and model revision.
-
-**Required response fields:**
-- `entity_ids`: List of created/modified entity IDs
-- `spatial_delta`: Bounding box and volume of changes
-- `model_revision`: Current model revision number
-- `elapsed_ms`: Operation duration
+All modeling commands MUST return state feedback. No fire-and-forget operations.
 
 ### Principle 2: Undo Transaction Wrapper
 
-Every mutating operation MUST be wrapped in a SketchUp Undo transaction. If the Ruby layer throws any exception, the transaction MUST be rolled back and an error returned to the Python layer.
-
-**Rules:**
-1. Begin Undo operation before any mutation
-2. If exception occurs: call `UndoManager.rollback` and return error
-3. If success: `UndoManager.release` and return result
-4. Never leave a transaction open on error
+Every mutating operation wrapped in SketchUp Undo transaction. On exception, rollback.
 
 ### Principle 3: mm / Z-Up Coordinate System
 
-All coordinates in the protocol are in **millimeters** with **Z-axis pointing up**. The Python layer is responsible for any unit conversion from user-facing units (meters, feet, inches) to mm before sending commands.
-
-**Conventions:**
-- Internal units: millimeters (mm)
-- Z-axis: points upward (standard SketchUp)
-- Origin: SketchUp model origin
-- No unit suffixes in protocol (e.g., `1000` means 1000mm, not 1m)
+All coordinates in **millimeters** with Z-axis pointing up.
 
 ### Principle 4: Atomic Operations with Rollback
 
-Each `execute_operation` request is atomic. On failure, the operation is rolled back and a structured error returned. Partial success is not allowed.
-
-**Flow:**
-1. Validate request parameters
-2. Begin transaction
-3. Execute operation
-4. On success: commit and return result
-5. On failure: rollback and return error with `rollback_status: "completed"`
+Each operation is atomic. On failure, rollback and return structured error.
 
 ### Principle 5: Non-Blocking SketchUp Interaction
 
-SketchUp UI must never freeze. All Ruby operations use `UI.start_timer` for deferred execution. Long operations report progress via incremental status updates.
+All Ruby operations use `UI.start_timer` for deferred execution.
 
-**Requirements:**
-- Socket listener runs on main thread via `UI.start_timer`
-- No blocking I/O in Ruby callbacks
-- Progress updates via incremental responses
-- Timeout handling for long operations
+### Principle 6: Design Model Synchronization
 
----
+Design Model (design_model.json) MUST be synchronized with SketchUp state.
 
-## Protocol: execute_operation
+### Principle 7: Semantic Positioning
 
-### Request Format
-
-```json
-{
-  "jsonrpc": "2.0",
-  "method": "execute_operation",
-  "params": {
-    "operation_id": "op_abc123",
-    "operation_type": "create_face",
-    "payload": {
-      "vertices": [[0, 0, 0], [1000, 0, 0], [1000, 500, 0], [0, 500, 0]],
-      "material_id": "mat_wood_oak",
-      "layer": "Furniture"
-    },
-    "rollback_on_failure": true
-  },
-  "id": 42
-}
-```
-
-### Success Response
-
-```json
-{
-  "jsonrpc": "2.0",
-  "result": {
-    "operation_id": "op_abc123",
-    "status": "success",
-    "entity_ids": ["ent_001", "ent_002"],
-    "spatial_delta": {
-      "bounding_box": {
-        "min": [0, 0, 0],
-        "max": [1000, 500, 0]
-      },
-      "volume_mm3": 0
-    },
-    "model_revision": 17,
-    "elapsed_ms": 12
-  },
-  "id": 42
-}
-```
-
-### Error Response (with rollback)
-
-```json
-{
-  "jsonrpc": "2.0",
-  "error": {
-    "code": -32001,
-    "message": "Face creation failed: points are collinear",
-    "data": {
-      "operation_id": "op_abc123",
-      "rollback_status": "completed",
-      "model_revision": 16
-    }
-  },
-  "id": 42
-}
-```
-
-### Error Codes
-
-| Code | Name | Description |
-|------|------|-------------|
-| -32000 | `OPERATION_ERROR` | General operation failure |
-| -32001 | `VALIDATION_ERROR` | Invalid parameters or geometry |
-| -32002 | `UNDO_FAILED` | Rollback did not complete cleanly |
-| -32003 | `SKETCHUP_BUSY` | SketchUp is busy, retry suggested |
-| -32004 | `ENTITY_NOT_FOUND` | Referenced entity ID does not exist |
-| -32005 | `PERMISSION_DENIED` | Operation not allowed in current context |
+LLM positions objects using semantic relationships, not raw coordinates.
 
 ---
 
-## Asset Management
+## MCP Tools Reference
 
-### Component Library
-
-The component library is located at `mcp_server/assets/library.json` and contains furniture definitions with metadata.
-
-**Library Entry Structure:**
-```json
-{
-  "id": "sofa_modern_double",
-  "name": "现代双人沙发",
-  "name_en": "Modern Double Sofa",
-  "category": "living_room",
-  "skp_path": "${SKETCHUP_ASSETS}/furniture/sofa_modern_double.skp",
-  "default_dimensions": {"width": 2000, "depth": 900, "height": 850},
-  "insertion_point": {
-    "description": "前缘中心",
-    "offset": [0, 0, 0],
-    "face_direction": "+y"
-  },
-  "bounds": {"min": [0, 0, 0], "max": [2000, 900, 850]}
-}
-```
-
-### SKP Asset Path Resolution
-
-SKP paths support environment variable substitution:
-- `${SKETCHUP_ASSETS}` - Resolved from `SKETCHUP_ASSETS` env var
-- Default: `/Applications/SketchUp.app/Contents/Resources`
-
-**Setting the asset path:**
-```bash
-export SKETCHUP_ASSETS=/path/to/your/sketchup_assets
-```
-
-### Managing Local .skp Models
-
-1. **Organize by category:**
-   ```
-   SKETCHUP_ASSETS/
-   ├── furniture/
-   │   ├── sofa_modern_double.skp
-   │   ├── dining_table_rect.skp
-   │   └── bed_double.skp
-   ├── fixtures/
-   │   └── lamp_floor.skp
-   └── structural/
-       └── column.skp
-   ```
-
-2. **Add new components:**
-   - Create or obtain .skp file
-   - Place in appropriate category folder
-   - Add entry to `library.json` with:
-     - Unique `id`
-     - `name` (Chinese)
-     - `name_en` (English)
-     - `skp_path` relative to `SKETCHUP_ASSETS`
-     - `default_dimensions` in mm
-     - `insertion_point` offset
-     - `bounds` for collision detection
-
-3. **Component requirements:**
-   - Units: millimeters
-   - Origin: at insertion point
-   - Forward face: +Y direction
-   - Scale: realistic 1:1 dimensions
-
-### Placement Rules
-
-Default clearances from `library.json`:
-| Rule | Value |
-|------|-------|
-| `min_clearance` | 600mm |
-| `door_clearance` | 900mm |
-| `walkway_width` | 800mm |
-
----
-
-## Sketchfab 3D Model Search
-
-SCC includes tools to search Sketchfab's library of Creative Commons licensed 3D models and download them for use in SketchUp.
-
-### Search for Models
+### Foundation Modeling
 
 ```python
-# Search Sketchfab for furniture and objects
-search_sketchfab_models(query: "modern sofa", count: 10)
-search_sketchfab_models(query: "floor lamp", count: 5)
-search_sketchfab_models(query: "potted plant interior", sort: "likes")
+create_face(vertices: list[list[float]], layer: str = None)
+create_box(corner_x: float, corner_y: float, corner_z: float, width: float, depth: float, height: float)
+create_wall(start_x: float, start_y: float, start_z: float, end_x: float, end_y: float, end_z: float, height: float, thickness: float, alignment: str = "center")
+create_group(entity_ids: list[str], name: str = None)
+create_door(wall_id: str, position_x: float, position_y: float, width: float = 900, height: float = 2100, swing_direction: str = "left")
+create_window(wall_id: str, position_x: float, position_y: float, width: float = 1200, height: float = 1000, sill_height: float = 900)
+create_stairs(start_x: float, start_y: float, start_z: float, end_x: float, end_y: float, end_z: float, width: float = 1000, num_steps: int = 12)
 ```
 
-### Download Models
+### Entity Operations
 
 ```python
-# Download a model (OBJ format recommended for SketchUp)
-download_sketchfab_model(model_uid: "abc123...", format_hint: "obj")
-
-# Search and download in one step
-search_and_download_sketchfab(query: "minimalist coffee table")
+move_entity(entity_ids: list[str], delta_x: float, delta_y: float, delta_z: float)
+rotate_entity(entity_ids: list[str], center_x: float, center_y: float, center_z: float, axis: str, angle: float)
+scale_entity(entity_ids: list[str], center_x: float, center_y: float, center_z: float, scale: float)
+copy_entity(entity_ids: list[str], delta_x: float, delta_y: float, delta_z: float)
+delete_entity(entity_ids: list[str])
 ```
 
-### Downloaded Model Storage
-
-Models are downloaded to: `~/SketchUp/SCC/downloaded_models/`
-
-After download, import into SketchUp via **File > Import** and select the downloaded file.
-
-### Workflow: Adding a New Object
-
-1. **Search**: `search_sketchfab_models(query: "modern gray sofa")`
-2. **Review results**: Check view count, likes, and description
-3. **Download**: `download_sketchfab_model(model_uid: "xxx", format_hint: "obj")`
-4. **Import**: In SketchUp, use File > Import to add the .obj file
-5. **Position**: Use SCC tools to position and scale the imported model
-
-### Model Format Notes
-
-| Format | SketchUp Compatibility | Notes |
-|--------|------------------------|-------|
-| OBJ | Best | Native import support |
-| GLTF/GLB | Requires conversion | Use external converter |
-| FBX | Limited | May lose materials |
-
----
-
-## Design Version Control
-
-### Overview
-
-Designs are versioned using a snapshot system that captures the complete model state at key milestones.
-
-### Version File Structure
-
-```
-designs/
-└── project_name/
-    ├── v1.0_initial/
-    │   ├── model.skp
-    │   ├── snapshot_客厅_birdseye.png
-    │   ├── snapshot_主卧_perspective.png
-    │   └── metadata.json
-    ├── v1.1_after_furniture/
-    │   ├── model.skp
-    │   └── metadata.json
-    └── v2.0_final/
-        ├── model.skp
-        └── metadata.json
-```
-
-### Metadata Format (metadata.json)
-
-```json
-{
-  "version": "1.0",
-  "created_at": "2026-04-14T10:30:00Z",
-  "created_by": "Claude",
-  "description": "Initial layout with walls and basic furniture",
-  "camera_views": {
-    "living_room_birdseye": "snapshot_客厅_birdseye.png",
-    "master_bedroom": "snapshot_主卧_perspective.png"
-  },
-  "entity_count": 142,
-  "style_preset": "japandi_cream",
-  "components_used": [
-    "sofa_modern_double",
-    "dining_table_rect",
-    "bed_double"
-  ]
-}
-```
-
-### Snapshot Naming Convention
-
-Format: `snapshot_{space}_{view_preset}.png`
-
-Examples:
-- `snapshot_客厅_panoramic.png`
-- `snapshot_主卧_birdseye.png`
-- `snapshot_餐厅_perspective.png`
-
-### Version Control Commands
-
-#### Save Version
-```python
-async def save_version(
-    project_name: str,
-    version_tag: str,
-    description: str,
-    output_dir: str = "./designs"
-) -> dict[str, Any]:
-    """Save current model state as a versioned snapshot."""
-```
-
-#### Load Version
-```python
-async def load_version(
-    project_name: str,
-    version_tag: str,
-    output_dir: str = "./designs"
-) -> dict[str, Any]:
-    """Load a previous version of the design."""
-```
-
-#### List Versions
-```python
-async def list_versions(
-    project_name: str,
-    output_dir: str = "./designs"
-) -> list[dict[str, Any]]:
-    """List all versions of a project."""
-```
-
-### Automatic Snapshots
-
-The system can capture automatic snapshots at key points:
-
-1. **After wall creation** - `snapshot_walls_complete.png`
-2. **After furniture placement** - `snapshot_furniture_placed.png`
-3. **After material application** - `snapshot_materials_applied.png`
-4. **Final delivery** - `snapshot_final_delivery.png`
-
-### Design Export Formats
-
-| Format | Extension | Use Case |
-|--------|-----------|----------|
-| SketchUp | `.skp` | Editing, further work |
-| glTF | `.gltf` / `.glb` | Web, AR/VR |
-| IFC | `.ifc` | BIM, architectural handover |
-| PNG | `.png` | Presentation, client review |
-| PDF | `.pdf` | Print, documentation |
-
-### Capture Presets
+### Material & Style
 
 ```python
-# Capture from preset views
-capture_design(
-    output_path="/designs/project/v1.0/snapshot_客厅.png",
-    view_preset="living_room_birdseye",
-    width=1920,
-    height=1080
-)
+apply_material(entity_ids: list[str], color: str = None, material_id: str = None, texture_scale_x: int = None, texture_scale_y: int = None)
+apply_style(style_name: str, entity_ids: list[str] = None)
+# Style options: "japandi_cream", "modern_industrial", "scandinavian", "mediterranean", "bohemian", "contemporary_minimalist"
+```
 
-# Multi-angle capture for client presentation
-for view in ["panoramic", "living_room_birdseye", "master_bedroom", "dining_area"]:
-    capture_design(
-        output_path=f"/designs/project/v1.0/snapshot_{view}.png",
-        view_preset=view
-    )
+### Query
+
+```python
+get_scene_info() -> dict  # Returns bounding_box, entity_counts, layers
+query_entities(entity_type: str = None, layer: str = None, limit: int = 100)
+```
+
+### Component & Lighting
+
+```python
+place_component(component_name: str, position_x: float = 0, position_y: float = 0, position_z: float = 0, rotation: float = 0, scale: float = 1)
+place_lighting(lighting_type: str, position_x: float, position_y: float, position_z: float = 0, ceiling_height: float = 2400, mount_height: float = 2000, rotation: float = 0)
+# lighting_type: "spotlight", "chandelier", "floor_lamp"
+```
+
+### Camera & Capture
+
+```python
+set_camera_view(view_preset: str = None, eye_x: float = None, eye_y: float = None, eye_z: float = None, target_x: float = None, target_y: float = None, target_z: float = None)
+capture_design(output_path: str, view_preset: str = None, width: int = 1920, height: int = 1080, return_base64: bool = False)
+```
+
+### Component Search
+
+```python
+search_sketchfab_models(query: str, count: int = 10, sort: str = "relevance")
+download_sketchfab_model(model_uid: str, format_hint: str = "obj", output_dir: str = None)
+search_and_download_sketchfab(query: str, format_hint: str = "obj")
+```
+
+### Export
+
+```python
+export_gltf(output_path: str, include_textures: bool = True)
+export_ifc(output_path: str)
 ```
 
 ---
 
 ## Implementation Phases
 
-### Phase 1: Foundation
+### Phase 1: Foundation ✅
 - [x] Create `CLAUDE.md` at project root
-- [x] Create `/specs/rpc_protocol.md` with full JSON-RPC 2.0 interface
-- [x] Create `/specs/spatial_constraints.md` (mm/Z-up conventions)
-- [x] Create `/specs/undo_semantics.md` (atomic rollback rules)
-- [x] Initialize `/mcp_server/` with `pyproject.toml` and FastMCP skeleton
-- [x] Initialize `/su_bridge/` with Ruby gem structure and basic listener
+- [x] Create `/specs/rpc_protocol.md`
+- [x] Initialize `/mcp_server/` with FastMCP skeleton
+- [x] Initialize `/su_bridge/` with Ruby plugin
 
-### Phase 2: Protocol Bridge
-- [x] Implement Unix socket bridge between Python and Ruby
-- [x] Implement non-blocking `UI.start_timer` listener in Ruby
-- [x] Implement JSON-RPC serialization in Python
-- [x] Implement `execute_operation` tool in Python with rollback support
+### Phase 2: Protocol Bridge ✅
+- [x] Implement Unix socket bridge
+- [x] Implement non-blocking `UI.start_timer` listener
+- [x] Implement `execute_operation` tool
 
-### Phase 3: Core Tools
-- [x] `create_face`, `create_box`, `create_group` tools
-- [x] `query_entities`, `query_model_info` resources
-- [x] `create_wall` tool with alignment support
-- [x] Undo transaction wrapper in Ruby
+### Phase 3: Core Tools ✅
+- [x] `create_face`, `create_box`, `create_wall`, `create_group`
+- [x] `query_entities`, `get_scene_info`
+- [x] `move_entity`, `rotate_entity`, `scale_entity`, `copy_entity`
+- [x] `create_door`, `create_window`, `create_stairs`
+- [x] Undo transaction wrapper
 
-### Phase 4: Skills
-- [x] Designer workflow skills (wall placement, door/window insertion)
-- [x] Common material and layer conventions
-- [x] Spatial validation skill (collision detection)
+### Phase 4: Skills (ECC) ✅
+- [x] `geometry_composition/SKILL.md` - Furniture composition patterns
+- [x] `designer_workflow/SKILL.md` - Standard design workflow
+- [x] `semantic_positioning/SKILL.md` - Relative positioning
+- [x] `common_operations/SKILL.md` - Frequent operations
+- [x] `component_search/SKILL.md` - Library search workflow
 
-### Phase 5: Visual & Export
-- [x] Material system with Hex/RGB color support
-- [x] Style presets (Japandi, Industrial, Scandinavian, etc.)
-- [x] Lighting placement (spotlight, chandelier, floor_lamp)
-- [x] Camera presets and capture/export tools
-- [x] Design version control and snapshot system
+### Phase 5: Rules ✅
+- [x] `rules/spatial_validator.rb` - Spatial constraint validation
+- [x] `specs/naming_convention.rules` - Entity naming standards
+- [x] `specs/unit_conversion.rules` - Unit conversion rules
+- [x] `specs/layer_convention.rules` - Layer usage guidelines
 
-### Phase 6: Plugin Marketplace
-- [x] Create `.claude-plugin/marketplace.json` for `/plugin marketplace add` support
-- [x] Create `.claude-plugin/plugin.json` with MCP server configuration
-- [x] Update CLAUDE.md with marketplace distribution documentation
-- [x] Add Sketchfab 3D model search tools
-- [x] Add Sketchfab search skill
+### Phase 6: Design Model ✅
+- [x] `design_model_schema.py` - JSON Schema and validation
+- [x] `design_model_resource.py` - MCP resources for reading
+- [x] `design_model_sync.rb` - SketchUp to JSON sync
+
+### Phase 7: Hooks ✅
+- [x] `Hooks::EntityObserver` - Basic SketchUp observer
+- [x] `on_save` - Sync on model save
+- [x] `on_entity_add` - Auto-add to design model (debounced)
+- [x] `on_entity_delete` - Auto-remove from design model (debounced)
+- [x] `on_transform` - Update semantic positions
+- [x] `Hooks.configure()` - Configurable debounce and sync options
+
+### Phase 8: Component Search MCP ✅
+- [x] `search_local_library` - Fuzzy search local .skp files
+- [x] `list_local_library_categories` - List available categories
+- [x] `search_warehouse` - 3D Warehouse URL generator
+- [x] `download_from_warehouse` - Download guidance
+
+### Phase 9: Visual & Export ✅
+- [x] Material system with Hex/RGB color
+- [x] All 6 style presets
+- [x] Lighting placement
+- [x] Camera presets and capture
+- [x] Design version control
+- [x] `export_gltf`, `export_ifc`
+
+### Phase 10: Plugin Marketplace ✅
+- [x] `.claude-plugin/marketplace.json`
+- [x] `.claude-plugin/plugin.json`
+- [x] Sketchfab 3D model search
+
+### Phase 11: GitHub Preparation ✅
+- [x] GitHub Actions CI/CD workflow
+- [x] LICENSE file (MIT)
+- [x] README.md user documentation
+- [x] .gitignore
+- [x] CONTRIBUTING.md
+- [x] Issue templates
 
 ---
 
 ## Verification
 
-1. **Python server starts**: `cd mcp_server && uv run python -m mcp_server.server` (should emit JSON-RPC initialize response on STDIO)
-2. **Ruby plugin loads**: In SketchUp's Ruby console, `load 'su_bridge/su_bridge.rb'` should not error
-3. **Protocol spec is valid**: The markdown in `/specs/rpc_protocol.md` should contain all required JSON-RPC fields
-4. **Unit tests pass**: `cd mcp_server && uv run pytest` and `cd su_bridge && bundle exec rspec`
+### Quick Verification
+
+```bash
+# 1. Verify Ruby syntax
+cd su_bridge && for f in lib/su_bridge/**/*.rb spec/*.rb; do ruby -c "$f"; done
+
+# 2. Verify Python syntax
+cd mcp_server && uv run python -m py_compile mcp_server/server.py
+
+# 3. Run Python tests
+cd mcp_server && uv run pytest tests/ -v
+
+# 4. Run integration tests (requires SketchUp running)
+cd mcp_server && uv run pytest tests/test_integration.py -v
+```
+
+### Manual Test Sequence
+
+1. Open SketchUp, run `SuBridge.start`
+2. Test: `get_scene_info` - should return scene info
+3. Test: `create_wall` - should create wall
+4. Test: `apply_style` - should apply Scandinavian style
+5. Test: `move_entity` - should move created wall
+
+### Plugin Reinstall Flow
+
+```bash
+/plugin marketplace remove sketchup-claude-code
+rm -rf ~/.claude-doubao/plugins/cache/sketchup-claude-code
+/plugin marketplace add /Users/avenir/Code/personal/sketchup-claude-code
+```
+
+---
+
+## Common Issues
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| TextContent validation error | Return type mismatch | Use `TextContent(type="text", text=...)` |
+| Socket connection refused | Ruby bridge not started | Run `SuBridge.start` in SketchUp |
+| Tools listed but call fails | Cache has old code | Reinstall plugin |
+| Ruby reload issues | UI.start_timer persistence | Restart SketchUp |
+
+---
+
+## Contributing
+
+When adding new features:
+
+1. Add MCP tool to `server.py`
+2. Add Ruby handler to `command_dispatcher.rb`
+3. Add entity builder if needed
+4. Add skill documentation if new workflow
+5. Add tests (unit + integration)
+6. Update this CLAUDE.md
+
+---
+
+## License
+
+MIT
