@@ -367,7 +367,7 @@ module SuBridge
       return false unless AI_LAYERS.include?(entity.layer.name)
 
       # Only track groups and component instances for now
-      entity.is_a?(sketchup::Group) || entity.is_a?(sketchup::ComponentInstance)
+      entity.is_a?((sketchup)::Group) || entity.is_a?((sketchup)::ComponentInstance)
     end
 
     # Apply components from design model to SketchUp model
@@ -425,7 +425,7 @@ module SuBridge
 
   # SketchUp Entity Observer for automatic design model sync
   # Uses debounced sync to batch changes and avoid excessive file I/O
-  class EntityObserver < sketchup::ModelObserver
+  class EntityObserver < (sketchup)::ModelObserver
     def initialize(sync_manager)
       @sync_manager = sync_manager
       @pending_changes = []
