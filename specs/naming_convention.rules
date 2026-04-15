@@ -1,0 +1,91 @@
+# Naming Convention Rules
+
+## Purpose
+
+Standardized naming ensures LLM can correctly reference entities and components.
+
+## Entity Naming
+
+### Format
+```
+{type}_{descriptor}_{number}
+```
+
+### Examples
+| Entity | Name | Rationale |
+|--------|------|-----------|
+| Wall | `wall_south_001` | Type + location + ID |
+| Door | `door_entrance_001` | Type + function + ID |
+| Window | `window_living_001` | Type + room + ID |
+| Sofa | `sofa_living_001` | Type + room + ID |
+| Table | `table_dining_001` | Type + room + ID |
+
+## Component Naming
+
+### Furniture
+```
+{type}_{style}_{material}_{number}
+```
+
+Examples:
+- `sofa_modern_grey_001`
+- `chair_vintage_oak_001`
+- `table_dining_oak_1400_001`
+
+### Lighting
+```
+{type}_{location}_{number}
+```
+
+Examples:
+- `lamp_floor_living_001`
+- `chandelier_dining_001`
+- `spotlight_ceiling_kitchen_001`
+
+## Layer Names
+
+| Layer | Contents |
+|-------|----------|
+| `Walls` | Exterior and interior walls |
+| `Floors` | Floor surfaces |
+| `Ceilings` | Ceiling surfaces |
+| `Furniture` | All furniture components |
+| `Fixtures` | Bathroom, kitchen fixtures |
+| `Lighting` | Light fixtures and sources |
+| `Electrical` | Outlets, switches |
+| `Text` | Labels, annotations |
+
+## Semantic Position Keys
+
+| Key Pattern | Example |
+|-------------|---------|
+| `{room}_{feature}_center` | `living_room_center` |
+| `{furniture}_center` | `dining_table_center` |
+| `{furniture}_left` | `sofa_left_edge` |
+| `{furniture}_front` | `bed_headboard` |
+
+## Design Model IDs
+
+### Format
+```
+{prefix}_{type}_{number}
+```
+
+| Prefix | Type | Example |
+|--------|------|---------|
+| `space_` | Space | `space_living_room_001` |
+| `comp_` | Component | `comp_sofa_001` |
+| `mat_` | Material | `mat_oak_wood` |
+| `scene_` | Scene/Camera | `scene_birdseye_001` |
+
+## LLM Usage
+
+When LLM needs to reference an entity:
+1. Look up in design_model.json
+2. Use exact name as key
+3. Never guess entity IDs
+
+When LLM creates entity:
+1. Generate name using convention above
+2. Record in design_model.json
+3. Return name to user in confirmation

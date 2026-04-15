@@ -5,11 +5,22 @@ require "securerandom"
 module SuBridge
   # Routes JSON-RPC requests to appropriate Ruby API handlers.
   class CommandDispatcher
+    # Operations that modify entity geometry and should trigger sync
+    ENTITY_MODIFYING_OPERATIONS = Set.new(%w[
+      create_face create_box create_wall create_group
+      create_door create_window create_stairs
+      move_entity rotate_entity scale_entity
+      delete_entity
+    ]).freeze
+
     OPERATION_HANDLERS = {
       "create_face" => :handle_create_face,
       "create_box" => :handle_create_box,
       "create_wall" => :handle_create_wall,
       "create_group" => :handle_create_group,
+      "create_door" => :handle_create_door,
+      "create_window" => :handle_create_window,
+      "create_stairs" => :handle_create_stairs,
       "delete_entity" => :handle_delete_entity,
       "set_material" => :handle_set_material,
       "apply_material" => :handle_apply_material,
@@ -17,11 +28,17 @@ module SuBridge
       "query_entities" => :handle_query_entities,
       "query_model_info" => :handle_query_model_info,
       "get_scene_info" => :handle_get_scene_info,
+      "move_entity" => :handle_move_entity,
+      "rotate_entity" => :handle_rotate_entity,
+      "scale_entity" => :handle_scale_entity,
+      "copy_entity" => :handle_copy_entity,
       "place_component" => :handle_place_component,
       "place_lighting" => :handle_place_lighting,
       "set_camera_view" => :handle_set_camera_view,
       "capture_design" => :handle_capture_design,
       "cleanup_model" => :handle_cleanup_model,
+      "export_gltf" => :handle_export_gltf,
+      "export_ifc" => :handle_export_ifc,
     }.freeze
 
     # Public dispatch for JSON-RPC requests
@@ -69,6 +86,9 @@ module SuBridge
 
       elapsed_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time) * 1000).round
 
+      # Trigger design model sync for entity-modifying operations
+      sync_design_model(operation_type, result[:entity_ids] || [])
+
       # Merge handler result with standard fields
       {
         operation_id: operation_id,
@@ -96,6 +116,55 @@ module SuBridge
     end
 
     private
+
+    # Trigger design model sync after entity-modifying operations
+    # @param operation_type [String] The operation type (e.g., "create_wall")
+    # @param entity_ids [Array<String>] Entity IDs that were modified
+    def sync_design_model(operation_type, entity_ids = [])
+      return unless ENTITY_MODIFYING_OPERATIONS.include?(operation_type)
+
+      sync = SuBridge.design_sync
+      return unless sync
+
+      case operation_type
+      when "delete_entity"
+        entity_ids.each do |eid|
+          # Extract numeric ID from entity ID string
+          numeric_id = eid.to_s.gsub("entity_", "").to_i
+          sync.remove_entity(numeric_id) if numeric_id > 0
+        end
+      when "move_entity", "rotate_entity", "scale_entity"
+        # For transform operations, we need to update the entity positions
+        # The EntityObserver will handle this via onEntityChange
+        # But we can also do an immediate sync for reliability
+        entity_ids.each do |eid|
+          numeric_id = eid.to_s.gsub("entity_", "").to_i
+          entity = find_entity_by_id(numeric_id) if numeric_id > 0
+          if entity
+            trans = entity.transformation
+            position = trans ? trans.origin.to_a : [0, 0, 0]
+            # Convert from inches to mm
+            position_mm = position.map { |v| (v * 25.4).round(2) }
+            sync.update_entity_position(numeric_id, position_mm)
+          end
+        end
+      else
+        # For create operations, sync the entire model to capture new entities
+        sync.sync_to_file!
+      end
+    rescue => e
+      puts "[SuBridge] Sync failed: #{e.message}"
+    end
+
+    # Find entity by numeric ID
+    # @param entity_id [Integer] Numeric entity ID
+    # @return [Sketchup::Entity, nil] The entity or nil if not found
+    def find_entity_by_id(entity_id)
+      model = sketchup.active_model
+      return nil unless model
+
+      model.entities.find { |e| e.entityID == entity_id }
+    end
 
     # Get Sketchup reference dynamically to avoid constant resolution issues
     def sketchup
@@ -444,6 +513,99 @@ module SuBridge
       }
     end
 
+    def handle_create_door(payload)
+      wall_id = payload["wall_id"]
+      position_x = payload["position_x"]
+      position_y = payload.fetch("position_y", 0)
+      width = payload.fetch("width", 900)
+      height = payload.fetch("height", 2100)
+      swing_direction = payload.fetch("swing_direction", "left")
+
+      raise ::SuBridge::UndoManager::ValidationError, "wall_id required" unless wall_id
+      raise ::SuBridge::UndoManager::ValidationError, "position_x required" unless position_x
+
+      result = SuBridge::Entities::DoorBuilder.create(
+        wall_id: wall_id,
+        position_x: position_x,
+        position_y: position_y,
+        width: width,
+        height: height,
+        swing_direction: swing_direction
+      )
+
+      {
+        entity_ids: result[:entity_ids],
+        spatial_delta: result[:spatial_delta],
+        model_revision: 1,
+        elapsed_ms: 0,
+      }
+    end
+
+    def handle_create_window(payload)
+      wall_id = payload["wall_id"]
+      position_x = payload["position_x"]
+      position_y = payload.fetch("position_y", 0)
+      width = payload.fetch("width", 1200)
+      height = payload.fetch("height", 1000)
+      sill_height = payload.fetch("sill_height", 900)
+
+      raise ::SuBridge::UndoManager::ValidationError, "wall_id required" unless wall_id
+      raise ::SuBridge::UndoManager::ValidationError, "position_x required" unless position_x
+
+      result = SuBridge::Entities::WindowBuilder.create(
+        wall_id: wall_id,
+        position_x: position_x,
+        position_y: position_y,
+        width: width,
+        height: height,
+        sill_height: sill_height
+      )
+
+      {
+        entity_ids: result[:entity_ids],
+        spatial_delta: result[:spatial_delta],
+        model_revision: 1,
+        elapsed_ms: 0,
+      }
+    end
+
+    def handle_create_stairs(payload)
+      start_x = payload["start_x"]
+      start_y = payload["start_y"]
+      start_z = payload["start_z"]
+      end_x = payload["end_x"]
+      end_y = payload["end_y"]
+      end_z = payload["end_z"]
+      width = payload.fetch("width", 1000)
+      num_steps = payload["num_steps"]
+
+      raise ::SuBridge::UndoManager::ValidationError, "start_x required" unless start_x
+      raise ::SuBridge::UndoManager::ValidationError, "start_y required" unless start_y
+      raise ::SuBridge::UndoManager::ValidationError, "start_z required" unless start_z
+      raise ::SuBridge::UndoManager::ValidationError, "end_x required" unless end_x
+      raise ::SuBridge::UndoManager::ValidationError, "end_y required" unless end_y
+      raise ::SuBridge::UndoManager::ValidationError, "end_z required" unless end_z
+
+      result = SuBridge::Entities::StairsBuilder.create(
+        start_x: start_x,
+        start_y: start_y,
+        start_z: start_z,
+        end_x: end_x,
+        end_y: end_y,
+        end_z: end_z,
+        width: width,
+        num_steps: num_steps
+      )
+
+      {
+        entity_ids: result[:entity_ids],
+        spatial_delta: result[:spatial_delta],
+        model_revision: 1,
+        elapsed_ms: 0,
+        stairs_info: result[:stairs_info],
+      }
+    end
+
     def handle_delete_entity(payload)
       entity_ids = payload["entity_ids"]
       raise ::SuBridge::UndoManager::ValidationError, "entity_ids required" unless entity_ids
@@ -474,13 +636,366 @@ module SuBridge
     end
 
     def handle_query_entities(payload)
-      # Stub - would query ::Sketchup model
-      { entity_ids: [], spatial_delta: {}, model_revision: 1, elapsed_ms: 0 }
+      entity_type = payload["entity_type"]
+      layer = payload["layer"]
+      limit = payload.fetch("limit", 100)
+
+      all_entities = sketchup.active_model.entities.to_a
+      results = []
+
+      all_entities.each do |entity|
+        # Filter by entity_type
+        if entity_type
+          type_match = case entity_type.downcase
+                       when "face" then entity.is_a?(sketchup.const_get("Face"))
+                       when "edge" then entity.is_a?(sketchup.const_get("Edge"))
+                       when "group" then entity.is_a?(sketchup.const_get("Group"))
+                       when "component" then entity.is_a?(sketchup.const_get("ComponentInstance"))
+                       else false
+                       end
+          next unless type_match
+        end
+
+        # Filter by layer
+        if layer
+          next unless entity.layer && entity.layer.name == layer
+        end
+
+        # Get layer name safely
+        layer_name = entity.layer&.name || "Unassigned"
+
+        # Get bounding box
+        bbox = entity.bounds
+        bounding_box = {
+          min: [bbox.min.x.to_mm, bbox.min.y.to_mm, bbox.min.z.to_mm],
+          max: [bbox.max.x.to_mm, bbox.max.y.to_mm, bbox.max.z.to_mm],
+        }
+
+        # Determine entity type string
+        type_str = case entity
+                   when sketchup.const_get("Face") then "face"
+                   when sketchup.const_get("Edge") then "edge"
+                   when sketchup.const_get("Group") then "group"
+                   when sketchup.const_get("ComponentInstance") then "component"
+                   else "unknown"
+                   end
+
+        results << {
+          entityID: entity.entityID.to_s,
+          type: type_str,
+          layer: layer_name,
+          bounding_box: bounding_box,
+        }
+
+        break if results.length >= limit
+      end
+
+      # Calculate overall spatial delta
+      if results.any?
+        all_mins = results.map { |r| r[:bounding_box][:min] }
+        all_maxs = results.map { |r| r[:bounding_box][:max] }
+
+        overall_bbox = {
+          min: [
+            all_mins.map { |m| m[0] }.min,
+            all_mins.map { |m| m[1] }.min,
+            all_mins.map { |m| m[2] }.min,
+          ],
+          max: [
+            all_maxs.map { |m| m[0] }.max,
+            all_maxs.map { |m| m[1] }.max,
+            all_maxs.map { |m| m[2] }.max,
+          ],
+        }
+      else
+        overall_bbox = { min: [0, 0, 0], max: [0, 0, 0] }
+      end
+
+      {
+        entity_ids: results.map { |r| r[:entityID] },
+        spatial_delta: { bounding_box: overall_bbox },
+        model_revision: 1,
+        elapsed_ms: 0,
+        entities: results,
+      }
     end
 
     def handle_query_model_info(payload)
       # Delegate to get_scene_info
       handle_get_scene_info(payload)
+    end
+
+    # Conversion factor: mm to inches (SketchUp internal units)
+    MM_TO_INCH = 1.0 / 25.4
+
+    def mm_to_inches(mm)
+      mm * MM_TO_INCH
+    end
+
+    def find_entities_by_ids(entity_ids)
+      model = sketchup.active_model
+      entities = model.entities
+      found = []
+      missing = []
+
+      entity_ids.each do |eid|
+        entity = entities.find { |e| e.entityID.to_s == eid }
+        if entity
+          found << entity
+        else
+          missing << eid
+        end
+      end
+
+      raise ::SuBridge::UndoManager::EntityNotFoundError, "Entities not found: #{missing.join(', ')}" unless missing.empty?
+
+      found
+    end
+
+    def handle_move_entity(payload)
+      entity_ids = payload["entity_ids"]
+      delta = payload["delta"] # [dx, dy, dz] in mm
+
+      raise ::SuBridge::UndoManager::ValidationError, "entity_ids required" unless entity_ids
+      raise ::SuBridge::UndoManager::ValidationError, "delta required" unless delta
+
+      # Convert delta from mm to inches
+      dx = mm_to_inches(delta[0] || 0)
+      dy = mm_to_inches(delta[1] || 0)
+      dz = mm_to_inches(delta[2] || 0)
+
+      vector = Geom::Vector3d.new(dx, dy, dz)
+      transformation = Geom::Transformation.translation(vector)
+
+      entities = find_entities_by_ids(entity_ids)
+      entities.each do |entity|
+        entity.transformation = transformation * entity.transformation
+      end
+
+      {
+        entity_ids: entity_ids,
+        spatial_delta: {},
+        model_revision: 1,
+        elapsed_ms: 0,
+      }
+    end
+
+    def handle_rotate_entity(payload)
+      entity_ids = payload["entity_ids"]
+      center = payload["center"] # [cx, cy, cz] in mm
+      axis = payload["axis"] || "+z" # axis string
+      angle = payload["angle"] # angle in degrees
+
+      raise ::SuBridge::UndoManager::ValidationError, "entity_ids required" unless entity_ids
+      raise ::SuBridge::UndoManager::ValidationError, "center required" unless center
+      raise ::SuBridge::UndoManager::ValidationError, "angle required" unless angle
+
+      # Convert center from mm to inches
+      cx = mm_to_inches(center[0] || 0)
+      cy = mm_to_inches(center[1] || 0)
+      cz = mm_to_inches(center[2] || 0)
+      center_pt = Geom::Point3d.new(cx, cy, cz)
+
+      # Parse axis
+      axis_vector = case axis.to_s.downcase
+                    when "+x", "x" then Geom::Vector3d.new(1, 0, 0)
+                    when "-x" then Geom::Vector3d.new(-1, 0, 0)
+                    when "+y", "y" then Geom::Vector3d.new(0, 1, 0)
+                    when "-y" then Geom::Vector3d.new(0, -1, 0)
+                    when "+z", "z" then Geom::Vector3d.new(0, 0, 1)
+                    when "-z" then Geom::Vector3d.new(0, 0, -1)
+                    else raise ::SuBridge::UndoManager::ValidationError, "Invalid axis: #{axis}"
+                    end
+
+      # Convert angle from degrees to radians
+      angle_rad = angle * Math::PI / 180.0
+
+      transformation = Geom::Transformation.rotation(center_pt, axis_vector, angle_rad)
+
+      entities = find_entities_by_ids(entity_ids)
+      entities.each do |entity|
+        entity.transformation = transformation * entity.transformation
+      end
+
+      {
+        entity_ids: entity_ids,
+        spatial_delta: {},
+        model_revision: 1,
+        elapsed_ms: 0,
+      }
+    end
+
+    def handle_scale_entity(payload)
+      entity_ids = payload["entity_ids"]
+      center = payload["center"] # [cx, cy, cz] in mm
+      scale = payload["scale"] # uniform scale factor or [sx, sy, sz]
+
+      raise ::SuBridge::UndoManager::ValidationError, "entity_ids required" unless entity_ids
+      raise ::SuBridge::UndoManager::ValidationError, "center required" unless center
+      raise ::SuBridge::UndoManager::ValidationError, "scale required" unless scale
+
+      # Convert center from mm to inches
+      cx = mm_to_inches(center[0] || 0)
+      cy = mm_to_inches(center[1] || 0)
+      cz = mm_to_inches(center[2] || 0)
+      center_pt = Geom::Point3d.new(cx, cy, cz)
+
+      # Parse scale factor(s)
+      if scale.is_a?(Numeric)
+        sx = sy = sz = scale.to_f
+      elsif scale.is_a?(Array) && scale.length == 3
+        sx = scale[0].to_f
+        sy = scale[1].to_f
+        sz = scale[2].to_f
+      else
+        raise ::SuBridge::UndoManager::ValidationError, "scale must be a number or [sx, sy, sz]"
+      end
+
+      transformation = Geom::Transformation.scaling(center_pt, sx, sy, sz)
+
+      entities = find_entities_by_ids(entity_ids)
+      entities.each do |entity|
+        entity.transformation = transformation * entity.transformation
+      end
+
+      {
+        entity_ids: entity_ids,
+        spatial_delta: {},
+        model_revision: 1,
+        elapsed_ms: 0,
+      }
+    end
+
+    def handle_copy_entity(payload)
+      entity_ids = payload["entity_ids"]
+      delta = payload["delta"] # [dx, dy, dz] in mm
+
+      raise ::SuBridge::UndoManager::ValidationError, "entity_ids required" unless entity_ids
+      raise ::SuBridge::UndoManager::ValidationError, "delta required" unless delta
+
+      model = sketchup.active_model
+      entities = model.entities
+
+      # Convert delta from mm to inches
+      dx = mm_to_inches(delta[0] || 0)
+      dy = mm_to_inches(delta[1] || 0)
+      dz = mm_to_inches(delta[2] || 0)
+
+      vector = Geom::Vector3d.new(dx, dy, dz)
+      transformation = Geom::Transformation.translation(vector)
+
+      original_entities = find_entities_by_ids(entity_ids)
+      new_entity_ids = []
+
+      original_entities.each do |entity|
+        # Use add_copy to create a copy, then apply transformation
+        copy = entities.add_copy(entity)
+        copy.transformation = transformation * copy.transformation
+        new_entity_ids << copy.entityID.to_s
+      end
+
+      {
+        entity_ids: new_entity_ids,
+        spatial_delta: {},
+        model_revision: 1,
+        elapsed_ms: 0,
+      }
+    end
+
+    def handle_export_gltf(payload)
+      output_path = payload["output_path"]
+      include_textures = payload.fetch("include_textures", true)
+
+      raise ::SuBridge::UndoManager::ValidationError, "output_path required" unless output_path
+
+      # SketchUp's GLTF exporter is available via the SketchupExchange gem
+      # or we can use the built-in 3D warehouse export options
+      # For now, use SketchUp's native export functionality
+      model = sketchup.active_model
+
+      # Ensure output path has .gltf or .glb extension
+      unless output_path.end_with?(".gltf", ".glb")
+        output_path = output_path + ".glb"
+      end
+
+      # Use SketchUp's native GLTF export (available in SketchUp 2021+)
+      options = {
+        "exportTextures" => include_textures,
+        "binary" => output_path.end_with?(".glb"),
+      }
+
+      # SketchUp exports to a temporary location then we move it
+      temp_path = output_path + ".tmp"
+
+      begin
+        # Call SketchUp's GLTF exporter
+        # The exporter is accessed via the Model export method
+        status = model.export(temp_path, options)
+
+        unless status
+          raise ::SuBridge::UndoManager::ValidationError, "GLTF export failed - SketchUp may not support this format"
+        end
+
+        # Rename temp file to final path
+        ::FileUtils.mv(temp_path, output_path) if ::File.exist?(temp_path)
+
+        {
+          entity_ids: [],
+          spatial_delta: {},
+          model_revision: 1,
+          elapsed_ms: 0,
+          export_info: {
+            format: "gltf",
+            output_path: output_path,
+            include_textures: include_textures,
+          },
+        }
+      rescue => e
+        # Clean up temp file if it exists
+        ::FileUtils.rm_f(temp_path) if defined?(::FileUtils)
+        raise ::SuBridge::UndoManager::ValidationError, "GLTF export failed: #{e.message}"
+      end
+    end
+
+    def handle_export_ifc(payload)
+      output_path = payload["output_path"]
+
+      raise ::SuBridge::UndoManager::ValidationError, "output_path required" unless output_path
+
+      # Ensure output path has .ifc extension
+      unless output_path.end_with?(".ifc")
+        output_path = output_path + ".ifc"
+      end
+
+      model = sketchup.active_model
+
+      begin
+        # SketchUp IFC export
+        # Note: IFC export requires SketchUp Pro or the IFC extension
+        options = {
+          "exportLayers" => true,
+          "exportSelectionOnly" => false,
+        }
+
+        status = model.export(output_path, options)
+
+        unless status
+          raise ::SuBridge::UndoManager::ValidationError, "IFC export failed - ensure SketchUp Pro is activated or IFC extension is installed"
+        end
+
+        {
+          entity_ids: [],
+          spatial_delta: {},
+          model_revision: 1,
+          elapsed_ms: 0,
+          export_info: {
+            format: "ifc",
+            output_path: output_path,
+          },
+        }
+      rescue => e
+        raise ::SuBridge::UndoManager::ValidationError, "IFC export failed: #{e.message}"
+      end
     end
   end
 end
