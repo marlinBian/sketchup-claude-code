@@ -672,8 +672,7 @@ async def list_local_library_categories() -> TextContent:
 
 
 if __name__ == "__main__":
-    # Mount design model resources
-    mcp.mount(design_model_mcp)
+    # Run the MCP server
     mcp.run()
 
 
