@@ -1,4 +1,5 @@
 #!/bin/bash
 # Start the SketchUp MCP server
-cd "$(dirname "$0")"
-exec uv run python -m mcp_server.server
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+exec python3 -m mcp_server.server
