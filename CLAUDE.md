@@ -572,6 +572,86 @@ rm -rf ~/.claude-doubao/plugins/cache/sketchup-claude-code
 
 ---
 
+## Marketplace Debugging Guide
+
+### ⚠️ CRITICAL: GitHub Default Branch Matters
+
+The Claude Code marketplace uses GitHub's **default branch** (HEAD), NOT the `main` branch.
+
+**Check default branch:**
+```bash
+git ls-remote https://github.com/marlinBian/sketchup-claude-code.git HEAD
+```
+
+**If HEAD points to old commit:**
+- The marketplace will serve outdated code
+- Debug: Check `~/.claude-model/.claude-doubao/plugins/marketplaces/sketchup-claude-code/mcp_server/start.sh`
+- If it shows `uv run python` instead of `python3`, the cached code is stale
+
+**Fix: Ensure fixes are in the default branch (master on this repo):**
+```bash
+# Merge fixes to master branch
+git checkout master
+git merge main
+git push origin master
+```
+
+### Marketplace Cache Location
+
+Claude Code stores marketplace plugins at:
+```
+~/.claude-model/.claude-doubao/plugins/
+├── marketplaces/sketchup-claude-code/  ← Git clone of repo
+└── cache/sketchup-claude-code/         ← Package cache
+```
+
+### Debugging Steps for Plugin Installation Issues
+
+1. **Remove marketplace and clear cache:**
+   ```bash
+   /plugin marketplace remove sketchup-claude-code
+   rm -rf ~/.claude-model/.claude-doubao/plugins/marketplaces/sketchup-claude-code
+   rm -rf ~/.claude-model/.claude-doubao/plugins/cache/sketchup-claude-code
+   ```
+
+2. **Re-add marketplace:**
+   ```bash
+   /plugin marketplace add https://github.com/marlinBian/sketchup-claude-code
+   ```
+
+3. **Install plugin:**
+   ```bash
+   /plugin install sketchup-claude-code
+   ```
+
+4. **Verify installation:**
+   ```bash
+   cat ~/.claude-model/.claude-doubao/plugins/marketplaces/sketchup-claude-code/mcp_server/start.sh
+   ```
+   Should show `python3 -m mcp_server.server`, NOT `uv run python`
+
+5. **Check MCP status:**
+   ```
+   /mcp
+   ```
+   Look for `sketchup-claude-code:sketchup-mcp · ✔ connected`
+
+### Why `uv run python` Might Appear
+
+- The `start.sh` file was changed from `uv run python` to `python3`
+- But marketplace cached the old version because:
+  1. GitHub default branch pointed to old commit
+  2. OR marketplace cache wasn't cleared
+
+### Prevention
+
+**Before pushing fixes:**
+1. Verify the fix commit is on the default branch (master)
+2. Check: `git ls-remote https://github.com/marlinBian/sketchup-claude-code.git HEAD`
+3. Confirm the commit hash matches your fix
+
+---
+
 ## Contributing
 
 When adding new features:
