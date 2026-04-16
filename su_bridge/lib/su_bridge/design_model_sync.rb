@@ -16,6 +16,11 @@ module SuBridge
   class DesignModelSync
     attr_reader :project_path
 
+    # Get Sketchup reference dynamically to avoid constant resolution issues
+    def self.sketchup
+      ::Object.const_get('Sketchup')
+    end
+
     # Default design model file name (hidden file)
     DESIGN_MODEL_FILENAME = ".design_model.json".freeze
 
@@ -57,7 +62,7 @@ module SuBridge
     end
 
     # Add a single entity to design_model.json
-    # @param entity [Sketchup::Entity] Entity to add
+    # @param entity [sketchup::Entity] Entity to add
     # @return [Boolean] true if successful
     def add_entity(entity)
       return false unless entity
@@ -163,9 +168,9 @@ module SuBridge
     #
     # @return [Hash] Result with counts of synced entities
     def sync_to_file!
-      return { error: "Model not available" } unless SketchUp.active_model
+      return { error: "Model not available" } unless ::Sketchup.active_model
 
-      model = SketchUp.active_model
+      model = ::Sketchup.active_model
       data = load || create_empty_model
 
       # Update timestamp
@@ -188,10 +193,10 @@ module SuBridge
     #
     # @return [Hash] Result with counts of synced entities
     def sync_from_file!
-      return { error: "Model not available" } unless SketchUp.active_model
+      return { error: "Model not available" } unless ::Sketchup.active_model
       return { error: "design_model.json not found" } unless File.exist?(@design_model_path)
 
-      model = SketchUp.active_model
+      model = ::Sketchup.active_model
       data = load
 
       return { error: "Failed to load design_model.json" } unless data
@@ -207,10 +212,10 @@ module SuBridge
     def register_observer
       return @observer if @observer
 
-      model = SketchUp.active_model
+      model = ::Sketchup.active_model
       return nil unless model
 
-      @observer = Hooks::EntityObserver.new(self)
+      @observer = EntityObserver.new(self)
       model.add_observer(@observer)
       @observer
     end
@@ -219,7 +224,7 @@ module SuBridge
     def unregister_observer
       return unless @observer
 
-      model = SketchUp.active_model
+      model = ::Sketchup.active_model
       model.remove_observer(@observer) if model
       @observer = nil
     end
@@ -229,7 +234,7 @@ module SuBridge
     # Get default project path based on current model
     # @return [String] Default project path
     def default_project_path
-      model = SketchUp.active_model
+      model = ::Sketchup.active_model
       if model && model.path && !model.path.empty?
         File.dirname(model.path)
       else
@@ -259,7 +264,7 @@ module SuBridge
     end
 
     # Extract components from SketchUp model
-    # @param model [Sketchup::Model] SketchUp model
+    # @param model [sketchup::Model] SketchUp model
     # @return [Hash] Components keyed by entity_id
     def extract_components(model)
       components = {}
@@ -281,7 +286,7 @@ module SuBridge
     end
 
     # Extract layers from SketchUp model
-    # @param model [Sketchup::Model] SketchUp model
+    # @param model [sketchup::Model] SketchUp model
     # @return [Hash] Layers with colors
     def extract_layers(model)
       layers = {}
@@ -298,7 +303,7 @@ module SuBridge
     end
 
     # Convert SketchUp entity to hash
-    # @param entity [Sketchup::Entity] Entity to convert
+    # @param entity [sketchup::Entity] Entity to convert
     # @return [Hash] Entity data
     def entity_to_hash(entity)
       trans = entity.transformation
@@ -335,7 +340,7 @@ module SuBridge
     end
 
     # Extract rotation angle from transformation (Z-axis rotation in degrees)
-    # @param trans [Sketchup::Transformation, nil] Transformation
+    # @param trans [sketchup::Transformation, nil] Transformation
     # @return [Float] Rotation in degrees
     def extract_rotation(trans)
       return 0 unless trans
@@ -354,7 +359,7 @@ module SuBridge
     end
 
     # Check if entity should be tracked
-    # @param entity [Sketchup::Entity] Entity to check
+    # @param entity [sketchup::Entity] Entity to check
     # @return [Boolean] true if entity is valid for tracking
     def valid_entity?(entity)
       return false unless entity
@@ -362,11 +367,11 @@ module SuBridge
       return false unless AI_LAYERS.include?(entity.layer.name)
 
       # Only track groups and component instances for now
-      entity.is_a?(Sketchup::Group) || entity.is_a?(Sketchup::ComponentInstance)
+      entity.is_a?(::Sketchup::Group) || entity.is_a?(::Sketchup::ComponentInstance)
     end
 
     # Apply components from design model to SketchUp model
-    # @param model [Sketchup::Model] SketchUp model
+    # @param model [sketchup::Model] SketchUp model
     # @param components [Hash] Components to apply
     def apply_components(model, components)
       # TODO: Implement applying entities from JSON back to SketchUp
@@ -420,7 +425,7 @@ module SuBridge
 
   # SketchUp Entity Observer for automatic design model sync
   # Uses debounced sync to batch changes and avoid excessive file I/O
-  class EntityObserver < Sketchup::ModelObserver
+  class EntityObserver < (::Sketchup)::ModelObserver
     def initialize(sync_manager)
       @sync_manager = sync_manager
       @pending_changes = []
@@ -429,8 +434,8 @@ module SuBridge
     end
 
     # Called when an entity is added to the model
-    # @param model [Sketchup::Model] The model
-    # @param entity [Sketchup::Entity] The added entity
+    # @param model [sketchup::Model] The model
+    # @param entity [sketchup::Entity] The added entity
     def onEntityAdded(model, entity)
       return unless Hooks.enabled?
       return unless should_track?(entity)
@@ -448,8 +453,8 @@ module SuBridge
     end
 
     # Called when an entity is removed from the model
-    # @param model [Sketchup::Model] The model
-    # @param entity [Sketchup::Entity] The removed entity
+    # @param model [sketchup::Model] The model
+    # @param entity [sketchup::Entity] The removed entity
     def onEntityRemoved(model, entity)
       return unless Hooks.enabled?
 
@@ -468,7 +473,7 @@ module SuBridge
     end
 
     # Called when a transaction is undone
-    # @param model [Sketchup::Model] The model
+    # @param model [sketchup::Model] The model
     def onTransactionUndo(model)
       return unless Hooks.enabled?
       return unless Hooks.sync_on_undo?
@@ -486,7 +491,7 @@ module SuBridge
     end
 
     # Called when the model is saved
-    # @param model [Sketchup::Model] The model
+    # @param model [sketchup::Model] The model
     def onSaveModel(model)
       return unless Hooks.enabled?
 
@@ -504,12 +509,12 @@ module SuBridge
 
     # Called when entities are transformed (moved/rotated/scaled)
     # This is triggered via the model's onEntityChange observer
-    # @param model [Sketchup::Model] The model
-    # @param entity [Sketchup::Entity] The transformed entity
+    # @param model [sketchup::Model] The model
+    # @param entity [sketchup::Entity] The transformed entity
     def onEntityChange(model, entity)
       return unless Hooks.enabled?
       return unless should_track?(entity)
-      return unless entity.is_a?(Sketchup::Group) || entity.is_a?(Sketchup::ComponentInstance)
+      return unless entity.is_a?(::Sketchup::Group) || entity.is_a?(::Sketchup::ComponentInstance)
 
       @lock.synchronize do
         @pending_changes << {
@@ -526,7 +531,7 @@ module SuBridge
     private
 
     # Check if entity should be tracked
-    # @param entity [Sketchup::Entity] Entity to check
+    # @param entity [sketchup::Entity] Entity to check
     # @return [Boolean] true if entity should be tracked
     def should_track?(entity)
       return false unless entity
@@ -536,7 +541,7 @@ module SuBridge
     end
 
     # Convert entity to change data hash
-    # @param entity [Sketchup::Entity] Entity to convert
+    # @param entity [sketchup::Entity] Entity to convert
     # @return [Hash] Entity data for change tracking
     def entity_to_change_data(entity)
       trans = entity.transformation
@@ -573,7 +578,7 @@ module SuBridge
     end
 
     # Extract rotation angle from transformation
-    # @param trans [Sketchup::Transformation, nil] Transformation
+    # @param trans [sketchup::Transformation, nil] Transformation
     # @return [Float] Rotation in degrees
     def extract_rotation(trans)
       return 0 unless trans

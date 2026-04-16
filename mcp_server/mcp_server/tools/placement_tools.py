@@ -34,6 +34,36 @@ def find_component_by_name(name: str) -> dict[str, Any] | None:
     return None
 
 
+def search_components(query: str, limit: int = 10) -> list[dict[str, Any]]:
+    """Search components by name with fuzzy matching.
+
+    Args:
+        query: Search query string
+        limit: Maximum number of results
+
+    Returns:
+        List of matching components
+    """
+    library = load_library()
+    name_lower = query.lower().strip()
+    results = []
+
+    for component in library.get("components", []):
+        name = component.get("name", "").lower()
+        name_en = component.get("name_en", "").lower()
+        tags = [t.lower() for t in component.get("tags", [])]
+
+        if (name_lower in name or
+            name_lower in name_en or
+            any(name_lower in tag for tag in tags)):
+            results.append(component)
+
+        if len(results) >= limit:
+            break
+
+    return results
+
+
 def calculate_wall_offset(
     wall_start: list[float],
     wall_end: list[float],
