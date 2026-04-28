@@ -27,6 +27,8 @@ def test_build_project_execution_plan_from_bathroom_project(tmp_path):
     assert plan["operation_count"] == 10
     assert plan["skipped_instances"] == []
     assert operation_types[:4] == ["create_wall"] * 4
+    assert plan["bridge_operations"][0]["payload"]["space_id"] == "bathroom_001"
+    assert plan["bridge_operations"][0]["payload"]["wall_side"] == "south"
     assert "bathroom_door_700" in component_ids
     assert "toilet_floor_mounted_basic" in component_ids
     assert "vanity_wall_600" in component_ids
@@ -102,6 +104,15 @@ def test_execute_project_execution_plan_accepts_injected_executor(tmp_path):
 
     assert result["status"] == "success"
     assert result["execution_sync"]["saved"] is True
+    assert result["execution_sync"]["updated_space_walls"] == [
+        "bathroom_001.south",
+        "bathroom_001.east",
+        "bathroom_001.north",
+        "bathroom_001.west",
+    ]
+    assert design_model["spaces"]["bathroom_001"]["execution"]["walls"]["south"][
+        "entity_ids"
+    ] == ["su-wall_bathroom_001_south"]
     assert design_model["components"]["toilet_001"]["entity_id"] == "su-place_toilet_001"
 
 
@@ -159,12 +170,16 @@ async def test_execute_project_model_syncs_entity_ids_to_project(monkeypatch, tm
 
     assert data["status"] == "success"
     assert data["execution_sync"]["saved"] is True
+    assert data["execution_sync"]["updated_spaces"] == ["bathroom_001"]
     assert "toilet_001" in data["execution_sync"]["updated_components"]
     assert "ceiling_light_001" in data["execution_sync"]["updated_lighting"]
     assert design_model["components"]["toilet_001"]["entity_id"] == "su-place_toilet_001"
     assert design_model["lighting"]["ceiling_light_001"]["entity_id"] == (
         "su-place_ceiling_light_001"
     )
+    assert design_model["spaces"]["bathroom_001"]["execution"]["walls"]["west"][
+        "entity_ids"
+    ] == ["su-wall_bathroom_001_west"]
     assert "wall_bathroom_001_south" in design_model["execution"]["bridge_operations"]
 
 

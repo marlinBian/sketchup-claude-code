@@ -73,6 +73,15 @@ async def test_get_project_state_summarizes_execution_feedback(tmp_path):
     design_model, errors = load_design_model(str(design_model_path))
     assert errors == []
     assert design_model is not None
+    design_model["spaces"]["bathroom_001"]["execution"] = {
+        "walls": {
+            "south": {
+                "operation_id": "wall_bathroom_001_south",
+                "entity_ids": ["su-wall"],
+                "status": "success",
+            },
+        },
+    }
     design_model["components"]["toilet_001"]["entity_id"] = "su-toilet"
     design_model["lighting"]["ceiling_light_001"]["entity_id"] = "su-light"
     design_model["execution"] = {
@@ -102,6 +111,8 @@ async def test_get_project_state_summarizes_execution_feedback(tmp_path):
     }
     assert data["execution"]["component_entity_count"] == 1
     assert data["execution"]["lighting_entity_count"] == 1
+    assert data["execution"]["space_wall_entity_count"] == 1
+    assert data["execution"]["space_walls_with_entity_ids"] == ["bathroom_001.south"]
     assert data["execution"]["components_with_entity_ids"] == ["toilet_001"]
     assert data["execution"]["lighting_with_entity_ids"] == ["ceiling_light_001"]
 

@@ -86,6 +86,12 @@ def test_execute_bridge_operations_stops_on_error_by_default():
 
 def test_sync_execution_report_to_design_model_records_entity_ids():
     design_model = {
+        "spaces": {
+            "bathroom_001": {
+                "type": "bathroom",
+                "bounds": {"min": [0, 0, 0], "max": [2000, 1800, 2400]},
+            },
+        },
         "components": {
             "toilet_001": {"type": "toilet", "name": "Toilet", "position": [0, 0, 0]},
         },
@@ -98,6 +104,26 @@ def test_sync_execution_report_to_design_model_records_entity_ids():
     }
     execution_report = {
         "results": [
+            {
+                "operation_id": "wall_bathroom_001_south",
+                "operation_type": "create_wall",
+                "request": {
+                    "params": {
+                        "payload": {
+                            "space_id": "bathroom_001",
+                            "wall_side": "south",
+                        },
+                    },
+                },
+                "response": {
+                    "result": {
+                        "status": "success",
+                        "entity_ids": ["su-wall-south"],
+                        "spatial_delta": {"bounding_box": {"min": [0, 0, 0]}},
+                    },
+                },
+                "ok": True,
+            },
             {
                 "operation_id": "place_toilet_001",
                 "operation_type": "place_component",
@@ -137,8 +163,13 @@ def test_sync_execution_report_to_design_model_records_entity_ids():
 
     sync = sync_execution_report_to_design_model(design_model, execution_report)
 
+    assert sync["updated_spaces"] == ["bathroom_001"]
+    assert sync["updated_space_walls"] == ["bathroom_001.south"]
     assert sync["updated_components"] == ["toilet_001"]
     assert sync["updated_lighting"] == ["ceiling_light_001"]
+    assert design_model["spaces"]["bathroom_001"]["execution"]["walls"]["south"][
+        "entity_ids"
+    ] == ["su-wall-south"]
     assert design_model["components"]["toilet_001"]["entity_id"] == "su-toilet"
     assert design_model["lighting"]["ceiling_light_001"]["entity_id"] == "su-light"
     assert "place_toilet_001" in design_model["execution"]["bridge_operations"]

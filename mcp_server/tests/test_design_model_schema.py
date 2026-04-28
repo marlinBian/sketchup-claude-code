@@ -110,6 +110,22 @@ class TestValidateDesignModel:
         data = {
             "version": "1.0",
             "project_name": "executed_project",
+            "spaces": {
+                "bathroom_001": {
+                    "type": "bathroom",
+                    "bounds": {"min": [0, 0, 0], "max": [2000, 1800, 2400]},
+                    "execution": {
+                        "walls": {
+                            "south": {
+                                "operation_id": "wall_bathroom_001_south",
+                                "entity_ids": ["su-wall-south"],
+                                "spatial_delta": {},
+                                "status": "success",
+                            },
+                        },
+                    },
+                },
+            },
             "components": {
                 "toilet_001": {
                     "type": "toilet",

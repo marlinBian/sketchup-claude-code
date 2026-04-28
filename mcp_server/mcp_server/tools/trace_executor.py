@@ -70,6 +70,8 @@ def sync_execution_report_to_design_model(
         "recorded_operations": [],
         "updated_components": [],
         "updated_lighting": [],
+        "updated_spaces": [],
+        "updated_space_walls": [],
     }
     execution = design_model.setdefault("execution", {})
     operations = execution.setdefault("bridge_operations", {})
@@ -99,6 +101,21 @@ def sync_execution_report_to_design_model(
         )
         instance_id = payload.get("instance_id")
         if not instance_id or not entity_ids:
+            space_id = payload.get("space_id")
+            wall_side = payload.get("wall_side")
+            if space_id and wall_side and space_id in design_model.get("spaces", {}):
+                space = design_model["spaces"][space_id]
+                execution = space.setdefault("execution", {})
+                walls = execution.setdefault("walls", {})
+                walls[wall_side] = {
+                    "operation_id": operation_id,
+                    "entity_ids": entity_ids,
+                    "spatial_delta": response_result.get("spatial_delta", {}),
+                    "status": response_result.get("status"),
+                }
+                if space_id not in sync["updated_spaces"]:
+                    sync["updated_spaces"].append(space_id)
+                sync["updated_space_walls"].append(f"{space_id}.{wall_side}")
             continue
 
         if instance_id in design_model.get("components", {}):

@@ -99,6 +99,39 @@ DESIGN_MODEL_SCHEMA: Dict[str, Any] = {
                             "minItems": 3,
                             "maxItems": 3,
                         },
+                        "execution": {
+                            "type": "object",
+                            "description": (
+                                "Execution metadata for live SketchUp space geometry"
+                            ),
+                            "properties": {
+                                "walls": {
+                                    "type": "object",
+                                    "description": "Wall-side bridge feedback keyed by side name",
+                                    "patternProperties": {
+                                        "^[a-zA-Z0-9_]+$": {
+                                            "type": "object",
+                                            "properties": {
+                                                "operation_id": {
+                                                    "type": "string",
+                                                    "description": (
+                                                        "Bridge operation that created "
+                                                        "or last updated this wall"
+                                                    ),
+                                                },
+                                                "entity_ids": {
+                                                    "type": "array",
+                                                    "items": {"type": "string"},
+                                                },
+                                                "spatial_delta": {"type": "object"},
+                                                "status": {"type": "string"},
+                                            },
+                                            "required": ["operation_id", "entity_ids"],
+                                        },
+                                    },
+                                },
+                            },
+                        },
                     },
                     "required": ["type", "bounds"],
                 },

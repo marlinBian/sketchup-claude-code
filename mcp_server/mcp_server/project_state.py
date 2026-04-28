@@ -216,12 +216,24 @@ def summarize_execution(design_model: dict[str, Any]) -> dict[str, Any]:
         for lighting_id, lighting in design_model.get("lighting", {}).items()
         if lighting.get("entity_id")
     )
+    space_walls_with_entity_ids: list[str] = []
+    for space_id, space in design_model.get("spaces", {}).items():
+        walls = (
+            space.get("execution", {}).get("walls", {})
+            if isinstance(space.get("execution"), dict)
+            else {}
+        )
+        for wall_side, wall in walls.items():
+            if isinstance(wall, dict) and wall.get("entity_ids"):
+                space_walls_with_entity_ids.append(f"{space_id}.{wall_side}")
 
     return {
         "operation_count": len(bridge_operations),
         "operation_type_counts": operation_type_counts,
+        "space_wall_entity_count": len(space_walls_with_entity_ids),
         "component_entity_count": len(components_with_entity_ids),
         "lighting_entity_count": len(lighting_with_entity_ids),
+        "space_walls_with_entity_ids": sorted(space_walls_with_entity_ids),
         "components_with_entity_ids": components_with_entity_ids,
         "lighting_with_entity_ids": lighting_with_entity_ids,
         "has_execution_feedback": bool(bridge_operations),

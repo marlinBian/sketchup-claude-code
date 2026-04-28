@@ -180,6 +180,9 @@ def bridge_operations_for_space(
             "operation_id": f"wall_{space_id}_{side}",
             "operation_type": "create_wall",
             "payload": {
+                "space_id": space_id,
+                "wall_side": side,
+                "wall_id": f"{space_id}_{side}",
                 "start": start,
                 "end": end,
                 "height": height,

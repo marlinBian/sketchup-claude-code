@@ -74,6 +74,8 @@ into `design_model.json`:
 
 - `execution.bridge_operations` records each successful operation, returned
   `entity_ids`, status, and spatial delta.
+- generated space walls receive wall-side execution feedback under
+  `spaces.<space_id>.execution.walls.<side>`, including returned `entity_ids`.
 - component and lighting instances receive the first returned SketchUp
   `entity_id`.
 - instance `execution.operation_id` records the bridge operation that created or
