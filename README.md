@@ -47,6 +47,13 @@ docs/             Architecture docs, ADRs, and localized docs
 
 ## Development Checks
 
+Local product smoke without SketchUp:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent smoke /tmp/sah-smoke --force
+```
+
 Python baseline tests, excluding live SketchUp integration tests:
 
 ```bash

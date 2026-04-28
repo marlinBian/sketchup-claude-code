@@ -5,6 +5,7 @@ import json
 import sys
 
 from mcp_server.project_init import init_project
+from mcp_server.smoke import DEFAULT_SMOKE_PROJECT, run_smoke, validate_project
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -27,6 +28,39 @@ def build_parser() -> argparse.ArgumentParser:
         help="Overwrite existing generated project files",
     )
 
+    validate_parser = subparsers.add_parser(
+        "validate",
+        help="Validate a design project workspace",
+    )
+    validate_parser.add_argument("project_path", help="Project directory to validate")
+
+    smoke_parser = subparsers.add_parser(
+        "smoke",
+        help="Run a local headless smoke check",
+    )
+    smoke_parser.add_argument(
+        "project_path",
+        nargs="?",
+        default=DEFAULT_SMOKE_PROJECT,
+        help=f"Smoke project directory (default: {DEFAULT_SMOKE_PROJECT})",
+    )
+    smoke_parser.add_argument(
+        "--template",
+        choices=["bathroom"],
+        default="bathroom",
+        help="Smoke template to generate",
+    )
+    smoke_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing generated smoke project files",
+    )
+    smoke_parser.add_argument(
+        "--with-bridge",
+        action="store_true",
+        help="Also execute the bathroom trace against a live SketchUp bridge",
+    )
+
     return parser
 
 
@@ -45,6 +79,19 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
+        if args.command == "validate":
+            result = validate_project(args.project_path)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result["ok"] else 1
+        if args.command == "smoke":
+            result = run_smoke(
+                args.project_path,
+                template=args.template,
+                overwrite=args.force,
+                with_bridge=args.with_bridge,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result["ok"] else 1
     except Exception as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1

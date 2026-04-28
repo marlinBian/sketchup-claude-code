@@ -80,3 +80,25 @@ def test_cli_init_outputs_json(tmp_path, capsys):
     assert exit_code == 0
     assert data["template"] == "bathroom"
     assert (tmp_path / "cli-project" / "design_model.json").exists()
+
+
+def test_cli_validate_outputs_json(tmp_path, capsys):
+    project_path = tmp_path / "cli-project"
+    init_project(project_path, template="bathroom")
+
+    exit_code = main(["validate", str(project_path)])
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert data["ok"] is True
+
+
+def test_cli_smoke_outputs_json(tmp_path, capsys):
+    exit_code = main(["smoke", str(tmp_path / "smoke"), "--force"])
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert data["ok"] is True
+    assert data["headless_plan"]["valid"] is True

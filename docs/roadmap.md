@@ -144,3 +144,15 @@ Goal: use screenshots and image generation as advisory design feedback.
 - map accepted visual feedback back into structured model changes
 - keep generated visuals advisory; `design_model.json` remains the source of
   truth
+
+## P8: Local Smoke And Doctoring
+
+Goal: make maintainers and early users verify the harness without remembering
+scattered commands.
+
+- add `sketchup-agent validate <project-path>`
+- add `sketchup-agent smoke [project-path] --force`
+- keep the default smoke headless so it works without SketchUp
+- add optional bridge execution with `--with-bridge`
+- validate project files, asset locks, snapshot manifests, and headless planning
+- make release checks use the same smoke path

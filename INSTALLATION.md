@@ -107,6 +107,27 @@ cd mcp_server
 uv run --extra dev sketchup-agent init /tmp/sah-bathroom --template bathroom --force
 ```
 
+Validate a project workspace:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent validate /tmp/sah-bathroom
+```
+
+Run the local smoke check without SketchUp:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent smoke /tmp/sah-smoke --force
+```
+
+Run the smoke check against a live SketchUp bridge:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent smoke /tmp/sah-smoke --force --with-bridge
+```
+
 Python tests:
 
 ```bash

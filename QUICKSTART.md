@@ -25,6 +25,12 @@ The project directory now owns `design_model.json`, `design_rules.json`,
 `assets.lock.json`, the `assets/components/` cache directory, and
 `snapshots/manifest.json`.
 
+Validate the generated project:
+
+```bash
+uv run --extra dev sketchup-agent validate ~/Design/my-bathroom
+```
+
 ## 2. Start SketchUp Bridge
 
 Install the Ruby bridge into SketchUp, then run this in the SketchUp Ruby
@@ -93,3 +99,15 @@ and clearance check.
 
 The harness now generates structured project state, validates clearances, sends
 operations to SketchUp, and keeps `design_model.json` as the source of truth.
+
+## Local Smoke Check
+
+From the source checkout, run:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent smoke /tmp/sah-smoke --force
+```
+
+Add `--with-bridge` only after SketchUp is open and `SuBridge.start` has created
+`/tmp/su_bridge.sock`.
