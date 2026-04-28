@@ -60,6 +60,8 @@ Views, reporting, and versions:
 - `capture_design`
 - `capture_project_snapshot`
 - `record_visual_feedback`
+- `list_visual_feedback`
+- `update_visual_feedback_action_status`
 - `generate_report`
 - `save_version`
 - `list_versions`
@@ -143,6 +145,11 @@ record_visual_feedback(
     source_snapshot_id="<snapshot-id>"
 )
 ```
+
+Use `list_visual_feedback` to inspect pending visual actions. After the user
+accepts an action and the agent applies the corresponding structured model,
+component, rule, material, or style change, call
+`update_visual_feedback_action_status` with `status="applied"`.
 
 ## Useful Dimensions
 

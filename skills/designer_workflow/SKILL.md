@@ -95,6 +95,11 @@ If the user wants to act on a screenshot or rendered image, call
 `design_model.json`, components, rules, materials, or styles after the visual
 feedback has been converted into explicit actions.
 
+Use `list_visual_feedback` before applying pending visual actions. After an
+accepted action has been applied through structured tools, call
+`update_visual_feedback_action_status` with `status="applied"` so the manifest
+does not become a stale suggestion log.
+
 ## Supported User Prompts
 
 English examples:

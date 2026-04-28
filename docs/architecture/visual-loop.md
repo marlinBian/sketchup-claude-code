@@ -14,6 +14,8 @@ The first supported visual workflow is project snapshot capture:
 5. If the user wants to act on visual feedback, `record_visual_feedback`
    records structured proposed actions in the same manifest before any model
    mutation happens.
+6. `list_visual_feedback` and `update_visual_feedback_action_status` track
+   proposed, accepted, rejected, and applied actions.
 
 The manifest records:
 

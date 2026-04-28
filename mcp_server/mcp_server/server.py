@@ -17,8 +17,10 @@ from mcp_server.resources.design_model_schema import load_design_model, save_des
 from mcp_server.resources.snapshot_manifest_schema import (
     append_snapshot_entry,
     append_visual_feedback_entry,
+    load_snapshot_manifest,
     snapshot_entry,
     snapshot_output_path,
+    validate_snapshot_manifest,
     visual_feedback_entry,
 )
 from mcp_server.resources.design_rules_schema import (
@@ -1121,6 +1123,106 @@ async def record_visual_feedback(
         response_payload = {
             "visual_feedback": entry,
             "manifest_path": str(snapshot_manifest_path(project_path)),
+            "advisory": True,
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(response_payload, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Visual feedback failed: {str(e)}")
+
+
+@mcp.tool()
+async def list_visual_feedback(project_path: str) -> TextContent:
+    """List advisory visual feedback reviews for a project."""
+    try:
+        manifest_path = snapshot_manifest_path(project_path)
+        manifest, errors = load_snapshot_manifest(manifest_path)
+        if errors or manifest is None:
+            return TextContent(
+                type="text",
+                text=f"Visual feedback failed: {'; '.join(errors)}",
+            )
+        response_payload = {
+            "project_path": str(Path(project_path).expanduser().resolve()),
+            "manifest_path": str(manifest_path),
+            "reviews": manifest.get("reviews", []),
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(response_payload, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Visual feedback failed: {str(e)}")
+
+
+@mcp.tool()
+async def update_visual_feedback_action_status(
+    project_path: str,
+    review_id: str,
+    action_index: int,
+    status: str,
+) -> TextContent:
+    """Update one visual feedback action status without mutating design truth."""
+    try:
+        if status not in {"proposed", "accepted", "rejected", "applied"}:
+            return TextContent(
+                type="text",
+                text=(
+                    "Visual feedback failed: status must be one of proposed, "
+                    "accepted, rejected, applied."
+                ),
+            )
+
+        manifest_path = snapshot_manifest_path(project_path)
+        manifest, errors = load_snapshot_manifest(manifest_path)
+        if errors or manifest is None:
+            return TextContent(
+                type="text",
+                text=f"Visual feedback failed: {'; '.join(errors)}",
+            )
+
+        reviews = manifest.get("reviews", [])
+        review = next(
+            (item for item in reviews if item.get("id") == review_id),
+            None,
+        )
+        if review is None:
+            return TextContent(
+                type="text",
+                text=f"Visual feedback failed: review not found: {review_id}",
+            )
+
+        actions = review.get("actions", [])
+        if action_index < 0 or action_index >= len(actions):
+            return TextContent(
+                type="text",
+                text=(
+                    "Visual feedback failed: action_index out of range: "
+                    f"{action_index}"
+                ),
+            )
+
+        actions[action_index]["status"] = status
+        is_valid, validation_errors = validate_snapshot_manifest(manifest)
+        if not is_valid:
+            return TextContent(
+                type="text",
+                text=f"Visual feedback failed: {'; '.join(validation_errors)}",
+            )
+
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        response_payload = {
+            "project_path": str(Path(project_path).expanduser().resolve()),
+            "manifest_path": str(manifest_path),
+            "review_id": review_id,
+            "action_index": action_index,
+            "status": status,
+            "action": actions[action_index],
             "advisory": True,
         }
         return TextContent(
