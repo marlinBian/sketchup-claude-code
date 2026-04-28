@@ -158,6 +158,27 @@ def component_instance_anchors(
     }
 
 
+def refresh_project_assets_lock(
+    project_path: str,
+    design_model: dict[str, Any],
+) -> Path:
+    """Refresh assets.lock.json from current design model component refs."""
+    library, library_errors = load_effective_library(project_path)
+    if library_errors:
+        raise ValueError("; ".join(library_errors))
+    lock_path = assets_lock_path(project_path)
+    lock_path.write_text(
+        json.dumps(
+            build_assets_lock(design_model, library),
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return lock_path
+
+
 def bridge_operation_for_component_instance(
     instance_id: str,
     instance: dict[str, Any],
@@ -310,6 +331,168 @@ def select_entity_summary(
     if not isinstance(entity, dict):
         raise ValueError("selection entity summary must be an object.")
     return entity
+
+
+def selected_visual_feedback_action(
+    manifest: dict[str, Any],
+    review_id: str,
+    action_index: int,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, str | None]:
+    """Return one visual feedback review/action pair or an error message."""
+    review = next(
+        (item for item in manifest.get("reviews", []) if item.get("id") == review_id),
+        None,
+    )
+    if review is None:
+        return None, None, f"review not found: {review_id}"
+
+    actions = review.get("actions", [])
+    if action_index < 0 or action_index >= len(actions):
+        return review, None, f"action_index out of range: {action_index}"
+
+    action = actions[action_index]
+    if not isinstance(action, dict):
+        return review, None, "visual feedback action must be an object."
+    return review, action, None
+
+
+def component_manifest_insertion_offset(
+    component: dict[str, Any] | None,
+    dimensions: dict[str, float],
+) -> list[float]:
+    """Return insertion offset for component bounds recalculation."""
+    if component:
+        offset = component.get("insertion_point", {}).get("offset")
+        if isinstance(offset, list) and len(offset) == 3:
+            return [float(offset[0]), float(offset[1]), float(offset[2])]
+    return [float(dimensions["width"]) / 2, 0.0, 0.0]
+
+
+def apply_component_visual_action(
+    project_path: str,
+    design_model: dict[str, Any],
+    target: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply one structured visual feedback action to a component instance."""
+    components = design_model.setdefault("components", {})
+    if target not in components:
+        raise ValueError(f"component target not found: {target}")
+
+    instance = components[target]
+    manifest = None
+    if payload.get("component_ref"):
+        manifest = get_component_by_id(
+            str(payload["component_ref"]),
+            project_path=project_path,
+        )
+        if manifest is None:
+            raise ValueError(f"component manifest not found: {payload['component_ref']}")
+        instance["component_ref"] = manifest["id"]
+        instance["type"] = str(manifest.get("subcategory") or manifest.get("category"))
+        instance["name"] = str(payload.get("name") or manifest["name"])
+        instance["dimensions"] = component_dimensions(manifest)
+        instance["clearance"] = manifest.get("clearance", {})
+        instance["layer"] = str(
+            payload.get("layer") or default_layer_for_component(manifest)
+        )
+        instance["skp_path"] = placement_tools.resolve_skp_path(
+            placement_tools.component_skp_path(manifest)
+        )
+
+    for key, value in payload.items():
+        if key in {"component_ref"}:
+            continue
+        if key in {
+            "position",
+            "rotation",
+            "layer",
+            "name",
+            "dimensions",
+            "clearance",
+            "semantic_anchor",
+            "relative_to",
+            "materials",
+        }:
+            instance[key] = value
+
+    dimensions = instance.get("dimensions")
+    if not isinstance(dimensions, dict):
+        raise ValueError(f"component target has invalid dimensions: {target}")
+    normalized_dimensions = {
+        "width": float(dimensions["width"]),
+        "depth": float(dimensions["depth"]),
+        "height": float(dimensions["height"]),
+    }
+    instance["dimensions"] = normalized_dimensions
+
+    position = instance.get("position")
+    if not isinstance(position, list) or len(position) != 3:
+        raise ValueError(f"component target has invalid position: {target}")
+    normalized_position = [
+        float(position[0]),
+        float(position[1]),
+        float(position[2]),
+    ]
+    instance["position"] = normalized_position
+
+    if manifest is None and instance.get("component_ref"):
+        manifest = get_component_by_id(
+            str(instance["component_ref"]),
+            project_path=project_path,
+        )
+    insertion_offset = component_manifest_insertion_offset(manifest, normalized_dimensions)
+    bounds = component_instance_bounds(
+        normalized_position,
+        normalized_dimensions,
+        insertion_offset,
+    )
+    instance["bounds"] = bounds
+    instance["anchors"] = component_instance_anchors(
+        normalized_position,
+        bounds,
+        normalized_dimensions,
+    )
+    instance.setdefault("source", {})
+    instance["source"]["visual_feedback"] = {
+        "kind": "structured_visual_action",
+    }
+    return instance
+
+
+def apply_lighting_visual_action(
+    design_model: dict[str, Any],
+    target: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply one structured visual feedback action to a lighting instance."""
+    lighting = design_model.setdefault("lighting", {})
+    if target not in lighting:
+        raise ValueError(f"lighting target not found: {target}")
+    lighting[target].update(payload)
+    lighting[target].setdefault("source", {})
+    lighting[target]["source"]["visual_feedback"] = {
+        "kind": "structured_visual_action",
+    }
+    return lighting[target]
+
+
+def apply_material_visual_action(
+    design_model: dict[str, Any],
+    target: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply one structured material action to project metadata or a component."""
+    if target in design_model.get("components", {}):
+        component = design_model["components"][target]
+        component.setdefault("materials", {})
+        component["materials"].update(payload)
+        return component["materials"]
+
+    metadata = design_model.setdefault("metadata", {})
+    metadata.setdefault("materials", {})
+    metadata["materials"][target] = payload
+    return metadata["materials"]
 
 
 @mcp.tool()
@@ -1231,6 +1414,143 @@ async def update_visual_feedback_action_status(
         )
     except Exception as e:
         return TextContent(type="text", text=f"Visual feedback failed: {str(e)}")
+
+
+@mcp.tool()
+async def apply_visual_feedback_action(
+    project_path: str,
+    review_id: str,
+    action_index: int,
+) -> TextContent:
+    """Apply one supported visual feedback action to structured project truth."""
+    try:
+        manifest_path = snapshot_manifest_path(project_path)
+        manifest, manifest_errors = load_snapshot_manifest(manifest_path)
+        if manifest_errors or manifest is None:
+            return TextContent(
+                type="text",
+                text=f"Visual feedback apply failed: {'; '.join(manifest_errors)}",
+            )
+
+        review, action, action_error = selected_visual_feedback_action(
+            manifest,
+            review_id,
+            action_index,
+        )
+        if action_error or action is None:
+            return TextContent(
+                type="text",
+                text=f"Visual feedback apply failed: {action_error}",
+            )
+
+        action_type = str(action.get("type"))
+        target = str(action.get("target"))
+        payload = action.get("payload", {})
+        if payload is None:
+            payload = {}
+        if not isinstance(payload, dict):
+            return TextContent(
+                type="text",
+                text="Visual feedback apply failed: action payload must be an object.",
+            )
+
+        design_model_path = find_design_model_path(project_path)
+        design_model, model_errors = load_design_model(str(design_model_path))
+        if model_errors or design_model is None:
+            return TextContent(
+                type="text",
+                text=f"Visual feedback apply failed: {'; '.join(model_errors)}",
+            )
+
+        applied: dict[str, Any]
+        refresh_lock = False
+        if action_type == "component":
+            applied = apply_component_visual_action(
+                project_path,
+                design_model,
+                target,
+                payload,
+            )
+            refresh_lock = True
+        elif action_type == "lighting":
+            applied = apply_lighting_visual_action(design_model, target, payload)
+            refresh_lock = bool(payload.get("component_ref"))
+        elif action_type == "material":
+            applied = apply_material_visual_action(design_model, target, payload)
+        elif action_type == "style":
+            style = (
+                payload.get("style")
+                or payload.get("style_name")
+                or payload.get("value")
+            )
+            if not style:
+                return TextContent(
+                    type="text",
+                    text="Visual feedback apply failed: style payload must include style.",
+                )
+            design_model.setdefault("metadata", {})["style"] = str(style)
+            applied = {"style": str(style)}
+        elif action_type == "note":
+            applied = {"note": action.get("intent", "")}
+        else:
+            return TextContent(
+                type="text",
+                text=(
+                    "Visual feedback apply failed: action type is not supported "
+                    f"for automatic application: {action_type}"
+                ),
+            )
+
+        design_model.setdefault("metadata", {})
+        design_model["metadata"].setdefault("visual_feedback", {})
+        design_model["metadata"]["visual_feedback"]["last_applied"] = {
+            "review_id": review_id,
+            "action_index": action_index,
+            "type": action_type,
+            "target": target,
+        }
+
+        saved, save_errors = save_design_model(str(design_model_path), design_model)
+        if not saved:
+            return TextContent(
+                type="text",
+                text=f"Visual feedback apply failed: {'; '.join(save_errors)}",
+            )
+
+        lock_path = None
+        if refresh_lock:
+            lock_path = refresh_project_assets_lock(project_path, design_model)
+
+        action["status"] = "applied"
+        is_valid, validation_errors = validate_snapshot_manifest(manifest)
+        if not is_valid:
+            return TextContent(
+                type="text",
+                text=f"Visual feedback apply failed: {'; '.join(validation_errors)}",
+            )
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        response_payload = {
+            "project_path": str(Path(project_path).expanduser().resolve()),
+            "design_model_path": str(design_model_path),
+            "assets_lock_path": str(lock_path) if lock_path else None,
+            "manifest_path": str(manifest_path),
+            "review_id": review_id,
+            "action_index": action_index,
+            "action": action,
+            "applied": applied,
+            "status": "applied",
+            "source_review": review,
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(response_payload, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Visual feedback apply failed: {str(e)}")
 
 
 @mcp.tool()

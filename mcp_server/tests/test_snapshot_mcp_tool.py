@@ -4,6 +4,8 @@ import json
 
 import pytest
 
+from mcp_server.project_init import init_project
+
 
 class FakeBridge:
     """Capture the JSON-RPC request and return a successful capture."""
@@ -140,4 +142,121 @@ async def test_update_visual_feedback_action_status_rejects_unknown_status(tmp_p
     assert response.text == (
         "Visual feedback failed: status must be one of proposed, accepted, "
         "rejected, applied."
+    )
+
+
+@pytest.mark.asyncio
+async def test_apply_visual_feedback_component_action_updates_project_truth(tmp_path):
+    from mcp_server import server
+
+    init_project(tmp_path, template="empty")
+    await server.add_component_instance(
+        project_path=str(tmp_path),
+        component_id="toilet_floor_mounted_basic",
+        position_x=500,
+        position_y=700,
+        position_z=0,
+        instance_id="fixture_001",
+    )
+    response = await server.record_visual_feedback(
+        project_path=str(tmp_path),
+        summary="The fixture should become a compact wall vanity.",
+        actions=[
+            {
+                "type": "component",
+                "target": "fixture_001",
+                "intent": "Replace the fixture with a wall vanity.",
+                "status": "accepted",
+                "payload": {
+                    "component_ref": "vanity_wall_600",
+                    "position": [1200, 0, 0],
+                    "rotation": 90,
+                },
+            }
+        ],
+    )
+    review_id = json.loads(response.text)["visual_feedback"]["id"]
+
+    apply_response = await server.apply_visual_feedback_action(
+        project_path=str(tmp_path),
+        review_id=review_id,
+        action_index=0,
+    )
+    data = json.loads(apply_response.text)
+    design_model = json.loads((tmp_path / "design_model.json").read_text())
+    asset_lock = json.loads((tmp_path / "assets.lock.json").read_text())
+    manifest = json.loads((tmp_path / "snapshots" / "manifest.json").read_text())
+
+    assert data["status"] == "applied"
+    assert design_model["components"]["fixture_001"]["component_ref"] == "vanity_wall_600"
+    assert design_model["components"]["fixture_001"]["position"] == [1200.0, 0.0, 0.0]
+    assert design_model["components"]["fixture_001"]["rotation"] == 90
+    assert design_model["components"]["fixture_001"]["dimensions"]["width"] == 600
+    assert asset_lock["assets"][0]["component_id"] == "vanity_wall_600"
+    assert asset_lock["assets"][0]["used_by"] == ["fixture_001"]
+    assert manifest["reviews"][0]["actions"][0]["status"] == "applied"
+
+
+@pytest.mark.asyncio
+async def test_apply_visual_feedback_style_action_updates_metadata(tmp_path):
+    from mcp_server import server
+
+    init_project(tmp_path, template="empty")
+    response = await server.record_visual_feedback(
+        project_path=str(tmp_path),
+        summary="The project should use a calmer visual language.",
+        actions=[
+            {
+                "type": "style",
+                "target": "project",
+                "intent": "Use a Scandinavian style direction.",
+                "status": "accepted",
+                "payload": {"style": "scandinavian"},
+            }
+        ],
+    )
+    review_id = json.loads(response.text)["visual_feedback"]["id"]
+
+    apply_response = await server.apply_visual_feedback_action(
+        project_path=str(tmp_path),
+        review_id=review_id,
+        action_index=0,
+    )
+    data = json.loads(apply_response.text)
+    design_model = json.loads((tmp_path / "design_model.json").read_text())
+
+    assert data["applied"] == {"style": "scandinavian"}
+    assert design_model["metadata"]["style"] == "scandinavian"
+    assert data["assets_lock_path"] is None
+
+
+@pytest.mark.asyncio
+async def test_apply_visual_feedback_rejects_unsupported_action_type(tmp_path):
+    from mcp_server import server
+
+    init_project(tmp_path, template="empty")
+    response = await server.record_visual_feedback(
+        project_path=str(tmp_path),
+        summary="Move the wall from the image.",
+        actions=[
+            {
+                "type": "geometry",
+                "target": "wall_001",
+                "intent": "Move the wall.",
+                "status": "accepted",
+                "payload": {"delta": [100, 0, 0]},
+            }
+        ],
+    )
+    review_id = json.loads(response.text)["visual_feedback"]["id"]
+
+    apply_response = await server.apply_visual_feedback_action(
+        project_path=str(tmp_path),
+        review_id=review_id,
+        action_index=0,
+    )
+
+    assert apply_response.text == (
+        "Visual feedback apply failed: action type is not supported for "
+        "automatic application: geometry"
     )

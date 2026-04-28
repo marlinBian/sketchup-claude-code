@@ -62,6 +62,7 @@ Views, reporting, and versions:
 - `record_visual_feedback`
 - `list_visual_feedback`
 - `update_visual_feedback_action_status`
+- `apply_visual_feedback_action`
 - `generate_report`
 - `save_version`
 - `list_versions`
@@ -150,6 +151,11 @@ Use `list_visual_feedback` to inspect pending visual actions. After the user
 accepts an action and the agent applies the corresponding structured model,
 component, rule, material, or style change, call
 `update_visual_feedback_action_status` with `status="applied"`.
+
+For supported action types, use `apply_visual_feedback_action` to apply the
+structured change and mark the action as applied in one step. The automatic path
+is intentionally limited to component, lighting, material, style, and note
+actions; geometry and rule changes require a more specific structured tool.
 
 ## Useful Dimensions
 

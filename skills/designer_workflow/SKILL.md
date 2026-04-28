@@ -100,6 +100,10 @@ accepted action has been applied through structured tools, call
 `update_visual_feedback_action_status` with `status="applied"` so the manifest
 does not become a stale suggestion log.
 
+Use `apply_visual_feedback_action` only for supported structured actions:
+component, lighting, material, style, and note. Do not use it to apply geometry
+or rule changes from pixels; use dedicated geometry or rule tools instead.
+
 ## Supported User Prompts
 
 English examples:

@@ -16,6 +16,8 @@ The first supported visual workflow is project snapshot capture:
    mutation happens.
 6. `list_visual_feedback` and `update_visual_feedback_action_status` track
    proposed, accepted, rejected, and applied actions.
+7. `apply_visual_feedback_action` can apply supported structured actions to
+   `design_model.json` and mark them applied in one step.
 
 The manifest records:
 
@@ -51,6 +53,11 @@ Screenshots and rendered images can guide design decisions. If the user accepts
 a visual suggestion, the agent must convert that suggestion into structured
 model changes, component selections, rule updates, or material changes before
 mutating the project truth.
+
+Automatic application is intentionally narrow. Component, lighting, material,
+style, and note actions can be applied directly because they map to existing
+project truth fields. Geometry and rule actions must use dedicated structured
+tools so the agent does not infer physical changes directly from pixels.
 
 Future image generation or rendering integrations should add renderer/model
 provenance to this manifest instead of writing untracked images.
