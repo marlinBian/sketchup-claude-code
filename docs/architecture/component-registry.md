@@ -12,6 +12,7 @@ Each component entry should eventually provide:
   "id": "toilet_floor_mounted_basic",
   "name": "Basic floor mounted toilet",
   "category": "fixture",
+  "subcategory": "toilet",
   "dimensions": {
     "width": 380,
     "depth": 700,
@@ -40,14 +41,26 @@ Each component entry should eventually provide:
   ],
   "assets": {
     "skp_path": "${SKETCHUP_ASSETS}/fixtures/toilet_floor_mounted_basic.skp",
-    "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/toilet_floor_mounted_basic.png"
+    "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/toilet_floor_mounted_basic.png",
+    "procedural_fallback": "box_fixture"
   },
   "license": {
     "type": "unknown",
-    "source": "seed"
+    "source": "seed",
+    "redistribution": "Placeholder metadata for procedural seed geometry."
+  },
+  "aliases": {
+    "en": ["toilet", "water closet"],
+    "zh-CN": ["马桶", "坐便器"]
   }
 }
 ```
+
+The canonical `name` field is English. Localized display strings and search
+terms belong in `aliases` or a later explicit localization structure.
+
+The packaged seed library lives at `mcp_server/mcp_server/assets/library.json`.
+The older root-level `mcp_server/assets/library.json` path is not canonical.
 
 ## First Milestone
 

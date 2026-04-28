@@ -1,0 +1,39 @@
+{
+  "version": "1.0",
+  "units": "mm",
+  "source": "test_fixture",
+  "rule_sets": {
+    "bathroom": {
+      "description": "Bathroom rules fixture for contract tests.",
+      "clearances": {
+        "circulation_min_width": 700,
+        "door_swing_clearance": 700,
+        "toilet_front_clearance": 600,
+        "toilet_side_clearance": 250,
+        "vanity_front_clearance": 700,
+        "mirror_mount_center_height": 1500
+      },
+      "fixture_dimensions": {
+        "toilet_floor_mounted_basic": {
+          "width": 380,
+          "depth": 700,
+          "height": 760
+        },
+        "vanity_wall_600": {
+          "width": 600,
+          "depth": 460,
+          "height": 850
+        },
+        "bathroom_door_700": {
+          "width": 700,
+          "depth": 40,
+          "height": 2100
+        }
+      },
+      "notes": [
+        "Fixture values are intentionally small and deterministic."
+      ]
+    }
+  },
+  "preferences": {}
+}

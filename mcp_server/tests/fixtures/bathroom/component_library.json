@@ -1,0 +1,51 @@
+{
+  "version": "1.0",
+  "description": "Bathroom component fixture for contract tests.",
+  "components": [
+    {
+      "id": "toilet_floor_mounted_basic",
+      "name": "Basic floor-mounted toilet",
+      "category": "fixture",
+      "subcategory": "toilet",
+      "dimensions": {
+        "width": 380,
+        "depth": 700,
+        "height": 760
+      },
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [380, 700, 760]
+      },
+      "insertion_point": {
+        "offset": [190, 0, 0],
+        "description": "Back center on floor",
+        "face_direction": "+y"
+      },
+      "anchors": {
+        "back": "wall",
+        "bottom": "floor",
+        "waste": "plumbing"
+      },
+      "clearance": {
+        "front": 600,
+        "left": 250,
+        "right": 250
+      },
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/fixtures/toilet_floor_mounted_basic.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/toilet_floor_mounted_basic.png",
+        "procedural_fallback": "box_fixture"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata for procedural seed geometry."
+      },
+      "aliases": {
+        "en": ["toilet", "water closet"],
+        "zh-CN": ["马桶", "坐便器"]
+      },
+      "tags": ["bathroom", "fixture", "toilet"]
+    }
+  ]
+}

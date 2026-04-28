@@ -20,8 +20,16 @@ my-design-project/
 components, lighting, semantic anchors, layers, and known SketchUp entity IDs in
 millimeters.
 
+The legacy hidden filename `.design_model.json` remains readable during the
+migration window, but new project initialization must create `design_model.json`.
+
 `design_rules.json` stores project-level preferences and constraints. It should
 override built-in defaults without modifying the harness installation.
+
+The first bundled rules are deliberately small bathroom seed rules. They are
+ergonomic defaults, not jurisdictional building code. Validation reports should
+state whether a value came from built-in defaults, an installed profile,
+project-local rules, or the active user instruction.
 
 `assets.lock.json` records the components actually used by this project,
 including component IDs, versions, local cache paths, upstream source URLs, and

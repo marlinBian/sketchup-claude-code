@@ -1,0 +1,40 @@
+{
+  "version": "1.0",
+  "units": "mm",
+  "source": "built_in_default",
+  "rule_sets": {
+    "bathroom": {
+      "description": "Seed bathroom clearances for the first vertical slice.",
+      "clearances": {
+        "circulation_min_width": 700,
+        "door_swing_clearance": 700,
+        "toilet_front_clearance": 600,
+        "toilet_side_clearance": 250,
+        "vanity_front_clearance": 700,
+        "mirror_mount_center_height": 1500
+      },
+      "fixture_dimensions": {
+        "toilet_floor_mounted_basic": {
+          "width": 380,
+          "depth": 700,
+          "height": 760
+        },
+        "vanity_wall_600": {
+          "width": 600,
+          "depth": 460,
+          "height": 850
+        },
+        "bathroom_door_700": {
+          "width": 700,
+          "depth": 40,
+          "height": 2100
+        }
+      },
+      "notes": [
+        "Rules are conservative seed values, not jurisdictional code.",
+        "Project rules may override them when a designer has a preference."
+      ]
+    }
+  },
+  "preferences": {}
+}

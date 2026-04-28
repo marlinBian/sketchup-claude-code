@@ -1,7 +1,7 @@
 """Local Component Library Search.
 
 Provides fuzzy search capabilities for the user's local .skp component library.
-Components are indexed in assets/library.json.
+Components are indexed in the package assets/library.json manifest.
 """
 
 import json
@@ -10,7 +10,33 @@ from pathlib import Path
 from typing import Optional
 
 # Library index path
-LIBRARY_PATH = Path(__file__).parent.parent.parent / "assets" / "library.json"
+LIBRARY_PATH = Path(__file__).parent.parent / "assets" / "library.json"
+
+
+def component_search_terms(component: dict) -> list[str]:
+    """Return searchable names, aliases, and tags for a component."""
+    terms: list[str] = []
+    for key in ("id", "name", "name_en", "subcategory", "category"):
+        value = component.get(key)
+        if isinstance(value, str) and value:
+            terms.append(value)
+
+    aliases = component.get("aliases", {})
+    if isinstance(aliases, dict):
+        for values in aliases.values():
+            if isinstance(values, list):
+                terms.extend(str(value) for value in values if value)
+
+    localized_names = component.get("localized_names", {})
+    if isinstance(localized_names, dict):
+        terms.extend(str(value) for value in localized_names.values() if value)
+
+    for key in ("tags", "style_tags"):
+        values = component.get(key, [])
+        if isinstance(values, list):
+            terms.extend(str(value) for value in values if value)
+
+    return terms
 
 
 def load_library() -> dict:
@@ -103,24 +129,11 @@ def search_library(
         if category and comp.get("category") != category:
             continue
 
-        # Calculate match score across multiple fields
-        name = comp.get("name", "")
-        name_en = comp.get("name_en", "")
-        style_tags = comp.get("style_tags", [])
-
-        # Try exact match first
-        name_match, name_score = fuzzy_match(query_lower, name)
-        en_match, en_score = fuzzy_match(query_lower, name_en)
-
-        best_score = max(name_score, en_score)
-
-        # Check style tags
-        tag_score = 0.0
-        for tag in style_tags:
-            _, score = fuzzy_match(query_lower, tag)
-            tag_score = max(tag_score, score)
-
-        best_score = max(best_score, tag_score * 0.8)  # Tags weighted slightly lower
+        # Calculate match score across names, aliases, and tags.
+        best_score = 0.0
+        for term in component_search_terms(comp):
+            _, score = fuzzy_match(query_lower, term)
+            best_score = max(best_score, score)
 
         # Include partial matches
         if best_score > 0:
@@ -189,12 +202,14 @@ def format_search_results(results: list[dict], include_score: bool = True) -> st
     lines = []
     for i, comp in enumerate(results, 1):
         name = comp.get("name", "Unknown")
-        name_en = comp.get("name_en", "")
+        aliases = comp.get("aliases", {})
+        localized = aliases.get("zh-CN", []) if isinstance(aliases, dict) else []
+        localized_name = localized[0] if localized else comp.get("name_en", "")
         category = comp.get("category", "uncategorized")
 
         line = f"{i}. {name}"
-        if name_en:
-            line += f" ({name_en})"
+        if localized_name:
+            line += f" ({localized_name})"
         line += f" - {category}"
 
         if include_score and "_match_score" in comp:

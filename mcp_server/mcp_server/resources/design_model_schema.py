@@ -118,6 +118,10 @@ DESIGN_MODEL_SCHEMA: Dict[str, Any] = {
                             "type": "string",
                             "description": "Human-readable name",
                         },
+                        "component_ref": {
+                            "type": "string",
+                            "description": "Component manifest ID used to create this instance",
+                        },
                         "position": {
                             "type": "array",
                             "items": {"type": "number"},
@@ -131,6 +135,44 @@ DESIGN_MODEL_SCHEMA: Dict[str, Any] = {
                                 "width": {"type": "number", "minimum": 0},
                                 "depth": {"type": "number", "minimum": 0},
                                 "height": {"type": "number", "minimum": 0},
+                            },
+                        },
+                        "bounds": {
+                            "type": "object",
+                            "properties": {
+                                "min": {
+                                    "type": "array",
+                                    "items": {"type": "number"},
+                                    "minItems": 3,
+                                    "maxItems": 3,
+                                },
+                                "max": {
+                                    "type": "array",
+                                    "items": {"type": "number"},
+                                    "minItems": 3,
+                                    "maxItems": 3,
+                                },
+                            },
+                            "required": ["min", "max"],
+                        },
+                        "anchors": {
+                            "type": "object",
+                            "patternProperties": {
+                                "^[a-zA-Z0-9_]+$": {
+                                    "type": "array",
+                                    "items": {"type": "number"},
+                                    "minItems": 3,
+                                    "maxItems": 3,
+                                },
+                            },
+                        },
+                        "clearance": {
+                            "type": "object",
+                            "patternProperties": {
+                                "^[a-zA-Z0-9_]+$": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                },
                             },
                         },
                         "rotation": {
@@ -167,6 +209,14 @@ DESIGN_MODEL_SCHEMA: Dict[str, Any] = {
                         "created_at": {
                             "type": "string",
                             "format": "date-time",
+                        },
+                        "entity_id": {
+                            "type": "string",
+                            "description": "SketchUp entity ID after bridge execution",
+                        },
+                        "source": {
+                            "type": "object",
+                            "description": "Provenance for generated or imported instances",
                         },
                     },
                     "required": ["type", "name", "position"],

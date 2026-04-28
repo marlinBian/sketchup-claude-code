@@ -9,7 +9,7 @@ Resource URIs:
 - design://{project_path}/semantic-anchor/{component_id} - Semantic anchors for component
 - design://{project_path}/layer/{layer_name} - Entities on a layer
 
-Note: project_path is the full directory path where .design_model.json is located.
+Note: project_path is the full directory path where design_model.json is located.
 For example: /Users/name/SketchUpProjects/living-room
 """
 
@@ -20,32 +20,38 @@ from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 
+from mcp_server.resources.project_files import (
+    DESIGN_MODEL_FILENAME,
+    LEGACY_DESIGN_MODEL_FILENAME,
+    find_design_model_path,
+)
+
 logger = logging.getLogger(__name__)
 
 # Initialize FastMCP instance for these resources
 mcp = FastMCP("scc-design")
 
-# Design model filename (hidden file)
-DESIGN_MODEL_FILENAME = ".design_model.json"
-
 
 def _load_design_model(project_path: str) -> dict:
-    """Load and parse .design_model.json for a project.
+    """Load and parse design_model.json for a project.
 
     Args:
-        project_path: Full directory path where .design_model.json is located
+        project_path: Full directory path where design_model.json is located
 
     Returns:
-        Parsed .design_model.json data
+        Parsed design_model.json data
 
     Raises:
-        FileNotFoundError: If project or .design_model.json doesn't exist
+        FileNotFoundError: If project or design_model.json doesn't exist
         json.JSONDecodeError: If JSON is invalid
     """
-    # project_path is the directory, we look for .design_model.json inside it
-    design_model_path = Path(project_path) / DESIGN_MODEL_FILENAME
+    design_model_path = find_design_model_path(project_path)
     if not design_model_path.exists():
-        raise FileNotFoundError(f"Design model not found in: {project_path}")
+        raise FileNotFoundError(
+            "Design model not found in "
+            f"{project_path}. Expected {DESIGN_MODEL_FILENAME}"
+            f" or legacy {LEGACY_DESIGN_MODEL_FILENAME}."
+        )
 
     with open(design_model_path, "r", encoding="utf-8") as f:
         return json.load(f)
@@ -56,7 +62,7 @@ async def get_design_model(project_path: str) -> dict:
     """Get the current design model for a project.
 
     Args:
-        project_path: Full directory path containing .design_model.json
+        project_path: Full directory path containing design_model.json
 
     Returns:
         Complete design model JSON
@@ -75,7 +81,7 @@ async def list_components(project_path: str) -> dict:
     component can be used for filtering on the client side.
 
     Args:
-        project_path: Full directory path containing .design_model.json
+        project_path: Full directory path containing design_model.json
 
     Returns:
         Dict with 'components' list and optional 'type_filter' if provided
@@ -105,7 +111,7 @@ async def get_spaces(project_path: str) -> dict:
     """Get all spaces in the design.
 
     Args:
-        project_path: Full directory path containing .design_model.json
+        project_path: Full directory path containing design_model.json
 
     Returns:
         Dictionary of space_id -> space_data
@@ -122,7 +128,7 @@ async def get_semantic_anchor(project_path: str, component_id: str) -> dict:
     """Get semantic anchors for a specific component.
 
     Args:
-        project_path: Full directory path containing .design_model.json
+        project_path: Full directory path containing design_model.json
         component_id: Component ID to look up
 
     Returns:
@@ -152,7 +158,7 @@ async def get_layer_entities(project_path: str, layer_name: str) -> list[dict]:
     """Get all entities on a specific layer.
 
     Args:
-        project_path: Full directory path containing .design_model.json
+        project_path: Full directory path containing design_model.json
         layer_name: Layer name to query (e.g., "Walls", "Furniture", "Lighting")
 
     Returns:

@@ -92,6 +92,19 @@ class TestValidateDesignModel:
         assert is_valid is True
         assert errors == []
 
+    def test_valid_bathroom_contract_fixture(self):
+        """Test validation of the first bathroom vertical-slice fixture."""
+        fixture_path = Path(__file__).parent / "fixtures" / "bathroom" / "design_model.json"
+
+        loaded, errors = load_design_model(str(fixture_path))
+
+        assert errors == []
+        assert loaded is not None
+        assert loaded["spaces"]["bathroom_001"]["type"] == "bathroom"
+        assert loaded["components"]["toilet_001"]["component_ref"] == (
+            "toilet_floor_mounted_basic"
+        )
+
     def test_missing_required_fields(self):
         """Test validation fails when required fields are missing."""
         data = {

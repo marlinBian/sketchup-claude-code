@@ -1,0 +1,144 @@
+{
+  "version": "1.0",
+  "project_name": "bathroom_contract_fixture",
+  "created_at": "2026-04-28T00:00:00Z",
+  "updated_at": "2026-04-28T00:00:00Z",
+  "metadata": {
+    "style": "neutral_seed",
+    "ceiling_height": 2400,
+    "units": "mm"
+  },
+  "spaces": {
+    "bathroom_001": {
+      "type": "bathroom",
+      "bounds": {
+        "min": [0, 0, 0],
+        "max": [2000, 1800, 2400]
+      },
+      "center": [1000, 900, 1200]
+    }
+  },
+  "components": {
+    "door_001": {
+      "type": "door",
+      "name": "Bathroom door 700 mm",
+      "component_ref": "bathroom_door_700",
+      "position": [0, 550, 0],
+      "dimensions": {
+        "width": 700,
+        "depth": 40,
+        "height": 2100
+      },
+      "bounds": {
+        "min": [0, 550, 0],
+        "max": [700, 590, 2100]
+      },
+      "anchors": {
+        "hinge": [0, 550, 0],
+        "bottom": [350, 570, 0]
+      },
+      "clearance": {
+        "front": 700,
+        "back": 700
+      },
+      "rotation": 0,
+      "layer": "Doors"
+    },
+    "toilet_001": {
+      "type": "toilet",
+      "name": "Basic floor-mounted toilet",
+      "component_ref": "toilet_floor_mounted_basic",
+      "position": [1000, 1100, 0],
+      "dimensions": {
+        "width": 380,
+        "depth": 700,
+        "height": 760
+      },
+      "bounds": {
+        "min": [810, 1100, 0],
+        "max": [1190, 1800, 760]
+      },
+      "anchors": {
+        "back": [1000, 1800, 0],
+        "bottom": [1000, 1450, 0]
+      },
+      "clearance": {
+        "front": 600,
+        "left": 250,
+        "right": 250
+      },
+      "rotation": 180,
+      "layer": "Fixtures"
+    },
+    "vanity_001": {
+      "type": "vanity",
+      "name": "Wall vanity 600 mm",
+      "component_ref": "vanity_wall_600",
+      "position": [1700, 500, 0],
+      "dimensions": {
+        "width": 600,
+        "depth": 460,
+        "height": 850
+      },
+      "bounds": {
+        "min": [1400, 500, 0],
+        "max": [2000, 960, 850]
+      },
+      "anchors": {
+        "back": [1700, 500, 0],
+        "bottom": [1700, 730, 0]
+      },
+      "clearance": {
+        "front": 700
+      },
+      "rotation": 0,
+      "layer": "Fixtures"
+    },
+    "mirror_001": {
+      "type": "mirror",
+      "name": "Wall mirror 500 mm",
+      "component_ref": "mirror_wall_500",
+      "position": [1700, 500, 1500],
+      "dimensions": {
+        "width": 500,
+        "depth": 40,
+        "height": 700
+      },
+      "bounds": {
+        "min": [1450, 500, 1150],
+        "max": [1950, 540, 1850]
+      },
+      "anchors": {
+        "back": [1700, 500, 1500],
+        "center": [1700, 520, 1500]
+      },
+      "clearance": {},
+      "rotation": 0,
+      "layer": "Fixtures"
+    }
+  },
+  "lighting": {
+    "ceiling_light_001": {
+      "type": "recessed_light",
+      "position": [1000, 900, 2400],
+      "component_ref": "ceiling_light_basic"
+    }
+  },
+  "semantic_anchors": {
+    "bathroom_001": {
+      "center_floor": [1000, 900, 0],
+      "center_ceiling": [1000, 900, 2400]
+    }
+  },
+  "layers": {
+    "Doors": {
+      "color": "#8C6A43"
+    },
+    "Fixtures": {
+      "color": "#F2F2F2"
+    },
+    "Lighting": {
+      "color": "#FFE8A3"
+    }
+  }
+}

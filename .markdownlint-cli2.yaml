@@ -8,6 +8,8 @@ globs:
   - CHANGELOG.md
   - CONTRIBUTING.md
   - docs/roadmap.md
+  - docs/architecture/component-registry.md
+  - docs/architecture/project-workspace.md
   - docs/architecture/runtime-vs-dev-skills.md
 config:
   MD024:

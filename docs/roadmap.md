@@ -36,6 +36,18 @@ slice.
 - add fixtures for a tiny bathroom project
 - add validation tests for valid and invalid examples
 
+Acceptance:
+
+```bash
+cd mcp_server && uv run --extra dev pytest \
+  tests/test_project_files.py \
+  tests/test_design_model_schema.py \
+  tests/test_design_rules_schema.py \
+  tests/test_component_manifest_schema.py \
+  tests/test_local_library_search.py \
+  tests/test_placement_tools.py -q
+```
+
 ## P2: Bathroom Headless Vertical Slice
 
 Goal: complete the design logic without requiring SketchUp UI.

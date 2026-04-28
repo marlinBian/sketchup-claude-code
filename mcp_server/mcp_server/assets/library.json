@@ -1,374 +1,2005 @@
 {
-  "version": "1.0.0",
-  "description": "SCC Component Library for Interior Design",
+  "$schema": "./component_manifest_schema.json",
+  "version": "1.0",
+  "description": "SketchUp Agent Harness seed component library.",
   "components": [
     {
       "id": "sofa_modern_2seat",
-      "name": "现代双人沙发",
-      "name_en": "Modern 2-Seat Sofa",
-      "skp_path": "${SKETCHUP_ASSETS}/furniture/sofa_2seat_modern.skp",
+      "name": "Modern 2-Seat Sofa",
+      "category": "furniture",
+      "subcategory": "sofa",
+      "dimensions": {
+        "width": 1800,
+        "depth": 900,
+        "height": 850
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [1800, 900, 850]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          1800,
+          900,
+          850
+        ]
       },
       "insertion_point": {
-        "offset": [900, 450, 0],
-        "description": "Center bottom"
+        "offset": [
+          900,
+          450,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["sofa", "沙发", "living_room", "客厅", "seating", "2-seat"]
+      "anchors": {
+        "bottom": "floor"
+      },
+      "clearance": {
+        "front": 600
+      },
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/furniture/sofa_2seat_modern.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/sofa_modern_2seat.png",
+        "procedural_fallback": "box_component"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "Modern 2-Seat Sofa",
+          "sofa",
+          "living_room",
+          "seating",
+          "2-seat"
+        ],
+        "zh-CN": [
+          "现代双人沙发",
+          "沙发",
+          "客厅"
+        ]
+      },
+      "tags": [
+        "Modern 2-Seat Sofa",
+        "sofa",
+        "living_room",
+        "seating",
+        "2-seat",
+        "现代双人沙发",
+        "沙发",
+        "客厅",
+        "furniture"
+      ]
     },
     {
       "id": "sofa_modern_3seat",
-      "name": "现代三人沙发",
-      "name_en": "Modern 3-Seat Sofa",
-      "skp_path": "${SKETCHUP_ASSETS}/furniture/sofa_3seat_modern.skp",
+      "name": "Modern 3-Seat Sofa",
+      "category": "furniture",
+      "subcategory": "sofa",
+      "dimensions": {
+        "width": 2400,
+        "depth": 900,
+        "height": 850
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [2400, 900, 850]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          2400,
+          900,
+          850
+        ]
       },
       "insertion_point": {
-        "offset": [1200, 450, 0],
-        "description": "Center bottom"
+        "offset": [
+          1200,
+          450,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["sofa", "沙发", "living_room", "客厅", "seating", "3-seat"]
+      "anchors": {
+        "bottom": "floor"
+      },
+      "clearance": {
+        "front": 600
+      },
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/furniture/sofa_3seat_modern.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/sofa_modern_3seat.png",
+        "procedural_fallback": "box_component"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "Modern 3-Seat Sofa",
+          "sofa",
+          "living_room",
+          "seating",
+          "3-seat"
+        ],
+        "zh-CN": [
+          "现代三人沙发",
+          "沙发",
+          "客厅"
+        ]
+      },
+      "tags": [
+        "Modern 3-Seat Sofa",
+        "sofa",
+        "living_room",
+        "seating",
+        "3-seat",
+        "现代三人沙发",
+        "沙发",
+        "客厅",
+        "furniture"
+      ]
     },
     {
       "id": "coffee_table_rect",
-      "name": "长方形茶几",
-      "name_en": "Rectangular Coffee Table",
-      "skp_path": "${SKETCHUP_ASSETS}/furniture/coffee_table_rect.skp",
+      "name": "Rectangular Coffee Table",
+      "category": "furniture",
+      "subcategory": "coffee_table",
+      "dimensions": {
+        "width": 1200,
+        "depth": 600,
+        "height": 450
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [1200, 600, 450]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          1200,
+          600,
+          450
+        ]
       },
       "insertion_point": {
-        "offset": [600, 300, 0],
-        "description": "Center bottom"
+        "offset": [
+          600,
+          300,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["coffee_table", "茶几", "living_room", "客厅", "table"]
+      "anchors": {
+        "bottom": "floor"
+      },
+      "clearance": {
+        "front": 600,
+        "left": 450,
+        "right": 450
+      },
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/furniture/coffee_table_rect.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/coffee_table_rect.png",
+        "procedural_fallback": "box_component"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "Rectangular Coffee Table",
+          "coffee_table",
+          "living_room",
+          "table"
+        ],
+        "zh-CN": [
+          "长方形茶几",
+          "茶几",
+          "客厅"
+        ]
+      },
+      "tags": [
+        "Rectangular Coffee Table",
+        "coffee_table",
+        "living_room",
+        "table",
+        "长方形茶几",
+        "茶几",
+        "客厅",
+        "furniture"
+      ]
     },
     {
       "id": "dining_table_4seat",
-      "name": "四人餐桌",
-      "name_en": "4-Seat Dining Table",
-      "skp_path": "${SKETCHUP_ASSETS}/furniture/dining_table_4.skp",
+      "name": "4-Seat Dining Table",
+      "category": "furniture",
+      "subcategory": "dining_table",
+      "dimensions": {
+        "width": 1600,
+        "depth": 900,
+        "height": 750
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [1600, 900, 750]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          1600,
+          900,
+          750
+        ]
       },
       "insertion_point": {
-        "offset": [800, 450, 0],
-        "description": "Center bottom"
+        "offset": [
+          800,
+          450,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["dining_table", "餐桌", "dining_room", "餐厅", "table", "4-seat"]
+      "anchors": {
+        "bottom": "floor"
+      },
+      "clearance": {
+        "front": 600,
+        "left": 450,
+        "right": 450
+      },
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/furniture/dining_table_4.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/dining_table_4seat.png",
+        "procedural_fallback": "box_component"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "4-Seat Dining Table",
+          "dining_table",
+          "dining_room",
+          "table",
+          "4-seat"
+        ],
+        "zh-CN": [
+          "四人餐桌",
+          "餐桌",
+          "餐厅"
+        ]
+      },
+      "tags": [
+        "4-Seat Dining Table",
+        "dining_table",
+        "dining_room",
+        "table",
+        "4-seat",
+        "四人餐桌",
+        "餐桌",
+        "餐厅",
+        "furniture"
+      ]
     },
     {
       "id": "dining_table_6seat",
-      "name": "六人餐桌",
-      "name_en": "6-Seat Dining Table",
-      "skp_path": "${SKETCHUP_ASSETS}/furniture/dining_table_6.skp",
+      "name": "6-Seat Dining Table",
+      "category": "furniture",
+      "subcategory": "dining_table",
+      "dimensions": {
+        "width": 2000,
+        "depth": 1000,
+        "height": 750
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [2000, 1000, 750]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          2000,
+          1000,
+          750
+        ]
       },
       "insertion_point": {
-        "offset": [1000, 500, 0],
-        "description": "Center bottom"
+        "offset": [
+          1000,
+          500,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["dining_table", "餐桌", "dining_room", "餐厅", "table", "6-seat"]
+      "anchors": {
+        "bottom": "floor"
+      },
+      "clearance": {
+        "front": 600,
+        "left": 450,
+        "right": 450
+      },
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/furniture/dining_table_6.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/dining_table_6seat.png",
+        "procedural_fallback": "box_component"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "6-Seat Dining Table",
+          "dining_table",
+          "dining_room",
+          "table",
+          "6-seat"
+        ],
+        "zh-CN": [
+          "六人餐桌",
+          "餐桌",
+          "餐厅"
+        ]
+      },
+      "tags": [
+        "6-Seat Dining Table",
+        "dining_table",
+        "dining_room",
+        "table",
+        "6-seat",
+        "六人餐桌",
+        "餐桌",
+        "餐厅",
+        "furniture"
+      ]
     },
     {
       "id": "dining_chair",
-      "name": "餐椅",
-      "name_en": "Dining Chair",
-      "skp_path": "${SKETCHUP_ASSETS}/furniture/dining_chair.skp",
+      "name": "Dining Chair",
+      "category": "furniture",
+      "subcategory": "chair",
+      "dimensions": {
+        "width": 450,
+        "depth": 500,
+        "height": 900
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [450, 500, 900]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          450,
+          500,
+          900
+        ]
       },
       "insertion_point": {
-        "offset": [225, 250, 0],
-        "description": "Center bottom"
+        "offset": [
+          225,
+          250,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["chair", "餐椅", "dining_room", "餐厅", "seating"]
+      "anchors": {
+        "bottom": "floor"
+      },
+      "clearance": {
+        "front": 600
+      },
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/furniture/dining_chair.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/dining_chair.png",
+        "procedural_fallback": "box_component"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "Dining Chair",
+          "chair",
+          "dining_room",
+          "seating"
+        ],
+        "zh-CN": [
+          "餐椅",
+          "餐厅"
+        ]
+      },
+      "tags": [
+        "Dining Chair",
+        "chair",
+        "dining_room",
+        "seating",
+        "餐椅",
+        "餐厅",
+        "furniture"
+      ]
     },
     {
       "id": "bed_single",
-      "name": "单人床",
-      "name_en": "Single Bed",
-      "skp_path": "${SKETCHUP_ASSETS}/furniture/bed_single.skp",
+      "name": "Single Bed",
+      "category": "furniture",
+      "subcategory": "bed",
+      "dimensions": {
+        "width": 1000,
+        "depth": 2000,
+        "height": 500
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [1000, 2000, 500]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          1000,
+          2000,
+          500
+        ]
       },
       "insertion_point": {
-        "offset": [500, 1000, 0],
-        "description": "Center bottom"
+        "offset": [
+          500,
+          1000,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["bed", "床", "bedroom", "卧室", "single"]
+      "anchors": {
+        "head": "wall",
+        "bottom": "floor"
+      },
+      "clearance": {
+        "front": 600,
+        "left": 600,
+        "right": 600
+      },
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/furniture/bed_single.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/bed_single.png",
+        "procedural_fallback": "box_component"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "Single Bed",
+          "bed",
+          "bedroom",
+          "single"
+        ],
+        "zh-CN": [
+          "单人床",
+          "床",
+          "卧室"
+        ]
+      },
+      "tags": [
+        "Single Bed",
+        "bed",
+        "bedroom",
+        "single",
+        "单人床",
+        "床",
+        "卧室",
+        "furniture"
+      ]
     },
     {
       "id": "bed_double",
-      "name": "双人床",
-      "name_en": "Double Bed",
-      "skp_path": "${SKETCHUP_ASSETS}/furniture/bed_double.skp",
+      "name": "Double Bed",
+      "category": "furniture",
+      "subcategory": "bed",
+      "dimensions": {
+        "width": 1500,
+        "depth": 2000,
+        "height": 500
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [1500, 2000, 500]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          1500,
+          2000,
+          500
+        ]
       },
       "insertion_point": {
-        "offset": [750, 1000, 0],
-        "description": "Center bottom"
+        "offset": [
+          750,
+          1000,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["bed", "床", "bedroom", "卧室", "double"]
+      "anchors": {
+        "head": "wall",
+        "bottom": "floor"
+      },
+      "clearance": {
+        "front": 600,
+        "left": 600,
+        "right": 600
+      },
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/furniture/bed_double.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/bed_double.png",
+        "procedural_fallback": "box_component"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "Double Bed",
+          "bed",
+          "bedroom",
+          "double"
+        ],
+        "zh-CN": [
+          "双人床",
+          "床",
+          "卧室"
+        ]
+      },
+      "tags": [
+        "Double Bed",
+        "bed",
+        "bedroom",
+        "double",
+        "双人床",
+        "床",
+        "卧室",
+        "furniture"
+      ]
     },
     {
       "id": "bed_queen",
-      "name": "大床",
-      "name_en": "Queen Bed",
-      "skp_path": "${SKETCHUP_ASSETS}/furniture/bed_queen.skp",
+      "name": "Queen Bed",
+      "category": "furniture",
+      "subcategory": "bed",
+      "dimensions": {
+        "width": 1800,
+        "depth": 2000,
+        "height": 550
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [1800, 2000, 550]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          1800,
+          2000,
+          550
+        ]
       },
       "insertion_point": {
-        "offset": [900, 1000, 0],
-        "description": "Center bottom"
+        "offset": [
+          900,
+          1000,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["bed", "床", "bedroom", "卧室", "queen"]
+      "anchors": {
+        "head": "wall",
+        "bottom": "floor"
+      },
+      "clearance": {
+        "front": 600,
+        "left": 600,
+        "right": 600
+      },
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/furniture/bed_queen.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/bed_queen.png",
+        "procedural_fallback": "box_component"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "Queen Bed",
+          "bed",
+          "bedroom",
+          "queen"
+        ],
+        "zh-CN": [
+          "大床",
+          "床",
+          "卧室"
+        ]
+      },
+      "tags": [
+        "Queen Bed",
+        "bed",
+        "bedroom",
+        "queen",
+        "大床",
+        "床",
+        "卧室",
+        "furniture"
+      ]
     },
     {
       "id": "nightstand",
-      "name": "床头柜",
-      "name_en": "Nightstand",
-      "skp_path": "${SKETCHUP_ASSETS}/furniture/nightstand.skp",
+      "name": "Nightstand",
+      "category": "furniture",
+      "subcategory": "bed",
+      "dimensions": {
+        "width": 500,
+        "depth": 400,
+        "height": 600
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [500, 400, 600]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          500,
+          400,
+          600
+        ]
       },
       "insertion_point": {
-        "offset": [250, 200, 0],
-        "description": "Center bottom"
+        "offset": [
+          250,
+          200,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["nightstand", "床头柜", "bedroom", "卧室", "storage"]
+      "anchors": {
+        "head": "wall",
+        "bottom": "floor"
+      },
+      "clearance": {
+        "front": 600,
+        "left": 600,
+        "right": 600
+      },
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/furniture/nightstand.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/nightstand.png",
+        "procedural_fallback": "box_component"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "Nightstand",
+          "nightstand",
+          "bedroom",
+          "storage"
+        ],
+        "zh-CN": [
+          "床头柜",
+          "卧室"
+        ]
+      },
+      "tags": [
+        "Nightstand",
+        "nightstand",
+        "bedroom",
+        "storage",
+        "床头柜",
+        "卧室",
+        "furniture",
+        "bed"
+      ]
     },
     {
       "id": "wardrobe",
-      "name": "衣柜",
-      "name_en": "Wardrobe",
-      "skp_path": "${SKETCHUP_ASSETS}/furniture/wardrobe.skp",
+      "name": "Wardrobe",
+      "category": "furniture",
+      "subcategory": "bed",
+      "dimensions": {
+        "width": 1800,
+        "depth": 600,
+        "height": 2100
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [1800, 600, 2100]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          1800,
+          600,
+          2100
+        ]
       },
       "insertion_point": {
-        "offset": [900, 300, 0],
-        "description": "Center bottom"
+        "offset": [
+          900,
+          300,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["wardrobe", "衣柜", "bedroom", "卧室", "storage"]
+      "anchors": {
+        "head": "wall",
+        "bottom": "floor"
+      },
+      "clearance": {
+        "front": 600,
+        "left": 600,
+        "right": 600
+      },
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/furniture/wardrobe.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/wardrobe.png",
+        "procedural_fallback": "box_component"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "Wardrobe",
+          "wardrobe",
+          "bedroom",
+          "storage"
+        ],
+        "zh-CN": [
+          "衣柜",
+          "卧室"
+        ]
+      },
+      "tags": [
+        "Wardrobe",
+        "wardrobe",
+        "bedroom",
+        "storage",
+        "衣柜",
+        "卧室",
+        "furniture",
+        "bed"
+      ]
     },
     {
       "id": "desk",
-      "name": "书桌",
-      "name_en": "Desk",
-      "skp_path": "${SKETCHUP_ASSETS}/furniture/desk.skp",
+      "name": "Desk",
+      "category": "furniture",
+      "subcategory": "desk",
+      "dimensions": {
+        "width": 1200,
+        "depth": 600,
+        "height": 750
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [1200, 600, 750]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          1200,
+          600,
+          750
+        ]
       },
       "insertion_point": {
-        "offset": [600, 300, 0],
-        "description": "Center bottom"
+        "offset": [
+          600,
+          300,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["desk", "书桌", "study", "书房", "office", "办公"]
+      "anchors": {
+        "bottom": "floor"
+      },
+      "clearance": {
+        "front": 600,
+        "left": 450,
+        "right": 450
+      },
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/furniture/desk.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/desk.png",
+        "procedural_fallback": "box_component"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "Desk",
+          "desk",
+          "study",
+          "office"
+        ],
+        "zh-CN": [
+          "书桌",
+          "书房",
+          "办公"
+        ]
+      },
+      "tags": [
+        "Desk",
+        "desk",
+        "study",
+        "office",
+        "书桌",
+        "书房",
+        "办公",
+        "furniture"
+      ]
     },
     {
       "id": "office_chair",
-      "name": "办公椅",
-      "name_en": "Office Chair",
-      "skp_path": "${SKETCHUP_ASSETS}/furniture/office_chair.skp",
+      "name": "Office Chair",
+      "category": "furniture",
+      "subcategory": "chair",
+      "dimensions": {
+        "width": 600,
+        "depth": 600,
+        "height": 1200
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [600, 600, 1200]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          600,
+          600,
+          1200
+        ]
       },
       "insertion_point": {
-        "offset": [300, 300, 0],
-        "description": "Center bottom"
+        "offset": [
+          300,
+          300,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["chair", "办公椅", "office", "办公室", "seating"]
+      "anchors": {
+        "bottom": "floor"
+      },
+      "clearance": {
+        "front": 600
+      },
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/furniture/office_chair.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/office_chair.png",
+        "procedural_fallback": "box_component"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "Office Chair",
+          "chair",
+          "office",
+          "seating"
+        ],
+        "zh-CN": [
+          "办公椅",
+          "办公室"
+        ]
+      },
+      "tags": [
+        "Office Chair",
+        "chair",
+        "office",
+        "seating",
+        "办公椅",
+        "办公室",
+        "furniture"
+      ]
     },
     {
       "id": "bookshelf",
-      "name": "书架",
-      "name_en": "Bookshelf",
-      "skp_path": "${SKETCHUP_ASSETS}/furniture/bookshelf.skp",
+      "name": "Bookshelf",
+      "category": "furniture",
+      "subcategory": "bookshelf",
+      "dimensions": {
+        "width": 800,
+        "depth": 300,
+        "height": 2000
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [800, 300, 2000]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          800,
+          300,
+          2000
+        ]
       },
       "insertion_point": {
-        "offset": [400, 150, 0],
-        "description": "Center bottom"
+        "offset": [
+          400,
+          150,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["bookshelf", "书架", "living_room", "客厅", "study", "书房", "storage"]
+      "anchors": {
+        "back": "wall",
+        "bottom": "floor"
+      },
+      "clearance": {
+        "front": 600
+      },
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/furniture/bookshelf.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/bookshelf.png",
+        "procedural_fallback": "box_component"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "Bookshelf",
+          "bookshelf",
+          "living_room",
+          "study",
+          "storage"
+        ],
+        "zh-CN": [
+          "书架",
+          "客厅",
+          "书房"
+        ]
+      },
+      "tags": [
+        "Bookshelf",
+        "bookshelf",
+        "living_room",
+        "study",
+        "storage",
+        "书架",
+        "客厅",
+        "书房",
+        "furniture"
+      ]
     },
     {
       "id": "tv_stand",
-      "name": "电视柜",
-      "name_en": "TV Stand",
-      "skp_path": "${SKETCHUP_ASSETS}/furniture/tv_stand.skp",
+      "name": "TV Stand",
+      "category": "furniture",
+      "subcategory": "tv_stand",
+      "dimensions": {
+        "width": 1800,
+        "depth": 450,
+        "height": 500
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [1800, 450, 500]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          1800,
+          450,
+          500
+        ]
       },
       "insertion_point": {
-        "offset": [900, 225, 0],
-        "description": "Center bottom"
+        "offset": [
+          900,
+          225,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["tv_stand", "电视柜", "living_room", "客厅", "media"]
+      "anchors": {
+        "back": "wall",
+        "bottom": "floor"
+      },
+      "clearance": {
+        "front": 600
+      },
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/furniture/tv_stand.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/tv_stand.png",
+        "procedural_fallback": "box_component"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "TV Stand",
+          "tv_stand",
+          "living_room",
+          "media"
+        ],
+        "zh-CN": [
+          "电视柜",
+          "客厅"
+        ]
+      },
+      "tags": [
+        "TV Stand",
+        "tv_stand",
+        "living_room",
+        "media",
+        "电视柜",
+        "客厅",
+        "furniture"
+      ]
     },
     {
       "id": "floor_lamp",
-      "name": "落地灯",
-      "name_en": "Floor Lamp",
-      "skp_path": "${SKETCHUP_ASSETS}/lighting/floor_lamp.skp",
+      "name": "Floor Lamp",
+      "category": "lighting",
+      "subcategory": "lamp",
+      "dimensions": {
+        "width": 400,
+        "depth": 400,
+        "height": 1700
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [400, 400, 1700]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          400,
+          400,
+          1700
+        ]
       },
       "insertion_point": {
-        "offset": [200, 200, 0],
-        "description": "Center bottom"
+        "offset": [
+          200,
+          200,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["floor_lamp", "落地灯", "lighting", "灯"]
+      "anchors": {
+        "bottom": "floor"
+      },
+      "clearance": {},
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/lighting/floor_lamp.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/floor_lamp.png",
+        "procedural_fallback": "box_light"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "Floor Lamp",
+          "floor_lamp",
+          "lighting"
+        ],
+        "zh-CN": [
+          "落地灯",
+          "灯"
+        ]
+      },
+      "tags": [
+        "Floor Lamp",
+        "floor_lamp",
+        "lighting",
+        "落地灯",
+        "灯",
+        "lamp"
+      ]
     },
     {
       "id": "table_lamp",
-      "name": "台灯",
-      "name_en": "Table Lamp",
-      "skp_path": "${SKETCHUP_ASSETS}/lighting/table_lamp.skp",
+      "name": "Table Lamp",
+      "category": "lighting",
+      "subcategory": "lamp",
+      "dimensions": {
+        "width": 300,
+        "depth": 300,
+        "height": 500
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [300, 300, 500]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          300,
+          300,
+          500
+        ]
       },
       "insertion_point": {
-        "offset": [150, 150, 0],
-        "description": "Center bottom"
+        "offset": [
+          150,
+          150,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["table_lamp", "台灯", "lighting", "灯"]
+      "anchors": {
+        "bottom": "floor"
+      },
+      "clearance": {},
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/lighting/table_lamp.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/table_lamp.png",
+        "procedural_fallback": "box_light"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "Table Lamp",
+          "table_lamp",
+          "lighting"
+        ],
+        "zh-CN": [
+          "台灯",
+          "灯"
+        ]
+      },
+      "tags": [
+        "Table Lamp",
+        "table_lamp",
+        "lighting",
+        "台灯",
+        "灯",
+        "lamp"
+      ]
     },
     {
       "id": "chandelier",
-      "name": "吊灯",
-      "name_en": "Chandelier",
-      "skp_path": "${SKETCHUP_ASSETS}/lighting/chandelier.skp",
+      "name": "Chandelier",
+      "category": "lighting",
+      "subcategory": "light",
+      "dimensions": {
+        "width": 800,
+        "depth": 800,
+        "height": 600
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [800, 800, 600]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          800,
+          800,
+          600
+        ]
       },
       "insertion_point": {
-        "offset": [400, 400, 600],
-        "description": "Top center (ceiling mount)"
+        "offset": [
+          400,
+          400,
+          600
+        ],
+        "description": "Top center (ceiling mount)",
+        "face_direction": "+y"
       },
-      "tags": ["chandelier", "吊灯", "lighting", "灯", "ceiling"]
+      "anchors": {
+        "top": "ceiling",
+        "center": "ceiling"
+      },
+      "clearance": {},
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/lighting/chandelier.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/chandelier.png",
+        "procedural_fallback": "box_light"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "Chandelier",
+          "chandelier",
+          "lighting",
+          "ceiling"
+        ],
+        "zh-CN": [
+          "吊灯",
+          "灯"
+        ]
+      },
+      "tags": [
+        "Chandelier",
+        "chandelier",
+        "lighting",
+        "ceiling",
+        "吊灯",
+        "灯",
+        "light"
+      ]
     },
     {
       "id": "spotlight",
-      "name": "射灯",
-      "name_en": "Spotlight",
-      "skp_path": "${SKETCHUP_ASSETS}/lighting/spotlight.skp",
+      "name": "Spotlight",
+      "category": "lighting",
+      "subcategory": "light",
+      "dimensions": {
+        "width": 150,
+        "depth": 150,
+        "height": 100
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [150, 150, 100]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          150,
+          150,
+          100
+        ]
       },
       "insertion_point": {
-        "offset": [75, 75, 0],
-        "description": "Center"
+        "offset": [
+          75,
+          75,
+          0
+        ],
+        "description": "Center",
+        "face_direction": "+y"
       },
-      "tags": ["spotlight", "射灯", "lighting", "灯", "ceiling"]
+      "anchors": {
+        "top": "ceiling",
+        "center": "ceiling"
+      },
+      "clearance": {},
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/lighting/spotlight.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/spotlight.png",
+        "procedural_fallback": "box_light"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "Spotlight",
+          "spotlight",
+          "lighting",
+          "ceiling"
+        ],
+        "zh-CN": [
+          "射灯",
+          "灯"
+        ]
+      },
+      "tags": [
+        "Spotlight",
+        "spotlight",
+        "lighting",
+        "ceiling",
+        "射灯",
+        "灯",
+        "light"
+      ]
     },
     {
       "id": "rug_large",
-      "name": "大地毯",
-      "name_en": "Large Rug",
-      "skp_path": "${SKETCHUP_ASSETS}/decor/rug_large.skp",
+      "name": "Large Rug",
+      "category": "decor",
+      "subcategory": "rug",
+      "dimensions": {
+        "width": 3000,
+        "depth": 2000,
+        "height": 20
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [3000, 2000, 20]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          3000,
+          2000,
+          20
+        ]
       },
       "insertion_point": {
-        "offset": [1500, 1000, 0],
-        "description": "Center bottom"
+        "offset": [
+          1500,
+          1000,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["rug", "地毯", "living_room", "客厅", "decor", "装饰"]
+      "anchors": {
+        "bottom": "floor"
+      },
+      "clearance": {},
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/decor/rug_large.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/rug_large.png",
+        "procedural_fallback": "box_decor"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "Large Rug",
+          "rug",
+          "living_room",
+          "decor"
+        ],
+        "zh-CN": [
+          "大地毯",
+          "地毯",
+          "客厅",
+          "装饰"
+        ]
+      },
+      "tags": [
+        "Large Rug",
+        "rug",
+        "living_room",
+        "decor",
+        "大地毯",
+        "地毯",
+        "客厅",
+        "装饰"
+      ]
     },
     {
       "id": "rug_medium",
-      "name": "中等地毯",
-      "name_en": "Medium Rug",
-      "skp_path": "${SKETCHUP_ASSETS}/decor/rug_medium.skp",
+      "name": "Medium Rug",
+      "category": "decor",
+      "subcategory": "bed",
+      "dimensions": {
+        "width": 2000,
+        "depth": 1500,
+        "height": 15
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [2000, 1500, 15]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          2000,
+          1500,
+          15
+        ]
       },
       "insertion_point": {
-        "offset": [1000, 750, 0],
-        "description": "Center bottom"
+        "offset": [
+          1000,
+          750,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["rug", "地毯", "living_room", "客厅", "bedroom", "卧室", "decor", "装饰"]
+      "anchors": {
+        "head": "wall",
+        "bottom": "floor"
+      },
+      "clearance": {},
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/decor/rug_medium.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/rug_medium.png",
+        "procedural_fallback": "box_decor"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "Medium Rug",
+          "rug",
+          "living_room",
+          "bedroom",
+          "decor"
+        ],
+        "zh-CN": [
+          "中等地毯",
+          "地毯",
+          "客厅",
+          "卧室",
+          "装饰"
+        ]
+      },
+      "tags": [
+        "Medium Rug",
+        "rug",
+        "living_room",
+        "bedroom",
+        "decor",
+        "中等地毯",
+        "地毯",
+        "客厅",
+        "卧室",
+        "装饰",
+        "bed"
+      ]
     },
     {
       "id": "plant_large",
-      "name": "大型绿植",
-      "name_en": "Large Plant",
-      "skp_path": "${SKETCHUP_ASSETS}/decor/plant_large.skp",
+      "name": "Large Plant",
+      "category": "decor",
+      "subcategory": "plant",
+      "dimensions": {
+        "width": 600,
+        "depth": 600,
+        "height": 1500
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [600, 600, 1500]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          600,
+          600,
+          1500
+        ]
       },
       "insertion_point": {
-        "offset": [300, 300, 0],
-        "description": "Center bottom"
+        "offset": [
+          300,
+          300,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["plant", "绿植", "decor", "装饰", "living_room", "客厅"]
+      "anchors": {
+        "bottom": "floor"
+      },
+      "clearance": {},
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/decor/plant_large.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/plant_large.png",
+        "procedural_fallback": "box_decor"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "Large Plant",
+          "plant",
+          "decor",
+          "living_room"
+        ],
+        "zh-CN": [
+          "大型绿植",
+          "绿植",
+          "装饰",
+          "客厅"
+        ]
+      },
+      "tags": [
+        "Large Plant",
+        "plant",
+        "decor",
+        "living_room",
+        "大型绿植",
+        "绿植",
+        "装饰",
+        "客厅"
+      ]
     },
     {
       "id": "plant_medium",
-      "name": "中型绿植",
-      "name_en": "Medium Plant",
-      "skp_path": "${SKETCHUP_ASSETS}/decor/plant_medium.skp",
+      "name": "Medium Plant",
+      "category": "decor",
+      "subcategory": "plant",
+      "dimensions": {
+        "width": 400,
+        "depth": 400,
+        "height": 800
+      },
       "bounds": {
-        "min": [0, 0, 0],
-        "max": [400, 400, 800]
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          400,
+          400,
+          800
+        ]
       },
       "insertion_point": {
-        "offset": [200, 200, 0],
-        "description": "Center bottom"
+        "offset": [
+          200,
+          200,
+          0
+        ],
+        "description": "Center bottom",
+        "face_direction": "+y"
       },
-      "tags": ["plant", "绿植", "decor", "装饰", "table"]
+      "anchors": {
+        "bottom": "floor"
+      },
+      "clearance": {},
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/decor/plant_medium.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/plant_medium.png",
+        "procedural_fallback": "box_decor"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata; verify asset license before redistribution."
+      },
+      "aliases": {
+        "en": [
+          "Medium Plant",
+          "plant",
+          "decor",
+          "table"
+        ],
+        "zh-CN": [
+          "中型绿植",
+          "绿植",
+          "装饰"
+        ]
+      },
+      "tags": [
+        "Medium Plant",
+        "plant",
+        "decor",
+        "table",
+        "中型绿植",
+        "绿植",
+        "装饰"
+      ]
+    },
+    {
+      "id": "toilet_floor_mounted_basic",
+      "name": "Basic floor-mounted toilet",
+      "category": "fixture",
+      "subcategory": "toilet",
+      "dimensions": {
+        "width": 380,
+        "depth": 700,
+        "height": 760
+      },
+      "bounds": {
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          380,
+          700,
+          760
+        ]
+      },
+      "insertion_point": {
+        "offset": [
+          190,
+          0,
+          0
+        ],
+        "description": "Back center on floor",
+        "face_direction": "+y"
+      },
+      "anchors": {
+        "back": "wall",
+        "bottom": "floor",
+        "waste": "plumbing"
+      },
+      "clearance": {
+        "front": 600,
+        "left": 250,
+        "right": 250
+      },
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/fixtures/toilet_floor_mounted_basic.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/toilet_floor_mounted_basic.png",
+        "procedural_fallback": "box_fixture"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata for procedural seed geometry."
+      },
+      "aliases": {
+        "en": [
+          "toilet",
+          "water closet"
+        ],
+        "zh-CN": [
+          "马桶",
+          "坐便器"
+        ]
+      },
+      "tags": [
+        "bathroom",
+        "fixture",
+        "toilet",
+        "马桶",
+        "坐便器"
+      ]
+    },
+    {
+      "id": "vanity_wall_600",
+      "name": "Wall vanity 600 mm",
+      "category": "fixture",
+      "subcategory": "vanity",
+      "dimensions": {
+        "width": 600,
+        "depth": 460,
+        "height": 850
+      },
+      "bounds": {
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          600,
+          460,
+          850
+        ]
+      },
+      "insertion_point": {
+        "offset": [
+          300,
+          0,
+          0
+        ],
+        "description": "Back center on floor",
+        "face_direction": "+y"
+      },
+      "anchors": {
+        "back": "wall",
+        "bottom": "floor",
+        "water": "plumbing"
+      },
+      "clearance": {
+        "front": 700
+      },
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/fixtures/vanity_wall_600.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/vanity_wall_600.png",
+        "procedural_fallback": "box_fixture"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata for procedural seed geometry."
+      },
+      "aliases": {
+        "en": [
+          "sink",
+          "vanity",
+          "wash basin"
+        ],
+        "zh-CN": [
+          "洗手台",
+          "洗手盆"
+        ]
+      },
+      "tags": [
+        "bathroom",
+        "fixture",
+        "sink",
+        "vanity",
+        "洗手台",
+        "洗手盆"
+      ]
+    },
+    {
+      "id": "mirror_wall_500",
+      "name": "Wall mirror 500 mm",
+      "category": "fixture",
+      "subcategory": "mirror",
+      "dimensions": {
+        "width": 500,
+        "depth": 40,
+        "height": 700
+      },
+      "bounds": {
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          500,
+          40,
+          700
+        ]
+      },
+      "insertion_point": {
+        "offset": [
+          250,
+          0,
+          350
+        ],
+        "description": "Back center at mirror center height",
+        "face_direction": "+y"
+      },
+      "anchors": {
+        "back": "wall",
+        "center": "wall"
+      },
+      "clearance": {},
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/fixtures/mirror_wall_500.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/mirror_wall_500.png",
+        "procedural_fallback": "box_fixture"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata for procedural seed geometry."
+      },
+      "aliases": {
+        "en": [
+          "mirror"
+        ],
+        "zh-CN": [
+          "镜子",
+          "镜柜"
+        ]
+      },
+      "tags": [
+        "bathroom",
+        "fixture",
+        "mirror",
+        "镜子",
+        "镜柜"
+      ]
+    },
+    {
+      "id": "bathroom_door_700",
+      "name": "Bathroom door 700 mm",
+      "category": "opening",
+      "subcategory": "door",
+      "dimensions": {
+        "width": 700,
+        "depth": 40,
+        "height": 2100
+      },
+      "bounds": {
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          700,
+          40,
+          2100
+        ]
+      },
+      "insertion_point": {
+        "offset": [
+          0,
+          0,
+          0
+        ],
+        "description": "Hinge side on floor",
+        "face_direction": "+y"
+      },
+      "anchors": {
+        "hinge": "wall",
+        "bottom": "floor"
+      },
+      "clearance": {
+        "front": 700,
+        "back": 700
+      },
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/openings/bathroom_door_700.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/bathroom_door_700.png",
+        "procedural_fallback": "box_opening"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata for procedural seed geometry."
+      },
+      "aliases": {
+        "en": [
+          "door",
+          "bathroom door"
+        ],
+        "zh-CN": [
+          "门",
+          "卫生间门"
+        ]
+      },
+      "tags": [
+        "bathroom",
+        "opening",
+        "door",
+        "门",
+        "卫生间门"
+      ]
+    },
+    {
+      "id": "ceiling_light_basic",
+      "name": "Basic ceiling light",
+      "category": "lighting",
+      "subcategory": "light",
+      "dimensions": {
+        "width": 300,
+        "depth": 300,
+        "height": 80
+      },
+      "bounds": {
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          300,
+          300,
+          80
+        ]
+      },
+      "insertion_point": {
+        "offset": [
+          150,
+          150,
+          80
+        ],
+        "description": "Top center at ceiling",
+        "face_direction": "-z"
+      },
+      "anchors": {
+        "top": "ceiling",
+        "center": "ceiling"
+      },
+      "clearance": {},
+      "assets": {
+        "skp_path": "${SKETCHUP_ASSETS}/lighting/ceiling_light_basic.skp",
+        "thumbnail": "${SKETCHUP_ASSETS}/thumbnails/ceiling_light_basic.png",
+        "procedural_fallback": "box_light"
+      },
+      "license": {
+        "type": "unknown",
+        "source": "seed",
+        "redistribution": "Placeholder metadata for procedural seed geometry."
+      },
+      "aliases": {
+        "en": [
+          "ceiling light",
+          "basic light"
+        ],
+        "zh-CN": [
+          "吸顶灯",
+          "灯"
+        ]
+      },
+      "tags": [
+        "bathroom",
+        "lighting",
+        "light",
+        "ceiling",
+        "吸顶灯",
+        "灯"
+      ]
     }
   ],
   "placement_rules": {
     "min_clearance": 600,
-    "min_door_clearance": 900,
-    "min_passage_width": 800,
-    "description": "Default placement rules in millimeters"
+    "min_door_clearance": 700,
+    "min_passage_width": 700,
+    "description": "Default placement rules in millimeters."
   },
   "categories": {
     "furniture": {
-      "name": "家具",
-      "name_en": "Furniture",
-      "subcategories": ["seating", "tables", "storage", "beds"]
+      "name": "Furniture"
+    },
+    "fixture": {
+      "name": "Fixture"
     },
     "lighting": {
-      "name": "灯具",
-      "name_en": "Lighting",
-      "subcategories": ["ceiling", "floor", "table"]
+      "name": "Lighting"
     },
     "decor": {
-      "name": "装饰",
-      "name_en": "Decor",
-      "subcategories": ["rugs", "plants", "art"]
+      "name": "Decor"
+    },
+    "opening": {
+      "name": "Opening"
     }
   }
 }

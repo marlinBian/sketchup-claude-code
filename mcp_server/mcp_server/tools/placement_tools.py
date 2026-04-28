@@ -20,15 +20,47 @@ def load_library() -> dict[str, Any]:
         return json.load(f)
 
 
+def component_search_terms(component: dict[str, Any]) -> list[str]:
+    """Return searchable component terms across canonical and localized fields."""
+    terms: list[str] = []
+    for key in ("id", "name", "name_en", "subcategory", "category"):
+        value = component.get(key)
+        if isinstance(value, str) and value:
+            terms.append(value)
+
+    aliases = component.get("aliases", {})
+    if isinstance(aliases, dict):
+        for values in aliases.values():
+            if isinstance(values, list):
+                terms.extend(str(value) for value in values if value)
+
+    localized_names = component.get("localized_names", {})
+    if isinstance(localized_names, dict):
+        terms.extend(str(value) for value in localized_names.values() if value)
+
+    for key in ("tags", "style_tags"):
+        values = component.get(key, [])
+        if isinstance(values, list):
+            terms.extend(str(value) for value in values if value)
+
+    return terms
+
+
+def component_skp_path(component: dict[str, Any]) -> str:
+    """Return an SKP path from the normalized or legacy component shape."""
+    assets = component.get("assets", {})
+    if isinstance(assets, dict) and assets.get("skp_path"):
+        return str(assets["skp_path"])
+    return str(component["skp_path"])
+
+
 def find_component_by_name(name: str) -> dict[str, Any] | None:
     """Find a component by name (supports Chinese and English)."""
     library = load_library()
     name_lower = name.lower()
 
     for component in library.get("components", []):
-        if (name_lower in component.get("name", "").lower() or
-            name_lower in component.get("name_en", "").lower() or
-            any(name_lower in tag.lower() for tag in component.get("tags", []))):
+        if any(name_lower in term.lower() for term in component_search_terms(component)):
             return component
 
     return None
@@ -49,13 +81,8 @@ def search_components(query: str, limit: int = 10) -> list[dict[str, Any]]:
     results = []
 
     for component in library.get("components", []):
-        name = component.get("name", "").lower()
-        name_en = component.get("name_en", "").lower()
-        tags = [t.lower() for t in component.get("tags", [])]
-
-        if (name_lower in name or
-            name_lower in name_en or
-            any(name_lower in tag for tag in tags)):
+        terms = [term.lower() for term in component_search_terms(component)]
+        if any(name_lower in term for term in terms):
             results.append(component)
 
         if len(results) >= limit:
@@ -249,7 +276,7 @@ async def place_component(
                 "operation_id": f"place_{id(place_component)}",
                 "operation_type": "place_component",
                 "payload": {
-                    "skp_path": resolve_skp_path(component["skp_path"]),
+                    "skp_path": resolve_skp_path(component_skp_path(component)),
                     "position": placement_position,
                     "rotation": rotation,
                     "scale": scale,
@@ -268,7 +295,7 @@ async def place_component(
         result["component_info"] = {
             "id": component["id"],
             "name": component["name"],
-            "name_en": component.get("name_en"),
+            "aliases": component.get("aliases", {}),
         }
 
         return result

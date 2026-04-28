@@ -84,11 +84,23 @@ SAMPLE_DESIGN_MODEL = {
 
 @pytest.fixture
 def temp_project_dir():
-    """Create a temporary project directory with .design_model.json."""
+    """Create a temporary project directory with design_model.json."""
     with tempfile.TemporaryDirectory() as tmpdir:
         project_path = Path(tmpdir)
 
-        # Write .design_model.json (hidden file)
+        model_path = project_path / "design_model.json"
+        with open(model_path, "w", encoding="utf-8") as f:
+            json.dump(SAMPLE_DESIGN_MODEL, f, ensure_ascii=False, indent=2)
+
+        yield str(project_path)
+
+
+@pytest.fixture
+def legacy_project_dir():
+    """Create a temporary project directory with legacy .design_model.json."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_path = Path(tmpdir)
+
         model_path = project_path / ".design_model.json"
         with open(model_path, "w", encoding="utf-8") as f:
             json.dump(SAMPLE_DESIGN_MODEL, f, ensure_ascii=False, indent=2)
@@ -98,7 +110,7 @@ def temp_project_dir():
 
 @pytest.fixture
 def empty_project_dir():
-    """Create an empty project directory (no .design_model.json)."""
+    """Create an empty project directory with no design model."""
     with tempfile.TemporaryDirectory() as tmpdir:
         project_path = Path(tmpdir)
         # Don't create .design_model.json
@@ -110,7 +122,7 @@ class TestGetDesignModel:
 
     @pytest.mark.asyncio
     async def test_read_valid_project(self, temp_project_dir):
-        """Test reading a project that exists with valid .design_model.json."""
+        """Test reading a project that exists with valid design_model.json."""
         from mcp_server.resources.design_model_resource import get_design_model
 
         result = await get_design_model(temp_project_dir)
@@ -118,6 +130,15 @@ class TestGetDesignModel:
         assert result["version"] == "1.0"
         assert "components" in result
         assert "spaces" in result
+
+    @pytest.mark.asyncio
+    async def test_read_legacy_hidden_project(self, legacy_project_dir):
+        """Test migration fallback for legacy .design_model.json projects."""
+        from mcp_server.resources.design_model_resource import get_design_model
+
+        result = await get_design_model(legacy_project_dir)
+
+        assert result["project_name"] == "test_project"
 
     @pytest.mark.asyncio
     async def test_missing_project(self, empty_project_dir):
@@ -309,7 +330,7 @@ class TestLoadDesignModel:
         # Create a project with invalid JSON
         with tempfile.TemporaryDirectory() as tmpdir:
             project_path = Path(tmpdir)
-            model_path = project_path / ".design_model.json"
+            model_path = project_path / "design_model.json"
             model_path.write_text("{ invalid json }")
 
             from mcp_server.resources.design_model_resource import _load_design_model
@@ -317,23 +338,20 @@ class TestLoadDesignModel:
             with pytest.raises(json.JSONDecodeError):
                 _load_design_model(str(project_path))
 
-    def test_hidden_filename_used(self, temp_project_dir):
-        """Test that .design_model.json (hidden) is used, not design_model.json."""
+    def test_canonical_filename_preferred(self, temp_project_dir):
+        """Test that design_model.json is preferred over legacy hidden file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             project_path = Path(tmpdir)
 
-            # Create .design_model.json (hidden) with correct data
-            hidden_path = project_path / ".design_model.json"
-            with open(hidden_path, "w", encoding="utf-8") as f:
+            legacy_path = project_path / ".design_model.json"
+            with open(legacy_path, "w", encoding="utf-8") as f:
                 json.dump({"version": "1.0", "components": {}}, f)
 
-            # Create design_model.json (visible, wrong file)
-            wrong_path = project_path / "design_model.json"
-            with open(wrong_path, "w", encoding="utf-8") as f:
+            canonical_path = project_path / "design_model.json"
+            with open(canonical_path, "w", encoding="utf-8") as f:
                 json.dump({"version": "9.9", "components": {}}, f)
 
             from mcp_server.resources.design_model_resource import _load_design_model
 
-            # Should read .design_model.json, not design_model.json
             result = _load_design_model(str(project_path))
-            assert result["version"] == "1.0"
+            assert result["version"] == "9.9"
