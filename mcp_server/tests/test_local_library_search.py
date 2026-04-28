@@ -7,6 +7,7 @@ from mcp_server.tools.local_library_search import (
     format_search_results,
     fuzzy_match,
     get_categories,
+    get_component_by_id,
     get_components_by_category,
     load_library,
     normalize_category,
@@ -185,6 +186,20 @@ class TestGetComponentsByCategory:
     def test_returns_empty_for_unknown_category(self, sample_library):
         result = get_components_by_category("unknown", sample_library)
         assert result == []
+
+
+class TestGetComponentById:
+    def test_returns_component_by_canonical_id(self, sample_library):
+        component = get_component_by_id(
+            "toilet_floor_mounted_basic",
+            library_data=sample_library,
+        )
+
+        assert component is not None
+        assert component["name"] == "Basic Floor-Mounted Toilet"
+
+    def test_returns_none_for_unknown_component(self, sample_library):
+        assert get_component_by_id("missing", library_data=sample_library) is None
 
 
 class TestFormatSearchResults:

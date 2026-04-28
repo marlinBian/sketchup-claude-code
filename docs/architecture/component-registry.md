@@ -122,3 +122,12 @@ initialization; it does not yet download external assets automatically.
 Search should prefer exact component IDs, names, and aliases before fuzzy or
 tag-only matches. Category filters use canonical manifest category names such as
 `fixture`, but plural user input such as `fixtures` is normalized for CLI use.
+
+Agents should use machine-readable registry tools for reasoning:
+
+- `search_components` returns matching component manifests with dimensions,
+  anchors, clearance data, asset metadata, license data, and match scores.
+- `get_component_manifest` returns one manifest entry by canonical component ID.
+
+`search_local_library` remains a human-readable summary path for short display
+responses, not the preferred reasoning contract.

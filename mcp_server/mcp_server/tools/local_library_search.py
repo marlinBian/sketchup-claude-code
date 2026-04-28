@@ -81,6 +81,21 @@ def load_library() -> dict:
         return {"components": []}
 
 
+def get_component_by_id(
+    component_id: str,
+    library_data: Optional[dict] = None,
+) -> dict | None:
+    """Return one component manifest entry by canonical ID."""
+    if library_data is None:
+        library_data = load_library()
+
+    for component in library_data.get("components", []):
+        if component.get("id") == component_id:
+            return component
+
+    return None
+
+
 def fuzzy_match(query: str, text: str, threshold: float = 0.3) -> tuple[bool, float]:
     """Check if query fuzzy-matches text.
 

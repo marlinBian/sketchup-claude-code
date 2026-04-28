@@ -54,6 +54,15 @@ Rule precedence is:
 3. project `design_rules.json`
 4. explicit instruction in the current agent session
 
+## Component Registry
+
+The harness uses semantic component metadata before placing reusable objects.
+Agents can use `search_components` and `get_component_manifest` to read
+dimensions, anchors, clearances, asset paths, and license data.
+
+Project `assets.lock.json` records the components actually referenced by the
+design project.
+
 ## Visual Output
 
 Screenshots and generated renderings are review artifacts. They can guide design

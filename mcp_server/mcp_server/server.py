@@ -25,6 +25,7 @@ from mcp_server.resources.project_files import design_rules_path, snapshot_manif
 from mcp_server.tools.local_library_search import (
     format_search_results,
     get_categories,
+    get_component_by_id,
     search_library,
 )
 from mcp_server.tools.bathroom_planner import plan_bathroom_project, save_bathroom_plan
@@ -852,6 +853,52 @@ async def search_local_library(
         return TextContent(type="text", text=formatted)
     except Exception as e:
         return TextContent(type="text", text=f"Search failed: {str(e)}")
+
+
+@mcp.tool()
+async def search_components(
+    query: str,
+    category: str | None = None,
+    limit: int = 10,
+) -> TextContent:
+    """Search the component registry and return machine-readable results."""
+    try:
+        results = search_library(query, category=category, limit=limit)
+        response = {
+            "query": query,
+            "category": category,
+            "limit": limit,
+            "count": len(results),
+            "components": results,
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(response, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Component search failed: {str(e)}")
+
+
+@mcp.tool()
+async def get_component_manifest(component_id: str) -> TextContent:
+    """Read one component manifest entry by canonical registry ID."""
+    try:
+        component = get_component_by_id(component_id)
+        if component is None:
+            return TextContent(
+                type="text",
+                text=f"Component not found: {component_id}",
+            )
+        response = {
+            "component_id": component_id,
+            "component": component,
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(response, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Component manifest failed: {str(e)}")
 
 
 @mcp.tool()

@@ -26,7 +26,22 @@ Chinese aliases are deliberate search data. For example, the user can ask for
 
 ### 1. Search Before Placing
 
-Use `search_local_library` first:
+Use `search_components` first when the agent needs dimensions, anchors,
+clearances, or license metadata:
+
+```python
+search_components(query="toilet", category="fixture", limit=5)
+```
+
+Use `get_component_manifest` when the component ID is known and the full
+manifest is needed for placement or validation:
+
+```python
+get_component_manifest(component_id="toilet_floor_mounted_basic")
+```
+
+`search_local_library` remains available for simple human-readable result
+summaries:
 
 ```python
 search_local_library(query="toilet", category="fixture", limit=5)
@@ -78,6 +93,8 @@ When reporting search results:
 - Use the canonical component name and ID from the returned result.
 - Mention key dimensions when placement depends on fit.
 - Mention clearance requirements when they affect usability.
+- Use machine-readable `search_components` results for actual reasoning; do not
+  parse formatted summary text when JSON results are available.
 - Do not claim legal code compliance from component metadata.
 
 When reporting placement:
