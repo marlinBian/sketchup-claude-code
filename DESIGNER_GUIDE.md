@@ -19,6 +19,10 @@ my-design-project/
   .mcp.json
   AGENTS.md
   CLAUDE.md
+  .agents/
+    skills/
+  .claude/
+    skills/
   assets/
     components/
   model.skp

@@ -29,9 +29,11 @@ packages = ["mcp_server"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "../su_bridge/lib" = "mcp_server/packaged/su_bridge/lib"
+"../skills" = "mcp_server/packaged/runtime_skills"
 
 [tool.hatch.build.targets.sdist.force-include]
 "../su_bridge/lib" = "mcp_server/packaged/su_bridge/lib"
+"../skills" = "mcp_server/packaged/runtime_skills"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

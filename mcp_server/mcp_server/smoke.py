@@ -22,6 +22,7 @@ from mcp_server.resources.project_files import (
     snapshots_path,
 )
 from mcp_server.resources.snapshot_manifest_schema import load_snapshot_manifest
+from mcp_server.runtime_skills import RUNTIME_SKILL_TARGETS
 from mcp_server.tools.bathroom_planner import plan_bathroom_project
 from mcp_server.tools.trace_executor import (
     execute_bridge_operations,
@@ -135,6 +136,21 @@ def validate_project(project_path: str | Path) -> dict[str, Any]:
                 guidance_file.exists(),
                 {"path": str(guidance_file)},
                 [] if guidance_file.exists() else [f"{filename} is missing."],
+            )
+        )
+
+    for target_name, relative_path in RUNTIME_SKILL_TARGETS.items():
+        skill_dir = root / relative_path
+        checks.append(
+            check_result(
+                f"{target_name}_runtime_skills",
+                skill_dir.is_dir() and any(skill_dir.rglob("SKILL.md")),
+                {"path": str(skill_dir)},
+                (
+                    []
+                    if skill_dir.is_dir() and any(skill_dir.rglob("SKILL.md"))
+                    else [f"{relative_path} is missing runtime skill files."]
+                ),
             )
         )
 

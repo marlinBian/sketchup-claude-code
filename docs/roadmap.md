@@ -106,6 +106,8 @@ Goal: make normal designer use independent of the source checkout.
 - configure Claude and Codex MCP entries from one source
 - expose installed MCP startup through `sketchup-agent-mcp`
 - expose runtime skills through supported plugin/skill mechanisms
+- install packaged runtime skills into project-local Claude and Codex skill
+  directories
 - install or update the SketchUp Ruby bridge
 - add `sketchup-agent install-bridge` with a SketchUp startup loader
 - package the Ruby bridge runtime with the MCP wheel so designers do not need a

@@ -17,6 +17,7 @@ from mcp_server.resources.project_files import (
     snapshots_path,
 )
 from mcp_server.resources.snapshot_manifest_schema import create_empty_snapshot_manifest
+from mcp_server.runtime_skills import install_runtime_skills
 from mcp_server.tools.bathroom_planner import plan_bathroom_project, save_bathroom_plan
 
 PROJECT_MCP_FILENAME = ".mcp.json"
@@ -68,6 +69,8 @@ This is a SketchUp Agent Harness design project.
 - Use `assets.lock.json` before relying on component assets.
 - Use `/tmp/su_bridge.sock` only as the live SketchUp execution bridge; SketchUp
   is the rendered/executed view, not the source of truth.
+- Use project-local runtime skills from `.agents/skills/` for Codex and
+  `.claude/skills/` for Claude when those agent CLIs support project skills.
 - Prefer MCP tools over manual JSON edits when tools exist.
 - Use millimeters for dimensions and coordinates.
 - Treat packaged component fallback boxes as placeholders, not final production
@@ -147,6 +150,11 @@ def init_project(
     write_json(mcp_config_path, default_project_mcp_config(), overwrite)
     write_text(codex_guidance_path, default_project_guidance(name), overwrite)
     write_text(claude_guidance_path, default_project_guidance(name), overwrite)
+    runtime_skills = install_runtime_skills(
+        root,
+        target="all",
+        force=overwrite,
+    )
 
     return {
         "project_path": str(root),
@@ -162,5 +170,8 @@ def init_project(
             "claude_guidance": str(claude_guidance_path),
             "snapshots": str(snapshots_dir),
             "snapshot_manifest": str(snapshot_manifest),
+            "codex_runtime_skills": runtime_skills["installs"]["codex"]["target"],
+            "claude_runtime_skills": runtime_skills["installs"]["claude"]["target"],
         },
+        "runtime_skills": runtime_skills,
     }

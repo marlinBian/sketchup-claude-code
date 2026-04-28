@@ -23,7 +23,9 @@ cd ~/Design/my-bathroom
 
 The project directory now owns `design_model.json`, `design_rules.json`,
 `assets.lock.json`, `.mcp.json`, `AGENTS.md`, `CLAUDE.md`, the
-`assets/components/` cache directory, and `snapshots/manifest.json`.
+project-local runtime skill directories `.agents/skills/` and
+`.claude/skills/`, the `assets/components/` cache directory, and
+`snapshots/manifest.json`.
 
 Validate the generated project:
 

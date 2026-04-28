@@ -18,6 +18,8 @@ def test_init_project_empty_template_creates_workspace_files(tmp_path):
     assert (project_path / ".mcp.json").exists()
     assert (project_path / "AGENTS.md").exists()
     assert (project_path / "CLAUDE.md").exists()
+    assert (project_path / ".agents" / "skills" / "bathroom_planning" / "SKILL.md").exists()
+    assert (project_path / ".claude" / "skills" / "bathroom_planning" / "SKILL.md").exists()
     assert (project_path / "snapshots").is_dir()
     assert (project_path / "snapshots" / "manifest.json").exists()
 
@@ -34,6 +36,9 @@ def test_init_project_empty_template_creates_workspace_files(tmp_path):
     assert mcp_config["mcpServers"]["sketchup-mcp"]["command"] == "sketchup-agent-mcp"
     assert "design_model.json" in (project_path / "AGENTS.md").read_text(encoding="utf-8")
     assert "design_rules.json" in (project_path / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "codex_runtime_skills" in result["files"]
+    assert "claude_runtime_skills" in result["files"]
+    assert result["runtime_skills"]["installed"] is True
 
 
 def test_init_project_bathroom_template_creates_seed_bathroom(tmp_path):
@@ -54,6 +59,8 @@ def test_init_project_bathroom_template_creates_seed_bathroom(tmp_path):
     assert (project_path / "snapshots" / "manifest.json").exists()
     assert (project_path / "AGENTS.md").exists()
     assert (project_path / "CLAUDE.md").exists()
+    assert (project_path / ".agents" / "skills" / "designer_workflow" / "SKILL.md").exists()
+    assert (project_path / ".claude" / "skills" / "designer_workflow" / "SKILL.md").exists()
 
 
 def test_init_project_refuses_to_overwrite_existing_files(tmp_path):

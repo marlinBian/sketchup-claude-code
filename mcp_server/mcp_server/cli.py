@@ -7,6 +7,7 @@ import sys
 from mcp_server.bridge_install import install_bridge
 from mcp_server.doctor import run_doctor
 from mcp_server.project_init import init_project
+from mcp_server.runtime_skills import install_runtime_skills
 from mcp_server.smoke import DEFAULT_SMOKE_PROJECT, run_smoke, validate_project
 
 
@@ -90,6 +91,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show the target paths without copying files.",
     )
 
+    skills_parser = subparsers.add_parser(
+        "install-skills",
+        help="Install runtime skills into a design project",
+    )
+    skills_parser.add_argument("project_path", help="Design project directory")
+    skills_parser.add_argument(
+        "--target",
+        choices=["all", "codex", "claude"],
+        default="all",
+        help="Runtime skill target to install",
+    )
+    skills_parser.add_argument(
+        "--source-dir",
+        help="Runtime skills source directory. Defaults to packaged runtime skills.",
+    )
+    skills_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Replace locally modified runtime skill files.",
+    )
+    skills_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show runtime skill files that would be installed.",
+    )
+
     doctor_parser = subparsers.add_parser(
         "doctor",
         help="Check harness install, project files, and SketchUp bridge state",
@@ -149,6 +176,16 @@ def main(argv: list[str] | None = None) -> int:
                 plugins_dir=args.plugins_dir,
                 source_dir=args.source_dir,
                 sketchup_version=args.sketchup_version,
+                force=args.force,
+                dry_run=args.dry_run,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "install-skills":
+            result = install_runtime_skills(
+                project_path=args.project_path,
+                target=args.target,
+                source_dir=args.source_dir,
                 force=args.force,
                 dry_run=args.dry_run,
             )

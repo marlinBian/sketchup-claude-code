@@ -39,6 +39,8 @@ This creates:
 - `.mcp.json`
 - `AGENTS.md`
 - `CLAUDE.md`
+- `.agents/skills/`
+- `.claude/skills/`
 - `snapshots/`
 - `snapshots/manifest.json`
 
@@ -46,6 +48,13 @@ New design projects use the installed MCP console script:
 
 ```bash
 sketchup-agent-mcp
+```
+
+`sketchup-agent init` also installs designer runtime skills into project-local
+agent skill directories. To refresh those skills in an existing project:
+
+```bash
+sketchup-agent install-skills ~/Design/my-bathroom --target all --force
 ```
 
 The source plugin `.mcp.json` starts the same MCP server through:
@@ -82,6 +91,9 @@ codex plugin marketplace add marlinBian/sketchup-agent-harness
 
 The Codex adapter should expose runtime skills from `skills/` and MCP startup
 through `.codex-plugin/plugin.json` and `.mcp.json`.
+
+For project-local use without opening the source checkout, the installed CLI
+copies runtime skills to `.agents/skills/` inside the design project.
 
 ## SketchUp Ruby Bridge
 

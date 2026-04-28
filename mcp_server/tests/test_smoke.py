@@ -27,6 +27,8 @@ def test_validate_project_accepts_initialized_bathroom(tmp_path):
         "snapshot_manifest",
         "codex_guidance",
         "claude_guidance",
+        "codex_runtime_skills",
+        "claude_runtime_skills",
         "asset_refs_locked",
     }
 
