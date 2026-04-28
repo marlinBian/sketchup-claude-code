@@ -19,6 +19,8 @@ For generic placement, combine:
 
 - `get_project_state` for the current `design_model.json`, effective design
   rules, asset-lock summary, and visual feedback summary
+- `validate_project_layout` for project-backed containment, physical overlap,
+  and simple front-clearance checks
 - `get_design_rules` for project-specific rules
 - `search_components` or `get_component_manifest` for registry dimensions and
   clearances
@@ -32,9 +34,26 @@ Before placement:
 2. Identify the target room or wall from `get_project_state`.
 3. Calculate proposed bounds in millimeters.
 4. Check minimum clearances from `get_design_rules`.
-5. Use `validate_design_project` to catch project file problems.
-6. Use `get_scene_info` when SketchUp state may differ from files.
-7. Report assumptions when validation is only approximate.
+5. Use `validate_project_layout` after project-backed placement.
+6. Use `validate_design_project` to catch project file, asset lock, runtime
+   skill, layout, and execution-trace problems.
+7. Use `get_scene_info` when SketchUp state may differ from files.
+8. Report assumptions when validation is only approximate.
+
+## Project Layout Validation
+
+```python
+validate_project_layout(project_path="<project-path>")
+```
+
+This checks:
+
+- component bounds are inside their linked or inferred rectangular space
+- component 3D bounds do not physically overlap within the same space
+- wall-backed components with `clearance.front` have enough front space
+
+It is deterministic and headless. It does not prove full collision-free design,
+door-swing code compliance, circulation analysis, or jurisdictional compliance.
 
 ## Typical Ergonomic Seeds
 

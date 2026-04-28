@@ -58,6 +58,8 @@ Agents can inspect project state through MCP tools:
 - `validate_design_project` runs the same core checks as
   `sketchup-agent validate`, including whether current project truth can produce
   a bridge execution trace without skipped instances
+- `validate_project_layout` checks component containment, physical overlap, and
+  simple front-clearance issues from current `design_model.json`
 - `set_project_space` creates or updates rectangular
   `spaces.<space_id>.bounds` entries and marks SketchUp sync status dirty until
   the project is executed again

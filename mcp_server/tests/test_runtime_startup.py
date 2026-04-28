@@ -88,6 +88,7 @@ runpy.run_module("mcp_server.server", run_name="__main__")
         "set_designer_profile_fixture_dimension",
         "set_designer_profile_preference",
         "set_project_space",
+        "validate_project_layout",
         "update_visual_feedback_action_status",
         "rotate_entity",
         "scale_entity",

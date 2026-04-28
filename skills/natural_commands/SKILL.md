@@ -63,6 +63,9 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
 - Compare versions: "compare these two drafts", "对比两个方案".
   Use `compare_project_versions` for saved versions or a saved version against
   current project truth.
+- Check layout: "check this layout", "检查一下方案".
+  Use `validate_project_layout` for geometry and clearance checks. Use
+  `validate_design_project` for the broader project health check.
 
 Chinese examples are deliberate bilingual user prompt support. Keep internal
 instructions and tool names English-first.

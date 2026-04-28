@@ -47,6 +47,7 @@ from mcp_server.resources.project_files import (
 from mcp_server.project_assets import (
     refresh_project_asset_lock as refresh_project_asset_lock_file,
 )
+from mcp_server.project_layout import validate_project_layout as validate_layout_file
 from mcp_server.project_state import read_project_state
 from mcp_server.project_versions import (
     compare_project_versions as compare_project_versions_file,
@@ -1874,6 +1875,19 @@ async def validate_design_project(project_path: str) -> TextContent:
         )
     except Exception as e:
         return TextContent(type="text", text=f"Project validation failed: {str(e)}")
+
+
+@mcp.tool()
+async def validate_project_layout(project_path: str) -> TextContent:
+    """Validate component containment, overlaps, and simple clearances."""
+    try:
+        result = validate_layout_file(project_path)
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Layout validation failed: {str(e)}")
 
 
 @mcp.tool()

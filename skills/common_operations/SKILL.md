@@ -85,6 +85,7 @@ Views, reporting, and versions:
 - `list_project_versions`
 - `compare_project_versions`
 - `restore_project_version`
+- `validate_project_layout`
 - `save_version` (compatibility alias for `save_project_version`)
 - `list_versions` (compatibility alias for `list_project_versions`)
 
@@ -101,6 +102,19 @@ compare_project_versions(
 Use this before restoring or when the designer asks how alternatives differ.
 Report changed files and the domain-specific details for spaces, components,
 lighting, rules, assets, or visual manifest counts.
+
+### Validate Layout
+
+```python
+validate_project_layout(project_path="<project-path>")
+```
+
+Use this after project-backed component placement or when the designer asks
+"check this layout" / "检查一下方案". It reports space containment,
+axis-aligned 3D overlaps, and simple front-clearance failures. Run
+`validate_design_project` when the user asks for the broader project health
+check because that also checks files, runtime skills, asset locks, layout, and
+execution planning.
 
 ## Common Flows
 

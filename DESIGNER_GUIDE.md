@@ -120,6 +120,11 @@ sent to SketchUp and linked to the returned SketchUp entity ID.
 Project `assets.lock.json` records the components actually referenced by the
 design project.
 
+Use `validate_project_layout` after placement or when asking the agent to check
+the layout. It reports component containment, physical overlap, and simple
+front-clearance issues from `design_model.json`. It is not a legal code
+compliance report.
+
 ## Versions
 
 Use `save_project_version` to preserve structured project truth milestones and

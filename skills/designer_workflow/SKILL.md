@@ -92,6 +92,10 @@ After component placement, use `plan_project_execution` to confirm the updated
 `design_model.json` can be converted into a bridge trace. Use
 `execute_project_model` only when the designer wants SketchUp updated.
 
+Use `validate_project_layout` after component placement or when the designer
+asks to check the layout. Treat failures as blockers for SketchUp execution
+unless the designer explicitly wants to keep a known conflict.
+
 ### 4. Execute Only When the User Wants SketchUp Updated
 
 Use `execute_bathroom_plan` when the user wants the model updated in SketchUp and
@@ -128,6 +132,9 @@ After planning or execution, summarize:
 - execution status, if `execute_bathroom_plan` was used
 - skipped instances, if `plan_project_execution` refused to convert part of the
   project truth
+- layout validation failures, if `validate_project_layout` or
+  `validate_design_project` found containment, overlap, or front-clearance
+  issues
 - execution sync details, if `execute_project_model` was used
 
 Do not replace structured output with only prose. The design model remains the

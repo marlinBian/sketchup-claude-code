@@ -25,6 +25,7 @@ from mcp_server.resources.project_files import (
 )
 from mcp_server.resources.snapshot_manifest_schema import load_snapshot_manifest
 from mcp_server.runtime_skills import RUNTIME_SKILL_TARGETS
+from mcp_server.project_layout import validate_layout_model
 from mcp_server.tools.bathroom_planner import plan_bathroom_project
 from mcp_server.tools.project_executor import (
     build_project_execution_plan,
@@ -188,6 +189,23 @@ def validate_project(project_path: str | Path) -> dict[str, Any]:
         )
 
     if design_model is not None:
+        layout_validation = validate_layout_model(design_model)
+        checks.append(
+            check_result(
+                "project_layout",
+                layout_validation["ok"],
+                {
+                    "checked": layout_validation["checked"],
+                    "failed_count": layout_validation["failed_count"],
+                },
+                [
+                    str(check)
+                    for check in layout_validation["checks"]
+                    if not check.get("valid", False)
+                ],
+            )
+        )
+
         try:
             execution_plan = build_project_execution_plan(root)
             checks.append(

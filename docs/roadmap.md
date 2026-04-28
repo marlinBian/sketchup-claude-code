@@ -187,6 +187,8 @@ scattered commands.
 - add optional bridge execution with `--with-bridge`
 - verify the current project can build a bridge trace without skipped instances
 - validate project files, asset locks, snapshot manifests, and headless planning
+- validate project-backed layout containment, physical overlap, and simple
+  front-clearance checks
 - probe live bridge runtime capabilities so stale loaded plugins are visible
 - expose live bridge version and supported operation metadata
 - make release checks use the same smoke path
