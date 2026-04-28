@@ -184,6 +184,11 @@ cd mcp_server
 uv run --extra dev sketchup-agent doctor /tmp/sah-bathroom --sketchup-version 2024
 ```
 
+When SketchUp is open and `/tmp/su_bridge.sock` exists, `doctor` also probes
+non-mutating bridge operations. If it reports missing runtime capabilities,
+restart SketchUp after `install-bridge --force` or reload the bridge before
+running live smoke tests.
+
 Run the local smoke check without SketchUp:
 
 ```bash

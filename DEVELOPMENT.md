@@ -77,6 +77,11 @@ cd mcp_server
 uv run --extra dev sketchup-agent doctor /tmp/sah-bathroom --sketchup-version 2024
 ```
 
+If a live bridge socket exists, doctor also probes required read-only bridge
+operations. A capability warning usually means SketchUp is still running an
+older loaded bridge and should be restarted or reloaded before integration
+tests.
+
 Wheel packaging check:
 
 ```bash

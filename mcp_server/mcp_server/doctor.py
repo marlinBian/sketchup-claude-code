@@ -12,6 +12,8 @@ from mcp_server.bridge_install import (
     default_plugins_dir,
     installed_sketchup_plugin_dirs,
 )
+from mcp_server.bridge.socket_bridge import BridgeConfig, SocketBridge
+from mcp_server.protocol.jsonrpc import JsonRpcRequest
 from mcp_server.resources.design_rules_schema import (
     DESIGNER_PROFILE_ENV,
     designer_profile_path_from_env,
@@ -72,6 +74,82 @@ def bridge_socket_check(socket_path: str = DEFAULT_BRIDGE_SOCKET) -> dict[str, A
         {"path": str(path)},
         severity="warning",
         message=None if path.exists() else "SketchUp bridge socket is not available.",
+    )
+
+
+def bridge_runtime_capability_check(
+    socket_path: str = DEFAULT_BRIDGE_SOCKET,
+) -> dict[str, Any]:
+    """Check whether the live bridge supports required non-mutating operations."""
+    path = Path(socket_path)
+    if not path.exists():
+        return check(
+            "bridge_runtime_capabilities",
+            True,
+            {"path": str(path), "skipped": True},
+            severity="info",
+            message="Skipped because the SketchUp bridge socket is not available.",
+        )
+
+    required_operations = {
+        "get_scene_info": {},
+        "get_selection_info": {"limit": 0},
+    }
+    operation_results: dict[str, dict[str, Any]] = {}
+    bridge = SocketBridge(
+        BridgeConfig(
+            socket_path=str(path),
+            connect_timeout=1.0,
+            recv_timeout=5.0,
+            max_retries=1,
+        )
+    )
+
+    try:
+        for operation_type, payload in required_operations.items():
+            request = JsonRpcRequest(
+                method="execute_operation",
+                params={
+                    "operation_id": f"doctor_{operation_type}",
+                    "operation_type": operation_type,
+                    "payload": payload,
+                    "rollback_on_failure": False,
+                },
+            )
+            response = bridge.send(request.to_dict())
+            error = response.get("error")
+            operation_results[operation_type] = {
+                "ok": error is None,
+                "error": error.get("message") if isinstance(error, dict) else None,
+            }
+    except Exception as error:
+        return check(
+            "bridge_runtime_capabilities",
+            False,
+            {"path": str(path), "error": str(error)},
+            severity="warning",
+            message="Could not query the live SketchUp bridge runtime.",
+        )
+    finally:
+        bridge.disconnect()
+
+    ok = all(result["ok"] for result in operation_results.values())
+    return check(
+        "bridge_runtime_capabilities",
+        ok,
+        {
+            "path": str(path),
+            "required_operations": operation_results,
+        },
+        severity="warning",
+        message=(
+            None
+            if ok
+            else (
+                "Live SketchUp bridge is missing required operation support. "
+                "Restart SketchUp after install-bridge, or reload the bridge."
+            )
+        ),
     )
 
 
@@ -157,6 +235,7 @@ def run_doctor(
         designer_profile_check(),
         sketchup_install_check(sketchup_version=sketchup_version, plugins_dir=plugins_dir),
         bridge_socket_check(socket_path),
+        bridge_runtime_capability_check(socket_path),
     ]
     project_validation = project_check(project_path)
     if project_validation is not None:

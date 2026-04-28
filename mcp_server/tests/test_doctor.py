@@ -3,7 +3,7 @@
 import json
 
 from mcp_server.cli import main
-from mcp_server.doctor import run_doctor
+from mcp_server.doctor import bridge_runtime_capability_check, run_doctor
 from mcp_server.project_init import init_project
 from mcp_server.resources.design_rules_schema import (
     DESIGNER_PROFILE_ENV,
@@ -83,6 +83,80 @@ def test_doctor_fails_on_invalid_project(tmp_path):
     assert result["ok"] is False
     assert project_check["ok"] is False
     assert project_check["severity"] == "error"
+
+
+def test_bridge_runtime_capability_check_skips_missing_socket(tmp_path):
+    result = bridge_runtime_capability_check(socket_path=str(tmp_path / "missing.sock"))
+
+    assert result["ok"] is True
+    assert result["severity"] == "info"
+    assert result["details"]["skipped"] is True
+
+
+def test_bridge_runtime_capability_check_reports_supported_operations(
+    monkeypatch,
+    tmp_path,
+):
+    socket_path = tmp_path / "su_bridge.sock"
+    socket_path.write_text("", encoding="utf-8")
+
+    class FakeBridge:
+        def __init__(self, config):
+            self.config = config
+
+        def send(self, data):
+            operation_type = data["params"]["operation_type"]
+            assert operation_type in {"get_scene_info", "get_selection_info"}
+            return {"result": {operation_type: {}}}
+
+        def disconnect(self):
+            pass
+
+    monkeypatch.setattr("mcp_server.doctor.SocketBridge", FakeBridge)
+
+    result = bridge_runtime_capability_check(socket_path=str(socket_path))
+
+    assert result["ok"] is True
+    assert result["details"]["required_operations"]["get_scene_info"]["ok"] is True
+    assert result["details"]["required_operations"]["get_selection_info"]["ok"] is True
+
+
+def test_bridge_runtime_capability_check_reports_stale_bridge(
+    monkeypatch,
+    tmp_path,
+):
+    socket_path = tmp_path / "su_bridge.sock"
+    socket_path.write_text("", encoding="utf-8")
+
+    class FakeBridge:
+        def __init__(self, config):
+            self.config = config
+
+        def send(self, data):
+            operation_type = data["params"]["operation_type"]
+            if operation_type == "get_selection_info":
+                return {
+                    "error": {
+                        "code": -32000,
+                        "message": "Unknown operation_type: get_selection_info",
+                    }
+                }
+            return {"result": {"scene_info": {}}}
+
+        def disconnect(self):
+            pass
+
+    monkeypatch.setattr("mcp_server.doctor.SocketBridge", FakeBridge)
+
+    result = bridge_runtime_capability_check(socket_path=str(socket_path))
+
+    assert result["ok"] is False
+    assert result["severity"] == "warning"
+    assert "Restart SketchUp" in result["message"]
+    assert (
+        result["details"]["required_operations"]["get_selection_info"]["error"]
+        == "Unknown operation_type: get_selection_info"
+    )
 
 
 def test_cli_doctor_outputs_json(tmp_path, capsys):
