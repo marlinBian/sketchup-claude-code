@@ -4,10 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from mcp_server.resources.asset_lock_schema import (
-    build_assets_lock,
-    create_empty_assets_lock,
-)
+from mcp_server.resources.asset_lock_schema import create_empty_assets_lock
 from mcp_server.resources.design_model_schema import create_empty_template
 from mcp_server.resources.design_rules_schema import create_default_design_rules
 from mcp_server.resources.project_files import (
@@ -21,7 +18,6 @@ from mcp_server.resources.project_files import (
 )
 from mcp_server.resources.snapshot_manifest_schema import create_empty_snapshot_manifest
 from mcp_server.tools.bathroom_planner import plan_bathroom_project, save_bathroom_plan
-from mcp_server.tools.local_library_search import load_library
 
 PROJECT_MCP_FILENAME = ".mcp.json"
 
@@ -74,7 +70,7 @@ def init_project(
         written = save_bathroom_plan(root, plan)
         design_model_path = Path(written["design_model_path"])
         design_rules_path = Path(written["design_rules_path"])
-        assets_lock = build_assets_lock(plan["design_model"], load_library())
+        assets_lock = None
     else:
         design_model_path = root / DESIGN_MODEL_FILENAME
         design_rules_path = root / DESIGN_RULES_FILENAME
@@ -90,8 +86,10 @@ def init_project(
     assets_cache.mkdir(parents=True, exist_ok=True)
     snapshots_dir.mkdir(exist_ok=True)
 
-    write_json(assets_lock_path, assets_lock, overwrite)
-    write_json(snapshot_manifest, create_empty_snapshot_manifest(), overwrite)
+    if assets_lock is not None:
+        write_json(assets_lock_path, assets_lock, overwrite)
+    if not snapshot_manifest.exists() or overwrite:
+        write_json(snapshot_manifest, create_empty_snapshot_manifest(), overwrite)
     write_json(mcp_config_path, default_project_mcp_config(), overwrite)
 
     return {

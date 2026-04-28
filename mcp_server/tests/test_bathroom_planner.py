@@ -76,10 +76,20 @@ def test_save_bathroom_plan_writes_project_files(tmp_path):
 
     design_model = json.loads((tmp_path / "design_model.json").read_text())
     design_rules = json.loads((tmp_path / "design_rules.json").read_text())
+    assets_lock = json.loads((tmp_path / "assets.lock.json").read_text())
+    snapshot_manifest = json.loads(
+        (tmp_path / "snapshots" / "manifest.json").read_text()
+    )
+    locked_ids = {asset["component_id"] for asset in assets_lock["assets"]}
 
     assert written["design_model_path"].endswith("design_model.json")
     assert written["design_rules_path"].endswith("design_rules.json")
+    assert written["assets_lock_path"].endswith("assets.lock.json")
+    assert written["snapshot_manifest_path"].endswith("snapshots/manifest.json")
     assert design_model["project_name"] == "saved_bathroom"
     assert design_rules["rule_sets"]["bathroom"]["clearances"][
         "toilet_front_clearance"
     ] == 600
+    assert "toilet_floor_mounted_basic" in locked_ids
+    assert (tmp_path / "assets" / "components").is_dir()
+    assert snapshot_manifest["snapshots"] == []

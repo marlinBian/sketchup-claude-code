@@ -7,10 +7,16 @@ from pathlib import Path
 from typing import Any
 
 from mcp_server.resources.design_rules_schema import create_default_design_rules
+from mcp_server.resources.asset_lock_schema import build_assets_lock
 from mcp_server.resources.project_files import (
     DESIGN_MODEL_FILENAME,
     DESIGN_RULES_FILENAME,
+    assets_cache_path,
+    assets_lock_path,
+    snapshot_manifest_path,
+    snapshots_path,
 )
+from mcp_server.resources.snapshot_manifest_schema import create_empty_snapshot_manifest
 from mcp_server.tools.placement_tools import (
     component_skp_path,
     load_library,
@@ -491,6 +497,12 @@ def save_bathroom_plan(project_path: str | Path, plan: dict[str, Any]) -> dict[s
 
     design_model_path = root / DESIGN_MODEL_FILENAME
     design_rules_path = root / DESIGN_RULES_FILENAME
+    lock_path = assets_lock_path(root)
+    cache_path = assets_cache_path(root)
+    snapshot_dir = snapshots_path(root)
+    manifest_path = snapshot_manifest_path(root)
+    cache_path.mkdir(parents=True, exist_ok=True)
+    snapshot_dir.mkdir(exist_ok=True)
 
     design_model_path.write_text(
         json.dumps(plan["design_model"], ensure_ascii=False, indent=2) + "\n",
@@ -500,8 +512,26 @@ def save_bathroom_plan(project_path: str | Path, plan: dict[str, Any]) -> dict[s
         json.dumps(plan["design_rules"], ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+    lock_path.write_text(
+        json.dumps(
+            build_assets_lock(plan["design_model"], load_library()),
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    if not manifest_path.exists():
+        manifest_path.write_text(
+            json.dumps(create_empty_snapshot_manifest(), ensure_ascii=False, indent=2)
+            + "\n",
+            encoding="utf-8",
+        )
 
     return {
         "design_model_path": str(design_model_path),
         "design_rules_path": str(design_rules_path),
+        "assets_lock_path": str(lock_path),
+        "assets_cache_path": str(cache_path),
+        "snapshot_manifest_path": str(manifest_path),
     }

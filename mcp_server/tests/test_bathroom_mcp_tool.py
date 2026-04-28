@@ -30,7 +30,11 @@ async def test_plan_bathroom_tool_writes_project_files(tmp_path):
 
     assert (tmp_path / "design_model.json").exists()
     assert (tmp_path / "design_rules.json").exists()
+    assert (tmp_path / "assets.lock.json").exists()
+    assert (tmp_path / "assets" / "components").is_dir()
+    assert (tmp_path / "snapshots" / "manifest.json").exists()
     assert data["written_files"]["design_model_path"].endswith("design_model.json")
+    assert data["written_files"]["assets_lock_path"].endswith("assets.lock.json")
 
 
 @pytest.mark.asyncio
