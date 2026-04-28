@@ -39,8 +39,7 @@ def default_project_mcp_config() -> dict[str, Any]:
     return {
         "mcpServers": {
             "sketchup-mcp": {
-                "command": "python3",
-                "args": ["-m", "mcp_server.server"],
+                "command": "sketchup-agent-mcp",
             }
         }
     }

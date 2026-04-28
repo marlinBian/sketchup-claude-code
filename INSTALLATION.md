@@ -40,11 +40,20 @@ This creates:
 - `snapshots/`
 - `snapshots/manifest.json`
 
-The generated `.mcp.json` starts the MCP server with:
+New design projects use the installed MCP console script:
 
 ```bash
-python3 -m mcp_server.server
+sketchup-agent-mcp
 ```
+
+The source plugin `.mcp.json` starts the same MCP server through:
+
+```bash
+./mcp_server/start.sh
+```
+
+The startup script prefers `uv run` when `uv` is available so plugin startup can
+use the package dependencies declared by `mcp_server/pyproject.toml`.
 
 ## Claude CLI
 
@@ -119,6 +128,12 @@ Run the local smoke check without SketchUp:
 ```bash
 cd mcp_server
 uv run --extra dev sketchup-agent smoke /tmp/sah-smoke --force
+```
+
+Check the plugin startup path:
+
+```bash
+./mcp_server/start.sh --startup-check
 ```
 
 Run the smoke check against a live SketchUp bridge:

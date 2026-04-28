@@ -83,6 +83,8 @@ Goal: execute the bathroom slice in SketchUp.
 - support procedural fallback geometry when a `.skp` asset is unavailable
 - capture scene info after execution
 - keep `design_model.json` synchronized with SketchUp results
+- make the Ruby bridge write canonical `design_model.json` while retaining
+  legacy `.design_model.json` read fallback
 
 Acceptance:
 
@@ -100,6 +102,7 @@ Goal: make normal designer use independent of the source checkout.
 - add `sketchup-agent init`
 - create a clean designer project directory
 - configure Claude and Codex MCP entries from one source
+- expose installed MCP startup through `sketchup-agent-mcp`
 - expose runtime skills through supported plugin/skill mechanisms
 - install or update the SketchUp Ruby bridge
 - document cleanup and rollback
@@ -156,6 +159,7 @@ scattered commands.
 
 - add `sketchup-agent validate <project-path>`
 - add `sketchup-agent smoke [project-path] --force`
+- add plugin startup smoke for `mcp_server/start.sh`
 - keep the default smoke headless so it works without SketchUp
 - add optional bridge execution with `--with-bridge`
 - validate project files, asset locks, snapshot manifests, and headless planning

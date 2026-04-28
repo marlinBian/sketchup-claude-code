@@ -18,6 +18,7 @@ dev = [
 
 [project.scripts]
 sketchup-agent = "mcp_server.cli:main"
+sketchup-agent-mcp = "mcp_server.server:main"
 
 [build-system]
 requires = ["hatchling"]

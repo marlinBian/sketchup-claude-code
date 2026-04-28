@@ -62,6 +62,14 @@ jobs:
           cd mcp_server
           uv run --extra dev pytest tests/ -m "not integration" -v --tb=short
 
+      - name: Check plugin startup path
+        run: ./mcp_server/start.sh --startup-check
+
+      - name: Run headless product smoke
+        run: |
+          cd mcp_server
+          uv run --extra dev sketchup-agent smoke /tmp/sah-ci-smoke --force
+
   ruby-tests:
     name: Ruby Tests
     runs-on: ubuntu-latest
@@ -101,9 +109,7 @@ jobs:
             AGENTS.md
             CHANGELOG.md
             CONTRIBUTING.md
+            skills/*.md
+            skills/**/*.md
             docs/roadmap.md
-            docs/architecture/bathroom-headless-slice.md
-            docs/architecture/bridge-trace-execution.md
-            docs/architecture/component-registry.md
-            docs/architecture/project-workspace.md
-            docs/architecture/runtime-vs-dev-skills.md
+            docs/architecture/*.md

@@ -1800,11 +1800,6 @@ async def move_entity(
         bridge.disconnect()
 
 
-if __name__ == "__main__":
-    # Run the MCP server after all tools have been registered.
-    mcp.run()
-
-
 @mcp.tool()
 async def rotate_entity(
     entity_ids: list[str],
@@ -1935,3 +1930,12 @@ async def copy_entity(
         return TextContent(type="text", text=str(response.get("result", {})))
     finally:
         bridge.disconnect()
+
+
+def main() -> None:
+    """Run the MCP server after all tools have been registered."""
+    mcp.run()
+
+
+if __name__ == "__main__":
+    main()

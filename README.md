@@ -54,6 +54,12 @@ cd mcp_server
 uv run --extra dev sketchup-agent smoke /tmp/sah-smoke --force
 ```
 
+Plugin startup smoke:
+
+```bash
+./mcp_server/start.sh --startup-check
+```
+
 Python baseline tests, excluding live SketchUp integration tests:
 
 ```bash

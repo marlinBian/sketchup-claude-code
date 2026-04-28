@@ -24,10 +24,12 @@ def test_init_project_empty_template_creates_workspace_files(tmp_path):
     snapshot_manifest = json.loads(
         (project_path / "snapshots" / "manifest.json").read_text()
     )
+    mcp_config = json.loads((project_path / ".mcp.json").read_text())
     assert design_model["project_name"] == "My Design"
     assert assets_lock["cache"]["root"] == "assets/components"
     assert assets_lock["assets"] == []
     assert snapshot_manifest["snapshots"] == []
+    assert mcp_config["mcpServers"]["sketchup-mcp"]["command"] == "sketchup-agent-mcp"
 
 
 def test_init_project_bathroom_template_creates_seed_bathroom(tmp_path):

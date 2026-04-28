@@ -22,8 +22,10 @@ module SuBridge
       ::Object.const_get('Sketchup')
     end
 
-    # Default design model file name (hidden file)
-    DESIGN_MODEL_FILENAME = ".design_model.json".freeze
+    # Canonical design model file name. The hidden legacy filename remains
+    # readable during migration, but all saves write the canonical file.
+    DESIGN_MODEL_FILENAME = "design_model.json".freeze
+    LEGACY_DESIGN_MODEL_FILENAME = ".design_model.json".freeze
 
     # Layer names that SCC manages
     AI_LAYERS = %w[Walls Floors Furniture Fixtures Lighting Windows Doors Stairs Ceiling].freeze
@@ -31,6 +33,7 @@ module SuBridge
     def initialize(project_path = nil)
       @project_path = project_path || default_project_path
       @design_model_path = File.join(@project_path, DESIGN_MODEL_FILENAME)
+      @legacy_design_model_path = File.join(@project_path, LEGACY_DESIGN_MODEL_FILENAME)
       @observer = nil
     end
 
@@ -43,9 +46,10 @@ module SuBridge
     # Get the current design model data
     # @return [Hash, nil] Parsed JSON data or nil if file doesn't exist
     def load
-      return nil unless File.exist?(@design_model_path)
+      path = existing_design_model_path
+      return nil unless File.exist?(path)
 
-      JSON.parse(File.read(@design_model_path))
+      JSON.parse(File.read(path))
     rescue JSON::ParserError => e
       puts "[SuBridge] Failed to parse design_model.json: #{e.message}"
       nil
@@ -196,7 +200,7 @@ module SuBridge
     # @return [Hash] Result with counts of synced entities
     def sync_from_file!
       return { error: "Model not available" } unless ::Sketchup.active_model
-      return { error: "design_model.json not found" } unless File.exist?(@design_model_path)
+      return { error: "design_model.json not found" } unless File.exist?(existing_design_model_path)
 
       model = ::Sketchup.active_model
       data = load
@@ -232,6 +236,15 @@ module SuBridge
     end
 
     private
+
+    # Resolve the file used for reads. Canonical files win over legacy files.
+    # Saves always write @design_model_path.
+    def existing_design_model_path
+      return @design_model_path if File.exist?(@design_model_path)
+      return @legacy_design_model_path if File.exist?(@legacy_design_model_path)
+
+      @design_model_path
+    end
 
     # Get default project path based on current model
     # @return [String] Default project path

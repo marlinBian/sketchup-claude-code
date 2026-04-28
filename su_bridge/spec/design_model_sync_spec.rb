@@ -15,13 +15,13 @@ RSpec.describe SuBridge::DesignModelSync do
     it "creates with custom project path" do
       sync = described_class.new(temp_dir)
       expect(sync.project_path).to eq(temp_dir)
-      expect(sync.design_model_path).to eq(File.join(temp_dir, ".design_model.json"))
+      expect(sync.design_model_path).to eq(File.join(temp_dir, "design_model.json"))
     end
   end
 
   describe "#design_model_path" do
     it "returns correct path" do
-      expect(sync.design_model_path).to eq(File.join(temp_dir, ".design_model.json"))
+      expect(sync.design_model_path).to eq(File.join(temp_dir, "design_model.json"))
     end
   end
 
@@ -34,7 +34,7 @@ RSpec.describe SuBridge::DesignModelSync do
 
     context "when file exists" do
       before do
-        File.write(File.join(temp_dir, ".design_model.json"), '{"version": "1.0", "components": {}}')
+        File.write(File.join(temp_dir, "design_model.json"), '{"version": "1.0", "components": {}}')
       end
 
       it "returns parsed JSON" do
@@ -44,9 +44,29 @@ RSpec.describe SuBridge::DesignModelSync do
       end
     end
 
+    context "when only legacy hidden file exists" do
+      before do
+        File.write(File.join(temp_dir, ".design_model.json"), '{"version": "1.0", "project_name": "legacy", "components": {}}')
+      end
+
+      it "reads the legacy file as a fallback" do
+        data = sync.load
+        expect(data["project_name"]).to eq("legacy")
+      end
+
+      it "saves back to canonical design_model.json" do
+        data = sync.load
+        data["project_name"] = "migrated"
+        expect(sync.save(data)).to be true
+
+        canonical = JSON.parse(File.read(File.join(temp_dir, "design_model.json")))
+        expect(canonical["project_name"]).to eq("migrated")
+      end
+    end
+
     context "when file has invalid JSON" do
       before do
-        File.write(File.join(temp_dir, ".design_model.json"), "invalid json")
+        File.write(File.join(temp_dir, "design_model.json"), "invalid json")
       end
 
       it "returns nil" do
