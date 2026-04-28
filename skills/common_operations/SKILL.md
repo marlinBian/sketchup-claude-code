@@ -34,6 +34,9 @@ Scene and geometry:
 
 Components and layout:
 
+- `search_components`
+- `get_component_manifest`
+- `add_component_instance`
 - `search_local_library`
 - `place_component`
 - `move_entity`
@@ -61,7 +64,14 @@ Views, reporting, and versions:
 ### Place a Registry Component
 
 ```python
-search_local_library(query="sofa", category="furniture", limit=5)
+search_components(query="sofa", category="furniture", limit=5)
+add_component_instance(
+    project_path="<project-path>",
+    component_id="sofa_modern_2seat",
+    position_x=3000,
+    position_y=2000,
+    position_z=0
+)
 place_component(
     component_name="Modern 2-Seat Sofa",
     position_x=3000,
@@ -71,6 +81,10 @@ place_component(
     scale=1
 )
 ```
+
+Use `place_component` only when the designer also wants SketchUp updated and the
+bridge is running. Project truth should be updated with `add_component_instance`
+first when a project path exists.
 
 ### Create Simple Geometry
 
@@ -118,6 +132,7 @@ capture_project_snapshot(
 
 - Do not claim that manual coordinate work is fully automatic design.
 - Do not place unknown components without searching the registry first.
+- Do not bypass `design_model.json` for project-backed component placement.
 - Do not promise legal code compliance from ergonomic seed values.
 - Do not describe placeholder boxes as final production assets.
 - Treat snapshots and rendered images as advisory review artifacts.

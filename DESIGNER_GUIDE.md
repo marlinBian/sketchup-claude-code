@@ -64,6 +64,10 @@ The harness uses semantic component metadata before placing reusable objects.
 Agents can use `search_components` and `get_component_manifest` to read
 dimensions, anchors, clearances, asset paths, and license data.
 
+Use `add_component_instance` when a selected component should become part of the
+project source of truth. It updates `design_model.json` and refreshes
+`assets.lock.json`.
+
 Project `assets.lock.json` records the components actually referenced by the
 design project.
 

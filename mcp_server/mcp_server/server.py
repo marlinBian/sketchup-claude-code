@@ -11,7 +11,8 @@ from mcp_server.tools import model_tools, query_tools, placement_tools
 from mcp_server.bridge.socket_bridge import SocketBridge
 from mcp_server.protocol.jsonrpc import JsonRpcRequest
 from mcp_server.resources import design_model_mcp
-from mcp_server.resources.design_model_schema import load_design_model
+from mcp_server.resources.asset_lock_schema import build_assets_lock
+from mcp_server.resources.design_model_schema import load_design_model, save_design_model
 from mcp_server.resources.snapshot_manifest_schema import (
     append_snapshot_entry,
     snapshot_entry,
@@ -23,6 +24,7 @@ from mcp_server.resources.design_rules_schema import (
     save_design_rules,
 )
 from mcp_server.resources.project_files import (
+    assets_lock_path,
     design_rules_path,
     find_design_model_path,
     snapshot_manifest_path,
@@ -34,7 +36,13 @@ from mcp_server.tools.local_library_search import (
     get_component_by_id,
     search_library,
 )
-from mcp_server.tools.bathroom_planner import plan_bathroom_project, save_bathroom_plan
+from mcp_server.tools.bathroom_planner import (
+    component_dimensions,
+    component_dimensions_for_rules,
+    plan_bathroom_project,
+    save_bathroom_plan,
+)
+from mcp_server.tools.placement_tools import load_library as load_component_library
 from mcp_server.tools.trace_executor import execute_bridge_operations
 
 # Create FastMCP server
@@ -68,6 +76,80 @@ def load_or_create_project_design_rules(
         return path, rules, []
 
     return path, create_default_design_rules(), []
+
+
+def default_layer_for_component(component: dict[str, Any]) -> str:
+    """Return a design model layer for a component manifest category."""
+    return {
+        "appliance": "Fixtures",
+        "decor": "Other",
+        "fixture": "Fixtures",
+        "furniture": "Furniture",
+        "lighting": "Lighting",
+        "opening": "Doors",
+        "other": "Other",
+    }.get(str(component.get("category", "other")), "Other")
+
+
+def next_component_instance_id(
+    design_model: dict[str, Any],
+    component: dict[str, Any],
+) -> str:
+    """Return a deterministic unused instance ID for a manifest component."""
+    base = str(component.get("subcategory") or component["id"])
+    existing = set(design_model.get("components", {}).keys())
+    index = 1
+    while True:
+        instance_id = f"{base}_{index:03d}"
+        if instance_id not in existing:
+            return instance_id
+        index += 1
+
+
+def component_instance_bounds(
+    position: list[float],
+    dimensions: dict[str, float],
+    insertion_offset: list[float],
+) -> dict[str, list[float]]:
+    """Return axis-aligned bounds from insertion point, dimensions, and offset."""
+    min_x = position[0] - float(insertion_offset[0])
+    min_y = position[1] - float(insertion_offset[1])
+    min_z = position[2] - float(insertion_offset[2])
+    return {
+        "min": [min_x, min_y, min_z],
+        "max": [
+            min_x + dimensions["width"],
+            min_y + dimensions["depth"],
+            min_z + dimensions["height"],
+        ],
+    }
+
+
+def component_instance_anchors(
+    position: list[float],
+    bounds: dict[str, list[float]],
+    dimensions: dict[str, float],
+) -> dict[str, list[float]]:
+    """Return generic world-space anchors for a component instance."""
+    min_x, min_y, min_z = bounds["min"]
+    return {
+        "insertion": position,
+        "bottom": [
+            min_x + dimensions["width"] / 2,
+            min_y + dimensions["depth"] / 2,
+            min_z,
+        ],
+        "center": [
+            min_x + dimensions["width"] / 2,
+            min_y + dimensions["depth"] / 2,
+            min_z + dimensions["height"] / 2,
+        ],
+        "back": [
+            min_x + dimensions["width"] / 2,
+            bounds["max"][1],
+            min_z,
+        ],
+    }
 
 
 @mcp.tool()
@@ -1095,6 +1177,109 @@ async def get_component_manifest(component_id: str) -> TextContent:
         )
     except Exception as e:
         return TextContent(type="text", text=f"Component manifest failed: {str(e)}")
+
+
+@mcp.tool()
+async def add_component_instance(
+    project_path: str,
+    component_id: str,
+    position_x: float,
+    position_y: float,
+    position_z: float = 0,
+    instance_id: str | None = None,
+    rotation: float = 0,
+    layer: str | None = None,
+    name: str | None = None,
+) -> TextContent:
+    """Add a semantic component instance to design_model.json and assets.lock.json."""
+    try:
+        design_model_path = find_design_model_path(project_path)
+        design_model, model_errors = load_design_model(str(design_model_path))
+        if model_errors or design_model is None:
+            return TextContent(
+                type="text",
+                text=f"Component instance failed: {'; '.join(model_errors)}",
+            )
+
+        component = get_component_by_id(component_id)
+        if component is None:
+            return TextContent(
+                type="text",
+                text=f"Component instance failed: component not found: {component_id}",
+            )
+
+        rules = project_rules_or_default(project_path)
+        dimensions = (
+            component_dimensions_for_rules(component, rules)
+            if rules
+            else component_dimensions(component)
+        )
+        position = [position_x, position_y, position_z]
+        insertion_offset = component["insertion_point"]["offset"]
+        bounds = component_instance_bounds(position, dimensions, insertion_offset)
+        chosen_id = instance_id or next_component_instance_id(design_model, component)
+        if chosen_id in design_model.get("components", {}):
+            return TextContent(
+                type="text",
+                text=f"Component instance failed: instance already exists: {chosen_id}",
+            )
+
+        instance = {
+            "type": str(component.get("subcategory") or component.get("category")),
+            "name": name or str(component["name"]),
+            "component_ref": component["id"],
+            "position": position,
+            "dimensions": dimensions,
+            "bounds": bounds,
+            "anchors": component_instance_anchors(position, bounds, dimensions),
+            "clearance": component.get("clearance", {}),
+            "rotation": rotation,
+            "layer": layer or default_layer_for_component(component),
+            "skp_path": placement_tools.resolve_skp_path(
+                placement_tools.component_skp_path(component)
+            ),
+            "source": {
+                "kind": "component_registry",
+                "component_id": component["id"],
+                "bounds": "axis_aligned_from_insertion_offset",
+            },
+        }
+
+        design_model.setdefault("components", {})
+        design_model["components"][chosen_id] = instance
+        saved, save_errors = save_design_model(str(design_model_path), design_model)
+        if not saved:
+            return TextContent(
+                type="text",
+                text=f"Component instance failed: {'; '.join(save_errors)}",
+            )
+
+        library = load_component_library()
+        lock_path = assets_lock_path(project_path)
+        lock_path.write_text(
+            json.dumps(
+                build_assets_lock(design_model, library),
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        response = {
+            "project_path": str(Path(project_path).expanduser().resolve()),
+            "design_model_path": str(design_model_path),
+            "assets_lock_path": str(lock_path),
+            "instance_id": chosen_id,
+            "component_id": component["id"],
+            "instance": instance,
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(response, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Component instance failed: {str(e)}")
 
 
 @mcp.tool()

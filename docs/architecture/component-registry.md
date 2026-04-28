@@ -128,6 +128,8 @@ Agents should use machine-readable registry tools for reasoning:
 - `search_components` returns matching component manifests with dimensions,
   anchors, clearance data, asset metadata, license data, and match scores.
 - `get_component_manifest` returns one manifest entry by canonical component ID.
+- `add_component_instance` writes a selected registry component into
+  `design_model.json` and refreshes `assets.lock.json`.
 
 `search_local_library` remains a human-readable summary path for short display
 responses, not the preferred reasoning contract.

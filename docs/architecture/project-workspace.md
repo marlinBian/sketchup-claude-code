@@ -50,6 +50,8 @@ Agents can inspect project state through MCP tools:
 - `list_project_components` returns component and lighting instances
 - `validate_design_project` runs the same core checks as
   `sketchup-agent validate`
+- `add_component_instance` records a selected registry component in
+  `design_model.json` and refreshes `assets.lock.json`
 
 `snapshots/` stores captures used for review, regression checks, and visual
 handoff. `snapshots/manifest.json` records provenance for each artifact and

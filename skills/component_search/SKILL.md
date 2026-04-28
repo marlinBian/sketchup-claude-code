@@ -58,7 +58,22 @@ If the result is weak, retry with an English design term such as `toilet`,
 
 ### 2. Place a Supported Component
 
-Use `place_component` only after finding a suitable registry item:
+When a project path is available, write the component into project truth first:
+
+```python
+add_component_instance(
+    project_path="<project-path>",
+    component_id="toilet_floor_mounted_basic",
+    position_x=500,
+    position_y=700,
+    position_z=0
+)
+```
+
+This updates `design_model.json` and `assets.lock.json`.
+
+Use `place_component` only when the designer wants direct SketchUp execution
+and the bridge is running:
 
 ```python
 place_component(
@@ -72,7 +87,8 @@ place_component(
 ```
 
 The current tool places by component display name, not by arbitrary external
-asset path.
+asset path. It does not replace `add_component_instance` as the project source
+of truth.
 
 ### 3. Prefer Slice Tools for Bathroom Layouts
 
@@ -100,6 +116,7 @@ When reporting search results:
 When reporting placement:
 
 - Say whether SketchUp execution succeeded or failed.
+- Say whether project files were updated when `add_component_instance` was used.
 - If SketchUp is unavailable, keep the selected component and intended position
   clear so the user can retry after starting the bridge.
 - Do not describe placeholder geometry as a final production model.
@@ -161,5 +178,7 @@ When adding or reviewing registry entries, preserve these fields where possible:
 - Do not promise automatic import of arbitrary downloaded assets.
 - Do not add unlicensed third-party model files to the registry.
 - Do not ignore dimensions, anchors, or clearance metadata during placement.
+- Do not place into SketchUp directly when the user expects the project source
+  of truth to be updated.
 - Keep user-facing examples bilingual where useful, but keep implementation
   instructions English-first.
