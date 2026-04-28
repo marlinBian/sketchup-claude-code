@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from mcp_server.project_assets import asset_lock_counts
+from mcp_server.project_versions import list_project_versions
 from mcp_server.resources.asset_lock_schema import load_assets_lock
 from mcp_server.resources.design_model_schema import load_design_model
 from mcp_server.resources.design_rules_schema import (
@@ -196,6 +197,7 @@ def read_project_state(
     include_rules: bool = True,
     include_assets: bool = True,
     include_visual_feedback: bool = True,
+    include_versions: bool = True,
 ) -> dict[str, Any]:
     """Read design_model.json plus optional supporting project summaries."""
     resolved_project_path = Path(project_path).expanduser().resolve()
@@ -223,4 +225,6 @@ def read_project_state(
         state["assets_lock"] = summarize_assets_lock(resolved_project_path)
     if include_visual_feedback:
         state["visual_feedback"] = summarize_snapshot_manifest(resolved_project_path)
+    if include_versions:
+        state["versions"] = list_project_versions(resolved_project_path)
     return state

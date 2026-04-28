@@ -759,6 +759,7 @@ async def get_project_state(
     include_rules: bool = True,
     include_assets: bool = True,
     include_visual_feedback: bool = True,
+    include_versions: bool = True,
 ) -> TextContent:
     """Read the project truth plus compact supporting project state."""
     try:
@@ -767,6 +768,7 @@ async def get_project_state(
             include_rules=include_rules,
             include_assets=include_assets,
             include_visual_feedback=include_visual_feedback,
+            include_versions=include_versions,
         )
         return TextContent(
             type="text",

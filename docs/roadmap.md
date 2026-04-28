@@ -206,6 +206,7 @@ Goal: make CLI agents inspect project truth without parsing files manually.
 - include effective design-rules, asset-lock, and visual-feedback summaries in
   project state inspection
 - expose the same project-state reader through `sketchup-agent state`
+- include saved version summaries in project state inspection
 - expose `list_project_components`
 - expose `validate_design_project`
 - keep validation behavior shared with `sketchup-agent validate`

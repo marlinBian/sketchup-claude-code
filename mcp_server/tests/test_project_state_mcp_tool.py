@@ -34,6 +34,7 @@ async def test_get_project_state_reads_design_model(tmp_path):
     assert data["visual_feedback"]["valid"] is True
     assert data["visual_feedback"]["snapshot_count"] == 0
     assert data["visual_feedback"]["pending_action_count"] == 0
+    assert data["versions"]["count"] == 0
 
 
 @pytest.mark.asyncio
@@ -47,6 +48,7 @@ async def test_get_project_state_can_skip_optional_summaries(tmp_path):
         include_rules=False,
         include_assets=False,
         include_visual_feedback=False,
+        include_versions=False,
     )
     data = json.loads(response.text)
 
@@ -54,6 +56,21 @@ async def test_get_project_state_can_skip_optional_summaries(tmp_path):
     assert "design_rules" not in data
     assert "assets_lock" not in data
     assert "visual_feedback" not in data
+    assert "versions" not in data
+
+
+@pytest.mark.asyncio
+async def test_get_project_state_summarizes_versions(tmp_path):
+    from mcp_server.server import get_project_state, save_project_version
+
+    init_project(tmp_path, template="bathroom")
+    await save_project_version(project_path=str(tmp_path), version_tag="draft_1")
+
+    response = await get_project_state(str(tmp_path))
+    data = json.loads(response.text)
+
+    assert data["versions"]["count"] == 1
+    assert data["versions"]["versions"][0]["version"] == "draft_1"
 
 
 @pytest.mark.asyncio

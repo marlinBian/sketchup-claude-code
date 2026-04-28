@@ -52,7 +52,7 @@ Agents can inspect project state through MCP tools:
 
 - `get_project_state` reads the current `design_model.json`, effective
   `design_rules.json`, compact `assets.lock.json`, and visual feedback
-  summaries when those files exist
+  summaries, plus saved version summaries when those files exist
 - `list_project_components` returns component and lighting instances
 - `validate_design_project` runs the same core checks as
   `sketchup-agent validate`

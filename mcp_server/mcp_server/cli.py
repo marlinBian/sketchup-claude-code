@@ -108,6 +108,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Omit snapshots/manifest.json visual feedback summary",
     )
+    state_parser.add_argument(
+        "--no-versions",
+        action="store_true",
+        help="Omit versions/ summary",
+    )
 
     smoke_parser = subparsers.add_parser(
         "smoke",
@@ -265,6 +270,7 @@ def main(argv: list[str] | None = None) -> int:
                 include_rules=not args.no_rules,
                 include_assets=not args.no_assets,
                 include_visual_feedback=not args.no_visual_feedback,
+                include_versions=not args.no_versions,
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
