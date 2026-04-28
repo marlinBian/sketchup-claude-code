@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ RUNTIME_SKILL_TARGETS = {
     "codex": Path(".agents") / "skills",
     "claude": Path(".claude") / "skills",
 }
+RUNTIME_SKILL_MANIFEST = ".sketchup-agent-runtime-skills.json"
 
 
 def repo_root_from_package() -> Path:
@@ -58,6 +60,20 @@ def copy_skill_tree(
         raise NotADirectoryError(f"Runtime skills source is not a directory: {source}")
 
     files = [path for path in source.rglob("*") if path.is_file()]
+    relative_files = sorted(str(path.relative_to(source)) for path in files)
+    manifest_path = target / RUNTIME_SKILL_MANIFEST
+    previous_files: list[str] = []
+    if manifest_path.exists():
+        try:
+            previous_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            previous_files = [
+                str(path)
+                for path in previous_manifest.get("files", [])
+                if isinstance(path, str)
+            ]
+        except json.JSONDecodeError:
+            previous_files = []
+    stale_files = sorted(set(previous_files) - set(relative_files))
     conflicts: list[str] = []
     installed_files: list[str] = []
     skipped_files: list[str] = []
@@ -91,12 +107,30 @@ def copy_skill_tree(
 
     if not dry_run:
         target.mkdir(parents=True, exist_ok=True)
+        if force:
+            for stale_file in stale_files:
+                stale_path = target / stale_file
+                if stale_path.exists() and stale_path.is_file():
+                    stale_path.unlink()
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "source": str(source),
+                    "files": relative_files,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
 
     return {
         "target": str(target),
         "file_count": len(files),
         "installed_files": installed_files,
         "skipped_files": skipped_files,
+        "stale_files": stale_files,
         "dry_run": dry_run,
     }
 

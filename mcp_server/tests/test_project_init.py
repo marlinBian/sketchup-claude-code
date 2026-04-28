@@ -4,6 +4,11 @@ import json
 
 from mcp_server.cli import main
 from mcp_server.project_init import init_project
+from mcp_server.resources.design_rules_schema import (
+    DESIGNER_PROFILE_ENV,
+    create_default_design_rules,
+    save_design_rules,
+)
 
 
 def test_init_project_empty_template_creates_workspace_files(tmp_path):
@@ -61,6 +66,20 @@ def test_init_project_bathroom_template_creates_seed_bathroom(tmp_path):
     assert (project_path / "CLAUDE.md").exists()
     assert (project_path / ".agents" / "skills" / "designer_workflow" / "SKILL.md").exists()
     assert (project_path / ".claude" / "skills" / "designer_workflow" / "SKILL.md").exists()
+
+
+def test_init_project_applies_configured_designer_profile(monkeypatch, tmp_path):
+    profile_path = tmp_path / "profile_rules.json"
+    profile = create_default_design_rules()
+    profile["source"] = "designer_profile"
+    profile["rule_sets"]["bathroom"]["clearances"]["toilet_front_clearance"] = 750
+    save_design_rules(profile_path, profile)
+    monkeypatch.setenv(DESIGNER_PROFILE_ENV, str(profile_path))
+
+    init_project(tmp_path / "profiled", template="bathroom")
+    rules = json.loads((tmp_path / "profiled" / "design_rules.json").read_text())
+
+    assert rules["rule_sets"]["bathroom"]["clearances"]["toilet_front_clearance"] == 750
 
 
 def test_init_project_refuses_to_overwrite_existing_files(tmp_path):

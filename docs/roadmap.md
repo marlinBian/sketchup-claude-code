@@ -183,6 +183,8 @@ documentation.
 - expose `set_fixture_dimension`
 - expose `set_design_preference`
 - load `design_rules.json` when planning into an existing project
+- merge configured designer profile rules from `SKETCHUP_AGENT_DESIGN_RULES`
+  before project-local rules
 - use project rules in `plan_bathroom`
 - use project rules in `execute_bathroom_plan`
 - use fixture dimension overrides during deterministic placement

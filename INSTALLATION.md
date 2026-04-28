@@ -57,6 +57,17 @@ agent skill directories. To refresh those skills in an existing project:
 sketchup-agent install-skills ~/Design/my-bathroom --target all --force
 ```
 
+Optional designer profile rules can be installed as a reusable JSON file and
+activated with:
+
+```bash
+export SKETCHUP_AGENT_DESIGN_RULES=~/.sketchup-agent-harness/design_rules.json
+```
+
+When this environment variable is set, new projects and planning tools merge
+those profile rules between built-in defaults and project-local
+`design_rules.json`.
+
 The source plugin `.mcp.json` starts the same MCP server through:
 
 ```bash

@@ -20,6 +20,7 @@ from mcp_server.resources.snapshot_manifest_schema import (
 )
 from mcp_server.resources.design_rules_schema import (
     create_default_design_rules,
+    effective_design_rules,
     load_design_rules,
     save_design_rules,
 )
@@ -53,15 +54,8 @@ mcp = FastMCP("sketchup-mcp")
 
 
 def project_rules_or_default(project_path: str | None) -> dict[str, Any] | None:
-    """Load project design rules when project_path has design_rules.json."""
-    if not project_path:
-        return None
-
-    path = design_rules_path(project_path)
-    if not Path(path).exists():
-        return None
-
-    rules, errors = load_design_rules(path)
+    """Load effective design rules from defaults, profile, and project."""
+    rules, errors = effective_design_rules(project_path)
     if errors:
         raise ValueError("; ".join(errors))
     return rules

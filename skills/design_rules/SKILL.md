@@ -7,6 +7,10 @@ Read and update project-local design preferences in `design_rules.json`.
 Use this skill when the designer wants future planning to follow a preferred
 clearance, dimension, or ergonomic convention.
 
+Built-in rules may be merged with a designer profile when
+`SKETCHUP_AGENT_DESIGN_RULES` points to a reusable design rules file. Project
+`design_rules.json` has higher precedence than that profile.
+
 ## Tools
 
 Read current rules:

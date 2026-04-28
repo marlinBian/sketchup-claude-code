@@ -61,7 +61,7 @@ with `set_design_clearance`, `set_fixture_dimension`, and
 Rule precedence is:
 
 1. built-in harness defaults
-2. installed designer profile
+2. installed designer profile from `SKETCHUP_AGENT_DESIGN_RULES`
 3. project `design_rules.json`
 4. explicit instruction in the current agent session
 

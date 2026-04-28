@@ -6,7 +6,7 @@ from typing import Any
 
 from mcp_server.resources.asset_lock_schema import create_empty_assets_lock
 from mcp_server.resources.design_model_schema import create_empty_template
-from mcp_server.resources.design_rules_schema import create_default_design_rules
+from mcp_server.resources.design_rules_schema import effective_design_rules
 from mcp_server.resources.project_files import (
     ASSETS_CACHE_DIR,
     ASSETS_LOCK_FILENAME,
@@ -66,6 +66,8 @@ This is a SketchUp Agent Harness design project.
 - Use `design_model.json` as the source of truth for structured project state.
 - Use `design_rules.json` for project-specific ergonomic preferences and
   clearance rules.
+- If `SKETCHUP_AGENT_DESIGN_RULES` is set, those designer profile rules were
+  merged before project-local rules during initialization and planning.
 - Use `assets.lock.json` before relying on component assets.
 - Use `/tmp/su_bridge.sock` only as the live SketchUp execution bridge; SketchUp
   is the rendered/executed view, not the source of truth.
@@ -121,7 +123,10 @@ def init_project(
                 path = root / filename
                 if path.exists():
                     raise FileExistsError(f"Refusing to overwrite existing file: {path}")
-        plan = plan_bathroom_project(project_name=name)
+        rules, rule_errors = effective_design_rules()
+        if rule_errors or rules is None:
+            raise ValueError("; ".join(rule_errors))
+        plan = plan_bathroom_project(project_name=name, rules=rules)
         written = save_bathroom_plan(root, plan)
         design_model_path = Path(written["design_model_path"])
         design_rules_path = Path(written["design_rules_path"])
@@ -129,8 +134,11 @@ def init_project(
     else:
         design_model_path = root / DESIGN_MODEL_FILENAME
         design_rules_path = root / DESIGN_RULES_FILENAME
+        rules, rule_errors = effective_design_rules()
+        if rule_errors or rules is None:
+            raise ValueError("; ".join(rule_errors))
         write_json(design_model_path, create_empty_template(name), overwrite)
-        write_json(design_rules_path, create_default_design_rules(), overwrite)
+        write_json(design_rules_path, rules, overwrite)
         assets_lock = default_assets_lock()
 
     assets_lock_path = root / ASSETS_LOCK_FILENAME

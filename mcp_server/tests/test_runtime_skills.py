@@ -8,6 +8,7 @@ from pathlib import Path
 
 from mcp_server.cli import main
 from mcp_server.runtime_skills import (
+    RUNTIME_SKILL_MANIFEST,
     install_runtime_skills,
     packaged_runtime_skills_source,
     skill_target_paths,
@@ -84,6 +85,27 @@ def test_install_runtime_skills_force_replaces_local_changes(tmp_path):
 
     assert result["installed"] is True
     assert target_file.read_text(encoding="utf-8") == "# Bathroom Planning\n"
+
+
+def test_install_runtime_skills_force_removes_previously_installed_stale_files(tmp_path):
+    source = make_runtime_skill_source(tmp_path)
+    project_path = tmp_path / "design"
+    install_runtime_skills(project_path, source_dir=source)
+    stale_source = source / "legacy"
+    stale_source.mkdir()
+    (stale_source / "SKILL.md").write_text("# Legacy\n", encoding="utf-8")
+    install_runtime_skills(project_path, source_dir=source, force=True)
+    stale_target = project_path / ".agents" / "skills" / "legacy" / "SKILL.md"
+    assert stale_target.exists()
+
+    (stale_source / "SKILL.md").unlink()
+    stale_source.rmdir()
+    result = install_runtime_skills(project_path, source_dir=source, force=True)
+
+    assert "legacy/SKILL.md" in result["installs"]["codex"]["stale_files"]
+    assert not stale_target.exists()
+    manifest = project_path / ".agents" / "skills" / RUNTIME_SKILL_MANIFEST
+    assert manifest.exists()
 
 
 def test_cli_install_skills_outputs_json(tmp_path, capsys):

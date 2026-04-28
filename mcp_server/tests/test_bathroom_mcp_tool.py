@@ -4,7 +4,11 @@ import json
 
 import pytest
 
-from mcp_server.resources.design_rules_schema import create_default_design_rules
+from mcp_server.resources.design_rules_schema import (
+    DESIGNER_PROFILE_ENV,
+    create_default_design_rules,
+    save_design_rules,
+)
 
 
 @pytest.mark.asyncio
@@ -59,6 +63,28 @@ async def test_plan_bathroom_tool_uses_project_design_rules(tmp_path):
     )
 
     assert data["validation_report"]["valid"] is False
+    assert toilet_front["required"] == 1200
+
+
+@pytest.mark.asyncio
+async def test_plan_bathroom_tool_uses_designer_profile(monkeypatch, tmp_path):
+    from mcp_server.server import plan_bathroom
+
+    profile_path = tmp_path / "profile_rules.json"
+    rules = create_default_design_rules()
+    rules["source"] = "designer_profile"
+    rules["rule_sets"]["bathroom"]["clearances"]["toilet_front_clearance"] = 1200
+    save_design_rules(profile_path, rules)
+    monkeypatch.setenv(DESIGNER_PROFILE_ENV, str(profile_path))
+
+    response = await plan_bathroom()
+    data = json.loads(response.text)
+    toilet_front = next(
+        check
+        for check in data["validation_report"]["checks"]
+        if check["name"] == "toilet_front_clearance"
+    )
+
     assert toilet_front["required"] == 1200
 
 
