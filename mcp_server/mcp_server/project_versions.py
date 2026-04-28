@@ -119,3 +119,45 @@ def list_project_versions(project_path: str | Path) -> dict[str, Any]:
         "count": len(versions),
         "versions": versions,
     }
+
+
+def restore_project_version(
+    project_path: str | Path,
+    version_tag: str,
+    overwrite_current: bool = False,
+) -> dict[str, Any]:
+    """Restore a structured project truth snapshot into the project workspace."""
+    validate_version_tag(version_tag)
+    if not overwrite_current:
+        raise ValueError("Restoring a version requires overwrite_current=True.")
+
+    root = Path(project_path).expanduser().resolve()
+    version_path = project_versions_path(root) / version_tag
+    metadata_path = version_path / "metadata.json"
+    if not version_path.is_dir():
+        raise FileNotFoundError(f"Project version not found: {version_tag}")
+    if not metadata_path.exists():
+        raise FileNotFoundError(f"Project version metadata not found: {metadata_path}")
+
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    files = [
+        str(path)
+        for path in metadata.get("files", [])
+        if isinstance(path, str)
+    ]
+    restored_files: list[str] = []
+    for relative_path in files:
+        source_path = version_path / relative_path
+        if not source_path.exists():
+            continue
+        target_path = root / relative_path
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_path, target_path)
+        restored_files.append(relative_path)
+
+    return {
+        "project_path": str(root),
+        "version": version_tag,
+        "version_path": str(version_path),
+        "restored_files": restored_files,
+    }

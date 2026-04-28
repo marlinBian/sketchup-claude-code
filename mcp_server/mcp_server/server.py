@@ -42,6 +42,7 @@ from mcp_server.project_assets import (
 from mcp_server.project_state import read_project_state
 from mcp_server.project_versions import (
     list_project_versions as list_project_versions_file,
+    restore_project_version as restore_project_version_file,
     save_project_version as save_project_version_file,
 )
 from mcp_server.smoke import validate_project as run_project_validation
@@ -2568,6 +2569,27 @@ async def list_project_versions(project_path: str) -> TextContent:
         )
     except Exception as e:
         return TextContent(type="text", text=f"Project versions failed: {str(e)}")
+
+
+@mcp.tool()
+async def restore_project_version(
+    project_path: str,
+    version_tag: str,
+    overwrite_current: bool = False,
+) -> TextContent:
+    """Restore a project-local structured truth version into current files."""
+    try:
+        result = restore_project_version_file(
+            project_path,
+            version_tag=version_tag,
+            overwrite_current=overwrite_current,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Project version restore failed: {str(e)}")
 
 
 @mcp.tool()

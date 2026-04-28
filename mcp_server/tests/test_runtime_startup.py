@@ -71,6 +71,7 @@ runpy.run_module("mcp_server.server", run_name="__main__")
         "register_project_component",
         "register_selected_component",
         "refresh_project_asset_lock",
+        "restore_project_version",
         "save_project_version",
         "update_visual_feedback_action_status",
         "rotate_entity",

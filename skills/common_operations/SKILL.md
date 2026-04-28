@@ -68,6 +68,7 @@ Views, reporting, and versions:
 - `generate_report`
 - `save_project_version`
 - `list_project_versions`
+- `restore_project_version`
 - `save_version`
 - `list_versions`
 
