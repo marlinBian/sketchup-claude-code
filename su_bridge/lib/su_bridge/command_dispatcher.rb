@@ -30,6 +30,7 @@ module SuBridge
       "apply_style" => :handle_apply_style,
       "query_entities" => :handle_query_entities,
       "query_model_info" => :handle_query_model_info,
+      "get_bridge_info" => :handle_get_bridge_info,
       "get_scene_info" => :handle_get_scene_info,
       "get_selection_info" => :handle_get_selection_info,
       "save_selected_component" => :handle_save_selected_component,
@@ -288,6 +289,21 @@ module SuBridge
           },
           entity_counts: entity_counts,
           layers: layers,
+        },
+      }
+    end
+
+    def handle_get_bridge_info(_payload)
+      {
+        entity_ids: [],
+        spatial_delta: {},
+        model_revision: 1,
+        elapsed_ms: 0,
+        bridge_info: {
+          version: SuBridge::VERSION,
+          socket_path: SuBridge::SOCKET_PATH,
+          supported_operations: OPERATION_HANDLERS.keys.sort,
+          entity_modifying_operations: ENTITY_MODIFYING_OPERATIONS.to_a.sort,
         },
       }
     end

@@ -496,6 +496,37 @@ def apply_material_visual_action(
 
 
 @mcp.tool()
+async def get_bridge_info() -> TextContent:
+    """Get live SketchUp bridge version and supported operation metadata."""
+    bridge = SocketBridge()
+    try:
+        bridge.connect()
+        request = JsonRpcRequest(
+            method="execute_operation",
+            params={
+                "operation_id": f"bridge_info_{id(get_bridge_info)}",
+                "operation_type": "get_bridge_info",
+                "payload": {},
+                "rollback_on_failure": False,
+            }
+        )
+        response = bridge.send(request.to_dict())
+        if "error" in response:
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
+        result = response.get("result", {})
+        return TextContent(
+            type="text",
+            text=json.dumps(
+                result.get("bridge_info", {}),
+                ensure_ascii=False,
+                indent=2,
+            ),
+        )
+    finally:
+        bridge.disconnect()
+
+
+@mcp.tool()
 async def get_scene_info() -> TextContent:
     """Get current SketchUp scene information.
 

@@ -62,6 +62,7 @@ runpy.run_module("mcp_server.server", run_name="__main__")
     tools = json.loads(result.stdout.strip().splitlines()[-1])
     assert {
         "apply_visual_feedback_action",
+        "get_bridge_info",
         "get_selection_info",
         "list_visual_feedback",
         "record_visual_feedback",

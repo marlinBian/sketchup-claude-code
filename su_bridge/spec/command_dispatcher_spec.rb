@@ -27,6 +27,7 @@ RSpec.describe SuBridge::CommandDispatcher do
         apply_style
         query_entities
         query_model_info
+        get_bridge_info
         get_scene_info
         get_selection_info
         save_selected_component
@@ -47,6 +48,18 @@ RSpec.describe SuBridge::CommandDispatcher do
         expect(SuBridge::CommandDispatcher::OPERATION_HANDLERS).to have_key(op),
           "Missing handler for #{op}"
       end
+    end
+  end
+
+  describe "#handle_get_bridge_info" do
+    it "returns bridge version and supported operations" do
+      result = dispatcher.send(:handle_get_bridge_info, {})
+
+      expect(result[:bridge_info][:version]).to eq(SuBridge::VERSION)
+      expect(result[:bridge_info][:socket_path]).to eq(SuBridge::SOCKET_PATH)
+      expect(result[:bridge_info][:supported_operations]).to include("get_bridge_info")
+      expect(result[:bridge_info][:supported_operations]).to include("get_selection_info")
+      expect(result[:bridge_info][:entity_modifying_operations]).to include("create_wall")
     end
   end
 

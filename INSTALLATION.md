@@ -189,6 +189,11 @@ non-mutating bridge operations. If it reports missing runtime capabilities,
 restart SketchUp after `install-bridge --force` or reload the bridge before
 running live smoke tests.
 
+Newer bridge installs expose `get_bridge_info`, which lets `doctor` report the
+loaded bridge version and supported operations. If that operation is missing,
+`doctor` falls back to direct capability probes so stale loaded plugins are
+still visible.
+
 Run the local smoke check without SketchUp:
 
 ```bash

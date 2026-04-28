@@ -41,6 +41,36 @@ class TestIntegrationConnection:
 class TestIntegrationSceneInfo:
     """Test get_scene_info with live SketchUp."""
 
+    def test_get_bridge_info_returns_supported_operations(self):
+        """Test that get_bridge_info returns live bridge capabilities."""
+        from mcp_server.bridge.socket_bridge import SocketBridge
+        from mcp_server.protocol.jsonrpc import JsonRpcRequest
+
+        bridge = SocketBridge()
+        try:
+            bridge.connect()
+            request = JsonRpcRequest(
+                method="execute_operation",
+                params={
+                    "operation_id": "test_bridge_info",
+                    "operation_type": "get_bridge_info",
+                    "payload": {},
+                    "rollback_on_failure": False,
+                }
+            )
+            response = bridge.send(request.to_dict())
+
+            assert "result" in response, f"Expected result in response: {response}"
+            result = response["result"]
+            assert "bridge_info" in result, f"Expected bridge_info in result: {result}"
+            bridge_info = result["bridge_info"]
+            assert "version" in bridge_info
+            assert "supported_operations" in bridge_info
+            assert "get_scene_info" in bridge_info["supported_operations"]
+            assert "get_selection_info" in bridge_info["supported_operations"]
+        finally:
+            bridge.disconnect()
+
     def test_get_scene_info_returns_valid_response(self):
         """Test that get_scene_info returns valid scene information."""
         from mcp_server.bridge.socket_bridge import SocketBridge

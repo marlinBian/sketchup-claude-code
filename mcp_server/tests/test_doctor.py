@@ -106,8 +106,19 @@ def test_bridge_runtime_capability_check_reports_supported_operations(
 
         def send(self, data):
             operation_type = data["params"]["operation_type"]
-            assert operation_type in {"get_scene_info", "get_selection_info"}
-            return {"result": {operation_type: {}}}
+            assert operation_type == "get_bridge_info"
+            return {
+                "result": {
+                    "bridge_info": {
+                        "version": "0.1.0",
+                        "supported_operations": [
+                            "get_bridge_info",
+                            "get_scene_info",
+                            "get_selection_info",
+                        ],
+                    }
+                }
+            }
 
         def disconnect(self):
             pass
@@ -117,8 +128,46 @@ def test_bridge_runtime_capability_check_reports_supported_operations(
     result = bridge_runtime_capability_check(socket_path=str(socket_path))
 
     assert result["ok"] is True
+    assert result["details"]["bridge_info"]["version"] == "0.1.0"
     assert result["details"]["required_operations"]["get_scene_info"]["ok"] is True
     assert result["details"]["required_operations"]["get_selection_info"]["ok"] is True
+
+
+def test_bridge_runtime_capability_check_reports_missing_advertised_operation(
+    monkeypatch,
+    tmp_path,
+):
+    socket_path = tmp_path / "su_bridge.sock"
+    socket_path.write_text("", encoding="utf-8")
+
+    class FakeBridge:
+        def __init__(self, config):
+            self.config = config
+
+        def send(self, data):
+            operation_type = data["params"]["operation_type"]
+            assert operation_type == "get_bridge_info"
+            return {
+                "result": {
+                    "bridge_info": {
+                        "version": "0.1.0",
+                        "supported_operations": ["get_bridge_info", "get_scene_info"],
+                    }
+                }
+            }
+
+        def disconnect(self):
+            pass
+
+    monkeypatch.setattr("mcp_server.doctor.SocketBridge", FakeBridge)
+
+    result = bridge_runtime_capability_check(socket_path=str(socket_path))
+
+    assert result["ok"] is False
+    assert "Restart SketchUp" in result["message"]
+    assert result["details"]["bridge_info"]["version"] == "0.1.0"
+    assert result["details"]["required_operations"]["get_scene_info"]["ok"] is True
+    assert result["details"]["required_operations"]["get_selection_info"]["ok"] is False
 
 
 def test_bridge_runtime_capability_check_reports_stale_bridge(
@@ -134,6 +183,13 @@ def test_bridge_runtime_capability_check_reports_stale_bridge(
 
         def send(self, data):
             operation_type = data["params"]["operation_type"]
+            if operation_type == "get_bridge_info":
+                return {
+                    "error": {
+                        "code": -32000,
+                        "message": "Unknown operation_type: get_bridge_info",
+                    }
+                }
             if operation_type == "get_selection_info":
                 return {
                     "error": {

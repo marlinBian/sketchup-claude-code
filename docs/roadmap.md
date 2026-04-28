@@ -173,6 +173,7 @@ scattered commands.
 - add optional bridge execution with `--with-bridge`
 - validate project files, asset locks, snapshot manifests, and headless planning
 - probe live bridge runtime capabilities so stale loaded plugins are visible
+- expose live bridge version and supported operation metadata
 - make release checks use the same smoke path
 
 ## P9: Project Rule Overrides

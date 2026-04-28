@@ -24,6 +24,7 @@ After mutation:
 
 Scene and geometry:
 
+- `get_bridge_info`
 - `get_scene_info`
 - `get_selection_info`
 - `create_wall`

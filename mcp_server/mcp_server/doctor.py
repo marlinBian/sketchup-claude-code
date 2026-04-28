@@ -106,6 +106,50 @@ def bridge_runtime_capability_check(
     )
 
     try:
+        info_request = JsonRpcRequest(
+            method="execute_operation",
+            params={
+                "operation_id": "doctor_get_bridge_info",
+                "operation_type": "get_bridge_info",
+                "payload": {},
+                "rollback_on_failure": False,
+            },
+        )
+        info_response = bridge.send(info_request.to_dict())
+        bridge_info = info_response.get("result", {}).get("bridge_info")
+        if isinstance(bridge_info, dict):
+            supported = set(bridge_info.get("supported_operations", []))
+            operation_results = {
+                operation_type: {
+                    "ok": operation_type in supported,
+                    "error": (
+                        None
+                        if operation_type in supported
+                        else "Missing from get_bridge_info supported_operations"
+                    ),
+                }
+                for operation_type in required_operations
+            }
+            ok = all(result["ok"] for result in operation_results.values())
+            return check(
+                "bridge_runtime_capabilities",
+                ok,
+                {
+                    "path": str(path),
+                    "bridge_info": bridge_info,
+                    "required_operations": operation_results,
+                },
+                severity="warning",
+                message=(
+                    None
+                    if ok
+                    else (
+                        "Live SketchUp bridge is missing required operation support. "
+                        "Restart SketchUp after install-bridge, or reload the bridge."
+                    )
+                ),
+            )
+
         for operation_type, payload in required_operations.items():
             request = JsonRpcRequest(
                 method="execute_operation",
