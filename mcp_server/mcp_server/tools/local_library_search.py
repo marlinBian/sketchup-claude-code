@@ -9,6 +9,14 @@ import re
 from pathlib import Path
 from typing import Optional
 
+from mcp_server.resources.component_manifest_schema import (
+    create_empty_component_library,
+    load_component_library,
+    merge_component_libraries,
+    save_component_library,
+)
+from mcp_server.resources.project_files import project_component_library_path
+
 # Library index path
 LIBRARY_PATH = Path(__file__).parent.parent / "assets" / "library.json"
 
@@ -81,13 +89,46 @@ def load_library() -> dict:
         return {"components": []}
 
 
+def load_project_library(project_path: str | Path) -> tuple[dict, list[str]]:
+    """Load a project-local component library or return an empty library."""
+    path = project_component_library_path(project_path)
+    if not path.exists():
+        return create_empty_component_library(), []
+
+    library, errors = load_component_library(path)
+    if errors or library is None:
+        return {}, errors
+    return library, []
+
+
+def load_effective_library(project_path: str | Path | None = None) -> tuple[dict, list[str]]:
+    """Load the packaged registry merged with optional project components."""
+    packaged = load_library()
+    if project_path is None:
+        return packaged, []
+
+    project_library, errors = load_project_library(project_path)
+    if errors:
+        return {}, errors
+
+    return merge_component_libraries(packaged, project_library), []
+
+
+def save_project_library(project_path: str | Path, library_data: dict) -> tuple[bool, list[str]]:
+    """Save the project-local component library."""
+    return save_component_library(project_component_library_path(project_path), library_data)
+
+
 def get_component_by_id(
     component_id: str,
     library_data: Optional[dict] = None,
+    project_path: str | Path | None = None,
 ) -> dict | None:
     """Return one component manifest entry by canonical ID."""
     if library_data is None:
-        library_data = load_library()
+        library_data, errors = load_effective_library(project_path)
+        if errors:
+            return None
 
     for component in library_data.get("components", []):
         if component.get("id") == component_id:

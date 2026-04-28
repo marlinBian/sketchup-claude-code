@@ -3,7 +3,10 @@
 from pathlib import Path
 
 from mcp_server.resources.component_manifest_schema import (
+    create_empty_component_library,
     load_component_library,
+    merge_component_libraries,
+    save_component_library,
     validate_component_library,
 )
 
@@ -18,6 +21,34 @@ def test_bathroom_component_fixture_is_valid():
     assert errors == []
     assert data is not None
     assert data["components"][0]["id"] == "toilet_floor_mounted_basic"
+
+
+def test_empty_project_component_library_is_valid(tmp_path):
+    library = create_empty_component_library()
+    path = tmp_path / "component_library.json"
+
+    saved, save_errors = save_component_library(path, library)
+    loaded, load_errors = load_component_library(path)
+
+    assert saved is True
+    assert save_errors == []
+    assert load_errors == []
+    assert loaded == library
+
+
+def test_merge_component_libraries_uses_later_component_ids():
+    packaged = {
+        "version": "1.0",
+        "components": [{"id": "sample", "name": "Packaged"}],
+    }
+    project = {
+        "version": "1.0",
+        "components": [{"id": "sample", "name": "Project"}],
+    }
+
+    merged = merge_component_libraries(packaged, project)
+
+    assert merged["components"] == [{"id": "sample", "name": "Project"}]
 
 
 def test_packaged_component_library_is_valid():

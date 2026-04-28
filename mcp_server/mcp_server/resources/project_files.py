@@ -6,6 +6,7 @@ DESIGN_MODEL_FILENAME = "design_model.json"
 LEGACY_DESIGN_MODEL_FILENAME = ".design_model.json"
 DESIGN_RULES_FILENAME = "design_rules.json"
 ASSETS_LOCK_FILENAME = "assets.lock.json"
+PROJECT_COMPONENT_LIBRARY_FILENAME = "component_library.json"
 ASSETS_CACHE_DIR = "assets/components"
 SNAPSHOTS_DIR = "snapshots"
 SNAPSHOT_MANIFEST_FILENAME = "manifest.json"
@@ -38,6 +39,11 @@ def design_rules_path(project_path: str | Path) -> Path:
 def assets_lock_path(project_path: str | Path) -> Path:
     """Return the project-local asset lock path."""
     return Path(project_path) / ASSETS_LOCK_FILENAME
+
+
+def project_component_library_path(project_path: str | Path) -> Path:
+    """Return the project-local component library path."""
+    return Path(project_path) / PROJECT_COMPONENT_LIBRARY_FILENAME
 
 
 def assets_cache_path(project_path: str | Path) -> Path:

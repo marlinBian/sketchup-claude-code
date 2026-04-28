@@ -34,6 +34,7 @@ This creates:
 
 - `design_model.json`
 - `design_rules.json`
+- `component_library.json`
 - `assets.lock.json`
 - `assets/components/`
 - `.mcp.json`

@@ -23,6 +23,7 @@ def test_validate_project_accepts_initialized_bathroom(tmp_path):
         "design_model",
         "design_rules",
         "assets_lock",
+        "component_library",
         "assets_cache",
         "snapshot_manifest",
         "codex_guidance",

@@ -60,6 +60,9 @@ runpy.run_module("mcp_server.server", run_name="__main__")
 
     assert result.returncode == 0, result.stderr
     tools = json.loads(result.stdout.strip().splitlines()[-1])
-    assert {"rotate_entity", "scale_entity", "copy_entity"}.issubset(
-        set(tools)
-    )
+    assert {
+        "register_project_component",
+        "rotate_entity",
+        "scale_entity",
+        "copy_entity",
+    }.issubset(set(tools))

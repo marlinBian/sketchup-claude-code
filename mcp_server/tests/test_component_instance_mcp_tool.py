@@ -108,6 +108,41 @@ async def test_add_component_instance_rejects_unknown_component(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_add_component_instance_uses_project_component_library(tmp_path):
+    from mcp_server.server import add_component_instance, register_project_component
+
+    init_project(tmp_path, template="empty")
+    await register_project_component(
+        project_path=str(tmp_path),
+        component_id="project_display_plinth",
+        name="Project display plinth",
+        category="furniture",
+        subcategory="display_plinth",
+        width=900,
+        depth=450,
+        height=750,
+        procedural_fallback="box_component",
+    )
+
+    response = await add_component_instance(
+        project_path=str(tmp_path),
+        component_id="project_display_plinth",
+        position_x=1000,
+        position_y=500,
+        position_z=0,
+    )
+    data = json.loads(response.text)
+    design_model = json.loads((tmp_path / "design_model.json").read_text())
+    asset_lock = json.loads((tmp_path / "assets.lock.json").read_text())
+
+    assert data["instance_id"] == "display_plinth_001"
+    assert design_model["components"]["display_plinth_001"]["component_ref"] == (
+        "project_display_plinth"
+    )
+    assert asset_lock["assets"][0]["component_id"] == "project_display_plinth"
+
+
+@pytest.mark.asyncio
 async def test_execute_component_instance_sends_bridge_operation_and_saves_entity_id(
     monkeypatch,
     tmp_path,

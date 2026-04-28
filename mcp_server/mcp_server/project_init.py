@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from mcp_server.resources.asset_lock_schema import create_empty_assets_lock
+from mcp_server.resources.component_manifest_schema import create_empty_component_library
 from mcp_server.resources.design_model_schema import create_empty_template
 from mcp_server.resources.design_rules_schema import effective_design_rules
 from mcp_server.resources.project_files import (
@@ -13,6 +14,7 @@ from mcp_server.resources.project_files import (
     DESIGN_MODEL_FILENAME,
     DESIGN_RULES_FILENAME,
     assets_cache_path,
+    project_component_library_path,
     snapshot_manifest_path,
     snapshots_path,
 )
@@ -69,6 +71,8 @@ This is a SketchUp Agent Harness design project.
 - If `SKETCHUP_AGENT_DESIGN_RULES` is set, those designer profile rules were
   merged before project-local rules during initialization and planning.
 - Use `assets.lock.json` before relying on component assets.
+- Use `component_library.json` for project-local semantic components that are
+  not part of the packaged registry.
 - Use `/tmp/su_bridge.sock` only as the live SketchUp execution bridge; SketchUp
   is the rendered/executed view, not the source of truth.
 - Use project-local runtime skills from `.agents/skills/` for Codex and
@@ -142,6 +146,7 @@ def init_project(
         assets_lock = default_assets_lock()
 
     assets_lock_path = root / ASSETS_LOCK_FILENAME
+    component_library_path = project_component_library_path(root)
     mcp_config_path = root / PROJECT_MCP_FILENAME
     codex_guidance_path = root / PROJECT_CODEX_GUIDANCE_FILENAME
     claude_guidance_path = root / PROJECT_CLAUDE_GUIDANCE_FILENAME
@@ -153,6 +158,14 @@ def init_project(
 
     if assets_lock is not None:
         write_json(assets_lock_path, assets_lock, overwrite)
+    if not component_library_path.exists() or overwrite:
+        write_json(
+            component_library_path,
+            create_empty_component_library(
+                description=f"Project-local components for {name}.",
+            ),
+            overwrite,
+        )
     if not snapshot_manifest.exists() or overwrite:
         write_json(snapshot_manifest, create_empty_snapshot_manifest(), overwrite)
     write_json(mcp_config_path, default_project_mcp_config(), overwrite)
@@ -172,6 +185,7 @@ def init_project(
             "design_model": str(design_model_path),
             "design_rules": str(design_rules_path),
             "assets_lock": str(assets_lock_path),
+            "component_library": str(component_library_path),
             "assets_cache": str(assets_cache),
             "mcp_config": str(mcp_config_path),
             "codex_guidance": str(codex_guidance_path),

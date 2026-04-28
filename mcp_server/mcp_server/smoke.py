@@ -11,6 +11,7 @@ from mcp_server.project_init import (
     init_project,
 )
 from mcp_server.resources.asset_lock_schema import load_assets_lock
+from mcp_server.resources.component_manifest_schema import load_component_library
 from mcp_server.resources.design_model_schema import load_design_model, save_design_model
 from mcp_server.resources.design_rules_schema import load_design_rules
 from mcp_server.resources.project_files import (
@@ -18,6 +19,7 @@ from mcp_server.resources.project_files import (
     assets_lock_path,
     design_rules_path,
     find_design_model_path,
+    project_component_library_path,
     snapshot_manifest_path,
     snapshots_path,
 )
@@ -100,6 +102,19 @@ def validate_project(project_path: str | Path) -> dict[str, Any]:
             assets_lock is not None,
             {"path": str(lock_file)},
             lock_errors,
+        )
+    )
+
+    component_library_file = project_component_library_path(root)
+    component_library, component_library_errors = load_component_library(
+        component_library_file
+    )
+    checks.append(
+        check_result(
+            "component_library",
+            component_library is not None,
+            {"path": str(component_library_file)},
+            component_library_errors,
         )
     )
 

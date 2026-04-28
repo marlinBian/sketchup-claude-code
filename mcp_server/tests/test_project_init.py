@@ -19,6 +19,7 @@ def test_init_project_empty_template_creates_workspace_files(tmp_path):
     assert (project_path / "design_model.json").exists()
     assert (project_path / "design_rules.json").exists()
     assert (project_path / "assets.lock.json").exists()
+    assert (project_path / "component_library.json").exists()
     assert (project_path / "assets" / "components").is_dir()
     assert (project_path / ".mcp.json").exists()
     assert (project_path / "AGENTS.md").exists()
@@ -30,6 +31,7 @@ def test_init_project_empty_template_creates_workspace_files(tmp_path):
 
     design_model = json.loads((project_path / "design_model.json").read_text())
     assets_lock = json.loads((project_path / "assets.lock.json").read_text())
+    component_library = json.loads((project_path / "component_library.json").read_text())
     snapshot_manifest = json.loads(
         (project_path / "snapshots" / "manifest.json").read_text()
     )
@@ -37,6 +39,7 @@ def test_init_project_empty_template_creates_workspace_files(tmp_path):
     assert design_model["project_name"] == "My Design"
     assert assets_lock["cache"]["root"] == "assets/components"
     assert assets_lock["assets"] == []
+    assert component_library["components"] == []
     assert snapshot_manifest["snapshots"] == []
     assert mcp_config["mcpServers"]["sketchup-mcp"]["command"] == "sketchup-agent-mcp"
     assert "design_model.json" in (project_path / "AGENTS.md").read_text(encoding="utf-8")
@@ -61,6 +64,7 @@ def test_init_project_bathroom_template_creates_seed_bathroom(tmp_path):
     assert "vanity_wall_600" in locked_ids
     assert "ceiling_light_basic" in locked_ids
     assert (project_path / "assets" / "components").is_dir()
+    assert (project_path / "component_library.json").exists()
     assert (project_path / "snapshots" / "manifest.json").exists()
     assert (project_path / "AGENTS.md").exists()
     assert (project_path / "CLAUDE.md").exists()

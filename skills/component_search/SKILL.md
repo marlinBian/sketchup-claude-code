@@ -40,6 +40,26 @@ manifest is needed for placement or validation:
 get_component_manifest(component_id="toilet_floor_mounted_basic")
 ```
 
+When the designer has a project-specific reusable object, register it before
+searching or placing it:
+
+```python
+register_project_component(
+    project_path="<project-path>",
+    component_id="project_display_plinth",
+    name="Project display plinth",
+    category="furniture",
+    width=900,
+    depth=450,
+    height=750,
+    aliases_en=["display stand"]
+)
+```
+
+After registration, pass `project_path` to `search_components`,
+`get_component_manifest`, `add_component_instance`, and
+`execute_component_instance` so project-local metadata is included.
+
 `search_local_library` remains available for simple human-readable result
 summaries:
 

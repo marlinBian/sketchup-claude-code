@@ -171,6 +171,17 @@ def validate_component_library(data: dict[str, Any]) -> tuple[bool, list[str]]:
     return len(errors) == 0, errors
 
 
+def create_empty_component_library(
+    description: str = "Project-local semantic component library.",
+) -> dict[str, Any]:
+    """Create an empty component library manifest."""
+    return {
+        "version": "1.0",
+        "description": description,
+        "components": [],
+    }
+
+
 def load_component_library(path: str | Path) -> tuple[dict[str, Any] | None, list[str]]:
     """Load and validate a component library manifest."""
     file_path = Path(path)
@@ -192,3 +203,45 @@ def load_component_library(path: str | Path) -> tuple[dict[str, Any] | None, lis
         return None, errors
 
     return data, []
+
+
+def save_component_library(
+    path: str | Path,
+    data: dict[str, Any],
+) -> tuple[bool, list[str]]:
+    """Save a component library manifest after validation."""
+    is_valid, errors = validate_component_library(data)
+    if not is_valid:
+        return False, errors
+
+    file_path = Path(path)
+    try:
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except OSError as error:
+        return False, [f"IO error writing file: {error}"]
+
+    return True, []
+
+
+def merge_component_libraries(*libraries: dict[str, Any] | None) -> dict[str, Any]:
+    """Merge component libraries, with later libraries replacing duplicate IDs."""
+    merged = {
+        "version": "1.0",
+        "description": "Effective component library.",
+        "components": [],
+    }
+    index: dict[str, dict[str, Any]] = {}
+
+    for library in libraries:
+        if not library:
+            continue
+        for component in library.get("components", []):
+            component_id = component.get("id")
+            if not isinstance(component_id, str) or not component_id:
+                continue
+            index[component_id] = component
+
+    merged["components"] = [index[key] for key in sorted(index)]
+    return merged

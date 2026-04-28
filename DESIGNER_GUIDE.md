@@ -15,6 +15,7 @@ directory:
 my-design-project/
   design_model.json
   design_rules.json
+  component_library.json
   assets.lock.json
   .mcp.json
   AGENTS.md
@@ -70,6 +71,11 @@ Rule precedence is:
 The harness uses semantic component metadata before placing reusable objects.
 Agents can use `search_components` and `get_component_manifest` to read
 dimensions, anchors, clearances, asset paths, and license data.
+
+Use `register_project_component` when a project-specific object should become a
+reusable semantic component. It writes metadata to `component_library.json`.
+Search and placement tools use this project-local registry when `project_path`
+is provided.
 
 Use `add_component_instance` when a selected component should become part of the
 project source of truth. It updates `design_model.json` and refreshes

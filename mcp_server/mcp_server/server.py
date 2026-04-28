@@ -12,6 +12,7 @@ from mcp_server.bridge.socket_bridge import SocketBridge
 from mcp_server.protocol.jsonrpc import JsonRpcRequest
 from mcp_server.resources import design_model_mcp
 from mcp_server.resources.asset_lock_schema import build_assets_lock
+from mcp_server.resources.component_manifest_schema import validate_component_library
 from mcp_server.resources.design_model_schema import load_design_model, save_design_model
 from mcp_server.resources.snapshot_manifest_schema import (
     append_snapshot_entry,
@@ -28,6 +29,7 @@ from mcp_server.resources.project_files import (
     assets_lock_path,
     design_rules_path,
     find_design_model_path,
+    project_component_library_path,
     snapshot_manifest_path,
 )
 from mcp_server.smoke import validate_project as run_project_validation
@@ -35,6 +37,9 @@ from mcp_server.tools.local_library_search import (
     format_search_results,
     get_categories,
     get_component_by_id,
+    load_effective_library,
+    load_project_library,
+    save_project_library,
     search_library,
 )
 from mcp_server.tools.bathroom_planner import (
@@ -43,7 +48,6 @@ from mcp_server.tools.bathroom_planner import (
     plan_bathroom_project,
     save_bathroom_plan,
 )
-from mcp_server.tools.placement_tools import load_library as load_component_library
 from mcp_server.tools.trace_executor import (
     execute_bridge_operations,
     sync_execution_report_to_design_model,
@@ -1138,6 +1142,7 @@ async def search_local_library(
     query: str,
     category: str | None = None,
     limit: int = 10,
+    project_path: str | None = None,
 ) -> TextContent:
     """Search local component library for matching components.
 
@@ -1153,7 +1158,15 @@ async def search_local_library(
         List of matching components with IDs and paths for place_component.
     """
     try:
-        results = search_library(query, category=category, limit=limit)
+        library, errors = load_effective_library(project_path)
+        if errors:
+            return TextContent(type="text", text=f"Search failed: {'; '.join(errors)}")
+        results = search_library(
+            query,
+            category=category,
+            limit=limit,
+            library_data=library,
+        )
         formatted = format_search_results(results)
         return TextContent(type="text", text=formatted)
     except Exception as e:
@@ -1165,14 +1178,27 @@ async def search_components(
     query: str,
     category: str | None = None,
     limit: int = 10,
+    project_path: str | None = None,
 ) -> TextContent:
     """Search the component registry and return machine-readable results."""
     try:
-        results = search_library(query, category=category, limit=limit)
+        library, errors = load_effective_library(project_path)
+        if errors:
+            return TextContent(
+                type="text",
+                text=f"Component search failed: {'; '.join(errors)}",
+            )
+        results = search_library(
+            query,
+            category=category,
+            limit=limit,
+            library_data=library,
+        )
         response = {
             "query": query,
             "category": category,
             "limit": limit,
+            "project_path": project_path,
             "count": len(results),
             "components": results,
         }
@@ -1185,10 +1211,13 @@ async def search_components(
 
 
 @mcp.tool()
-async def get_component_manifest(component_id: str) -> TextContent:
+async def get_component_manifest(
+    component_id: str,
+    project_path: str | None = None,
+) -> TextContent:
     """Read one component manifest entry by canonical registry ID."""
     try:
-        component = get_component_by_id(component_id)
+        component = get_component_by_id(component_id, project_path=project_path)
         if component is None:
             return TextContent(
                 type="text",
@@ -1196,6 +1225,7 @@ async def get_component_manifest(component_id: str) -> TextContent:
             )
         response = {
             "component_id": component_id,
+            "project_path": project_path,
             "component": component,
         }
         return TextContent(
@@ -1204,6 +1234,170 @@ async def get_component_manifest(component_id: str) -> TextContent:
         )
     except Exception as e:
         return TextContent(type="text", text=f"Component manifest failed: {str(e)}")
+
+
+@mcp.tool()
+async def register_project_component(
+    project_path: str,
+    component_id: str,
+    name: str,
+    category: str,
+    width: float,
+    depth: float,
+    height: float,
+    subcategory: str | None = None,
+    skp_path: str | None = None,
+    procedural_fallback: str | None = "box_component",
+    insertion_offset_x: float | None = None,
+    insertion_offset_y: float = 0,
+    insertion_offset_z: float = 0,
+    anchor_back: str | None = None,
+    anchor_bottom: str | None = "floor",
+    clearance_front: float | None = None,
+    clearance_left: float | None = None,
+    clearance_right: float | None = None,
+    aliases_en: list[str] | None = None,
+    aliases_zh_cn: list[str] | None = None,
+    tags: list[str] | None = None,
+    license_type: str = "unknown",
+    license_source: str = "project_local",
+    license_author: str | None = None,
+    license_url: str | None = None,
+    redistribution: str = "Project-local component metadata.",
+    overwrite: bool = False,
+) -> TextContent:
+    """Register one project-local semantic component manifest entry."""
+    try:
+        if width <= 0 or depth <= 0 or height <= 0:
+            return TextContent(
+                type="text",
+                text="Project component failed: dimensions must be positive.",
+            )
+
+        project_library, errors = load_project_library(project_path)
+        if errors:
+            return TextContent(
+                type="text",
+                text=f"Project component failed: {'; '.join(errors)}",
+            )
+
+        packaged = get_component_by_id(component_id)
+        project_existing = get_component_by_id(component_id, library_data=project_library)
+        if packaged is not None and project_existing is None:
+            return TextContent(
+                type="text",
+                text=(
+                    "Project component failed: component ID already exists in "
+                    f"packaged registry: {component_id}"
+                ),
+            )
+        if project_existing is not None and not overwrite:
+            return TextContent(
+                type="text",
+                text=f"Project component failed: component already exists: {component_id}",
+            )
+
+        anchors = {}
+        if anchor_bottom:
+            anchors["bottom"] = anchor_bottom
+        if anchor_back:
+            anchors["back"] = anchor_back
+        if not anchors:
+            anchors["center"] = "free"
+
+        clearance = {}
+        for key, value in (
+            ("front", clearance_front),
+            ("left", clearance_left),
+            ("right", clearance_right),
+        ):
+            if value is not None:
+                clearance[key] = value
+
+        assets = {"skp_path": skp_path or f"assets/components/{component_id}.skp"}
+        if procedural_fallback:
+            assets["procedural_fallback"] = procedural_fallback
+
+        license_info = {
+            "type": license_type,
+            "source": license_source,
+            "redistribution": redistribution,
+        }
+        if license_author:
+            license_info["author"] = license_author
+        if license_url:
+            license_info["url"] = license_url
+
+        component = {
+            "id": component_id,
+            "name": name,
+            "category": category,
+            "dimensions": {
+                "width": width,
+                "depth": depth,
+                "height": height,
+            },
+            "bounds": {
+                "min": [0, 0, 0],
+                "max": [width, depth, height],
+            },
+            "insertion_point": {
+                "offset": [
+                    insertion_offset_x if insertion_offset_x is not None else width / 2,
+                    insertion_offset_y,
+                    insertion_offset_z,
+                ],
+                "description": "Project-local insertion point.",
+            },
+            "anchors": anchors,
+            "clearance": clearance,
+            "assets": assets,
+            "license": license_info,
+            "aliases": {
+                "en": aliases_en or [],
+                "zh-CN": aliases_zh_cn or [],
+            },
+        }
+        if subcategory:
+            component["subcategory"] = subcategory
+        if tags:
+            component["tags"] = tags
+
+        if overwrite:
+            project_library["components"] = [
+                item
+                for item in project_library.get("components", [])
+                if item.get("id") != component_id
+            ]
+        project_library.setdefault("components", []).append(component)
+
+        is_valid, validation_errors = validate_component_library(project_library)
+        if not is_valid:
+            return TextContent(
+                type="text",
+                text=f"Project component failed: {'; '.join(validation_errors)}",
+            )
+
+        saved, save_errors = save_project_library(project_path, project_library)
+        if not saved:
+            return TextContent(
+                type="text",
+                text=f"Project component failed: {'; '.join(save_errors)}",
+            )
+
+        response = {
+            "project_path": str(Path(project_path).expanduser().resolve()),
+            "component_library_path": str(project_component_library_path(project_path)),
+            "component_id": component_id,
+            "component": component,
+            "overwritten": project_existing is not None and overwrite,
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(response, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Project component failed: {str(e)}")
 
 
 @mcp.tool()
@@ -1228,7 +1422,7 @@ async def add_component_instance(
                 text=f"Component instance failed: {'; '.join(model_errors)}",
             )
 
-        component = get_component_by_id(component_id)
+        component = get_component_by_id(component_id, project_path=project_path)
         if component is None:
             return TextContent(
                 type="text",
@@ -1281,7 +1475,12 @@ async def add_component_instance(
                 text=f"Component instance failed: {'; '.join(save_errors)}",
             )
 
-        library = load_component_library()
+        library, library_errors = load_effective_library(project_path)
+        if library_errors:
+            return TextContent(
+                type="text",
+                text=f"Component instance failed: {'; '.join(library_errors)}",
+            )
         lock_path = assets_lock_path(project_path)
         lock_path.write_text(
             json.dumps(
@@ -1333,7 +1532,7 @@ async def execute_component_instance(
             )
 
         component_id = instance.get("component_ref")
-        component = get_component_by_id(component_id)
+        component = get_component_by_id(component_id, project_path=project_path)
         if component is None:
             return TextContent(
                 type="text",
@@ -1382,17 +1581,26 @@ async def execute_component_instance(
 
 
 @mcp.tool()
-async def list_local_library_categories() -> TextContent:
+async def list_local_library_categories(project_path: str | None = None) -> TextContent:
     """List all available categories in the local component library.
 
     Returns:
         List of categories like "furniture", "fixture", "lighting".
     """
     try:
-        categories = get_categories()
+        library, errors = load_effective_library(project_path)
+        if errors:
+            return TextContent(
+                type="text",
+                text=f"Failed to load categories: {'; '.join(errors)}",
+            )
+        categories = get_categories(library)
         if not categories:
             return TextContent(type="text", text="No categories found in library.")
-        return TextContent(type="text", text="Available categories:\n- " + "\n- ".join(categories))
+        return TextContent(
+            type="text",
+            text="Available categories:\n- " + "\n- ".join(categories),
+        )
     except Exception as e:
         return TextContent(type="text", text=f"Failed to load categories: {str(e)}")
 

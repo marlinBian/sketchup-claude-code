@@ -62,6 +62,11 @@ terms belong in `aliases` or a later explicit localization structure.
 The packaged seed library lives at `mcp_server/mcp_server/assets/library.json`.
 The older root-level `mcp_server/assets/library.json` path is not canonical.
 
+Designer projects may also define project-local components in
+`component_library.json`. Search and placement tools merge the packaged seed
+library with this project-local library when `project_path` is provided.
+Project-local component IDs should not collide with packaged component IDs.
+
 ## First Milestone
 
 The first useful registry should support only a small bathroom scenario:
@@ -117,6 +122,18 @@ The lock shape is:
 defines the cache contract and writes the directory during project
 initialization; it does not yet download external assets automatically.
 
+## Project-Local Components
+
+`register_project_component` writes one semantic component entry into the
+project's `component_library.json`. This supports early workflows where a
+designer creates or imports a SketchUp object and wants the agent to reuse it as
+a structured component later.
+
+The first supported project-local registration path records metadata only:
+dimensions, bounds, insertion point, anchors, clearances, asset path,
+procedural fallback, aliases, tags, and license/provenance fields. It does not
+yet extract a selected SketchUp entity into a `.skp` asset automatically.
+
 ## Search Ranking
 
 Search should prefer exact component IDs, names, and aliases before fuzzy or
@@ -128,6 +145,7 @@ Agents should use machine-readable registry tools for reasoning:
 - `search_components` returns matching component manifests with dimensions,
   anchors, clearance data, asset metadata, license data, and match scores.
 - `get_component_manifest` returns one manifest entry by canonical component ID.
+- `register_project_component` adds a project-local manifest entry.
 - `add_component_instance` writes a selected registry component into
   `design_model.json` and refreshes `assets.lock.json`.
 - `execute_component_instance` sends a project-backed component instance to the
