@@ -14,6 +14,7 @@ from mcp_server.project_versions import (
     save_project_version,
 )
 from mcp_server.project_init import init_project
+from mcp_server.release_check import run_release_check
 from mcp_server.runtime_skills import install_runtime_skills
 from mcp_server.smoke import DEFAULT_SMOKE_PROJECT, run_smoke, validate_project
 from mcp_server.tools.project_executor import (
@@ -294,6 +295,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="SketchUp bridge socket path.",
     )
 
+    release_parser = subparsers.add_parser(
+        "release-check",
+        help="Run source-checkout release smoke checks without SketchUp UI",
+    )
+    release_parser.add_argument(
+        "--project-path",
+        default="/tmp/sah-release-check",
+        help="Temporary project directory for product smoke.",
+    )
+    release_parser.add_argument(
+        "--plugins-dir",
+        default="/tmp/sah-release-plugins",
+        help="Temporary Plugins directory for bridge install dry run.",
+    )
+
     return parser
 
 
@@ -409,6 +425,13 @@ def main(argv: list[str] | None = None) -> int:
                 plugins_dir=args.plugins_dir,
                 sketchup_version=args.sketchup_version,
                 socket_path=args.socket_path,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result["ok"] else 1
+        if args.command == "release-check":
+            result = run_release_check(
+                project_path=args.project_path,
+                plugins_dir=args.plugins_dir,
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result["ok"] else 1

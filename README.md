@@ -54,6 +54,13 @@ cd mcp_server
 uv run --extra dev sketchup-agent smoke /tmp/sah-smoke --force
 ```
 
+Release smoke without SketchUp:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent release-check
+```
+
 Plugin startup smoke:
 
 ```bash

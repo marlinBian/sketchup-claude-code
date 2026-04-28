@@ -63,6 +63,13 @@ cd mcp_server
 uv run --extra dev sketchup-agent init /tmp/sah-bathroom --template bathroom --force
 ```
 
+Release smoke:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent release-check
+```
+
 Bridge install dry run:
 
 ```bash

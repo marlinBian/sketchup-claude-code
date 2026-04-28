@@ -21,6 +21,8 @@
   `cd mcp_server && uv run --extra dev pytest tests/ -m "not integration" -v --tb=short`
 - [ ] Product smoke:
   `cd mcp_server && uv run --extra dev sketchup-agent smoke /tmp/sah-pr-smoke --force`
+- [ ] Release smoke:
+  `cd mcp_server && uv run --extra dev sketchup-agent release-check`
 - [ ] MCP startup: `./mcp_server/start.sh --startup-check`
 - [ ] Ruby tests: `cd su_bridge && bundle exec rspec spec/ --format progress`
 - [ ] Markdown lint: `npx markdownlint-cli2`

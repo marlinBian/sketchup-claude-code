@@ -175,6 +175,7 @@ scattered commands.
 - add `sketchup-agent smoke [project-path] --force`
 - add `sketchup-agent plan-execution <project-path>`
 - add `sketchup-agent execute-project <project-path>`
+- add `sketchup-agent release-check`
 - add plugin startup smoke for `mcp_server/start.sh`
 - keep the default smoke headless so it works without SketchUp
 - add optional bridge execution with `--with-bridge`
