@@ -22,6 +22,11 @@ Expected files:
 - `snapshots/`
 - `snapshots/manifest.json`
 
+Use `get_project_state` to read the current structured model,
+`list_project_components` to inspect placed component-like instances, and
+`validate_design_project` before reporting that the project files are internally
+consistent.
+
 If these files are missing, tell the user to initialize the project with:
 
 ```bash

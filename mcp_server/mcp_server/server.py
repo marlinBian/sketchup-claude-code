@@ -11,6 +11,7 @@ from mcp_server.tools import model_tools, query_tools, placement_tools
 from mcp_server.bridge.socket_bridge import SocketBridge
 from mcp_server.protocol.jsonrpc import JsonRpcRequest
 from mcp_server.resources import design_model_mcp
+from mcp_server.resources.design_model_schema import load_design_model
 from mcp_server.resources.snapshot_manifest_schema import (
     append_snapshot_entry,
     snapshot_entry,
@@ -21,7 +22,12 @@ from mcp_server.resources.design_rules_schema import (
     load_design_rules,
     save_design_rules,
 )
-from mcp_server.resources.project_files import design_rules_path, snapshot_manifest_path
+from mcp_server.resources.project_files import (
+    design_rules_path,
+    find_design_model_path,
+    snapshot_manifest_path,
+)
+from mcp_server.smoke import validate_project as run_project_validation
 from mcp_server.tools.local_library_search import (
     format_search_results,
     get_categories,
@@ -149,6 +155,82 @@ async def set_design_clearance(
         )
     except Exception as e:
         return TextContent(type="text", text=f"Design rules failed: {str(e)}")
+
+
+@mcp.tool()
+async def get_project_state(project_path: str) -> TextContent:
+    """Read the project design model from design_model.json."""
+    try:
+        path = find_design_model_path(project_path)
+        design_model, errors = load_design_model(str(path))
+        if errors:
+            return TextContent(
+                type="text",
+                text=f"Project state failed: {'; '.join(errors)}",
+            )
+        response = {
+            "project_path": str(Path(project_path).expanduser().resolve()),
+            "design_model_path": str(path),
+            "design_model": design_model,
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(response, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Project state failed: {str(e)}")
+
+
+@mcp.tool()
+async def list_project_components(
+    project_path: str,
+    include_lighting: bool = True,
+) -> TextContent:
+    """List component-like instances currently referenced by a project."""
+    try:
+        path = find_design_model_path(project_path)
+        design_model, errors = load_design_model(str(path))
+        if errors or design_model is None:
+            return TextContent(
+                type="text",
+                text=f"Project components failed: {'; '.join(errors)}",
+            )
+
+        components = [
+            {**component, "id": component_id, "kind": "component"}
+            for component_id, component in design_model.get("components", {}).items()
+        ]
+        if include_lighting:
+            components.extend(
+                {**lighting, "id": lighting_id, "kind": "lighting"}
+                for lighting_id, lighting in design_model.get("lighting", {}).items()
+            )
+
+        response = {
+            "project_path": str(Path(project_path).expanduser().resolve()),
+            "design_model_path": str(path),
+            "count": len(components),
+            "components": components,
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(response, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Project components failed: {str(e)}")
+
+
+@mcp.tool()
+async def validate_design_project(project_path: str) -> TextContent:
+    """Validate core project files using the same checks as the CLI."""
+    try:
+        result = run_project_validation(project_path)
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Project validation failed: {str(e)}")
 
 
 @mcp.tool()

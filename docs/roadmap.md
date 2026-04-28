@@ -172,3 +172,14 @@ documentation.
 - keep validation reports explicit about failed rule checks
 - avoid overwriting designer preferences with built-in defaults unless creating
   a new project
+
+## P10: Project State Inspection
+
+Goal: make CLI agents inspect project truth without parsing files manually.
+
+- expose `get_project_state`
+- expose `list_project_components`
+- expose `validate_design_project`
+- keep validation behavior shared with `sketchup-agent validate`
+- use inspection tools in runtime skills before planning, placement, or visual
+  review

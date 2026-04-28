@@ -44,6 +44,13 @@ External downloads are still explicit actions, not automatic background work.
 
 `model.skp` is the SketchUp model generated or synchronized by the bridge.
 
+Agents can inspect project state through MCP tools:
+
+- `get_project_state` reads the current `design_model.json`
+- `list_project_components` returns component and lighting instances
+- `validate_design_project` runs the same core checks as
+  `sketchup-agent validate`
+
 `snapshots/` stores captures used for review, regression checks, and visual
 handoff. `snapshots/manifest.json` records provenance for each artifact and
 marks visual outputs as advisory.

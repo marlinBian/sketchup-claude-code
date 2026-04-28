@@ -23,6 +23,9 @@ my-design-project/
     manifest.json
 ```
 
+Agents can inspect this state with `get_project_state`, list placed objects with
+`list_project_components`, and run file checks with `validate_design_project`.
+
 ## Example Requests
 
 English:

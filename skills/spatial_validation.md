@@ -17,9 +17,10 @@ The returned `validation_report` is the most reliable current validation output.
 
 For generic placement, combine:
 
-- `design_model.json`
-- `design_rules.json`
-- component dimensions and clearances from the registry
+- `get_project_state` for the current `design_model.json`
+- `get_design_rules` for project-specific rules
+- `search_components` or `get_component_manifest` for registry dimensions and
+  clearances
 - scene information from `get_scene_info`
 
 ## Generic Checklist
@@ -27,11 +28,12 @@ For generic placement, combine:
 Before placement:
 
 1. Search the registry and read component dimensions.
-2. Identify the target room or wall from `design_model.json`.
+2. Identify the target room or wall from `get_project_state`.
 3. Calculate proposed bounds in millimeters.
-4. Check minimum clearances from `design_rules.json`.
-5. Use `get_scene_info` when SketchUp state may differ from files.
-6. Report assumptions when validation is only approximate.
+4. Check minimum clearances from `get_design_rules`.
+5. Use `validate_design_project` to catch project file problems.
+6. Use `get_scene_info` when SketchUp state may differ from files.
+7. Report assumptions when validation is only approximate.
 
 ## Typical Ergonomic Seeds
 
