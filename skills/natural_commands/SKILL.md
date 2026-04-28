@@ -17,9 +17,14 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
   Use `plan_project_execution` first, then `execute_project_model` when the
   trace has no skipped instances and the bridge is running.
 - Search components: "find a sofa", "找一个马桶".
-  Use `search_local_library`.
+  Use `search_components` for machine-readable registry data. Use
+  `search_local_library` only for a short display summary.
 - Place component: "place the sofa here", "放一个沙发".
-  Use `place_component`.
+  When a project path exists, use `add_component_instance` to update
+  `design_model.json`, then use `plan_project_execution` or
+  `execute_project_model` if the designer wants SketchUp updated. Use
+  `place_component` only for ad hoc live SketchUp placement without a
+  project-backed instance.
 - Create primitive: "make a box", "建一个柜体占位".
   Use `create_box`.
 - Change material: "make it white", "改成白色".
@@ -48,16 +53,16 @@ slice, default to the bathroom template and report the exact assumptions.
 
 ## Chinese Alias Handling
 
-Pass Chinese component words directly to `search_local_library` first:
+Pass Chinese component words directly to `search_components` first:
 
 ```python
-search_local_library(query="马桶", category="fixture", limit=5)
+search_components(query="马桶", category="fixture", limit=5)
 ```
 
 If search is weak, retry with a canonical English term:
 
 ```python
-search_local_library(query="toilet", category="fixture", limit=5)
+search_components(query="toilet", category="fixture", limit=5)
 ```
 
 ## Guardrails

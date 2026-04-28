@@ -78,6 +78,8 @@ Views, reporting, and versions:
 
 ### Place a Registry Component
 
+Project-backed placement:
+
 ```python
 search_components(query="sofa", category="furniture", limit=5)
 add_component_instance(
@@ -91,6 +93,11 @@ execute_component_instance(
     project_path="<project-path>",
     instance_id="sofa_001"
 )
+```
+
+Ad hoc live SketchUp placement without project truth:
+
+```python
 place_component(
     component_name="Modern 2-Seat Sofa",
     position_x=3000,
@@ -125,8 +132,9 @@ execute_project_model(project_path="<project-path>")
 ```
 
 Use `execute_project_model` for project-backed synchronization. It records
-returned SketchUp entity IDs and operation metadata back into `design_model.json`
-when execution succeeds.
+returned SketchUp entity IDs and operation metadata back into
+`design_model.json` when execution succeeds, including generated space walls
+under `spaces.<space_id>.execution.walls.<side>`.
 
 ### Create Simple Geometry
 

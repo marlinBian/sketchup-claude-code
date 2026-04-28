@@ -79,17 +79,18 @@ After registration, pass `project_path` to `search_components`,
 `get_component_manifest`, `add_component_instance`, and
 `execute_component_instance` so project-local metadata is included.
 
-`search_local_library` remains available for simple human-readable result
+`search_local_library` remains available only for simple human-readable result
 summaries:
 
 ```python
 search_local_library(query="toilet", category="fixture", limit=5)
 ```
 
-For Chinese user prompts, pass the user's natural words directly first:
+For Chinese user prompts, pass the user's natural words directly to
+`search_components` first:
 
 ```python
-search_local_library(query="马桶", category="fixture", limit=5)
+search_components(query="马桶", category="fixture", limit=5)
 ```
 
 If the result is weak, retry with an English design term such as `toilet`,

@@ -52,8 +52,9 @@ built-in seed rules. Report failed checks from `validation_report`; do not
 silently relax them.
 
 When `execute_bathroom_plan` succeeds with `project_path`, use
-`execution_sync` to report which component and lighting instances received live
-SketchUp `entity_id` values in `design_model.json`.
+`execution_sync` to report which generated space walls, component instances,
+and lighting instances received live SketchUp `entity_id` values in
+`design_model.json`.
 
 ## Prompt Examples
 

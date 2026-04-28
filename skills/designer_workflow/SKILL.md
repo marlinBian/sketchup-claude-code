@@ -84,8 +84,9 @@ them and fix the missing space bounds, component references, or registry entries
 before executing.
 
 Use `execute_project_model` when the designer wants the current project truth
-sent to SketchUp. On success, use `execution_sync` to report which component and
-lighting instances received SketchUp `entity_id` values.
+sent to SketchUp. On success, use `execution_sync` to report which generated
+space walls, component instances, and lighting instances received SketchUp
+`entity_id` values.
 
 Before calling it, confirm the bridge is expected to be available at
 `/tmp/su_bridge.sock`. If execution fails because SketchUp is not running, report
