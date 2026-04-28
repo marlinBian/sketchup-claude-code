@@ -89,6 +89,14 @@ jobs:
           test -f /tmp/sah-wheel-plugins/su_bridge/lib/su_bridge.rb
           test -f /tmp/sah-wheel-plugins/su_bridge.rb
 
+      - name: Check installed wheel project initialization
+        run: |
+          /tmp/sah-wheel-venv/bin/sketchup-agent init /tmp/sah-wheel-project --template bathroom --force
+          /tmp/sah-wheel-venv/bin/sketchup-agent validate /tmp/sah-wheel-project
+          /tmp/sah-wheel-venv/bin/sketchup-agent install-skills /tmp/sah-wheel-project --target all --dry-run
+          test -f /tmp/sah-wheel-project/.agents/skills/bathroom_planning/SKILL.md
+          test -f /tmp/sah-wheel-project/.claude/skills/bathroom_planning/SKILL.md
+
   ruby-tests:
     name: Ruby Tests
     runs-on: ubuntu-latest

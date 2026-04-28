@@ -1,3 +1,5 @@
+# Pull Request
+
 ## Summary
 
 <!-- What does this PR do? Provide a brief summary -->
@@ -15,9 +17,13 @@
 
 <!-- How was this tested? -->
 
-- [ ] Ruby syntax check: `for f in su_bridge/lib/su_bridge/**/*.rb su_bridge/spec/**/*.rb; do ruby -c "$f" || exit 1; done`
-- [ ] Python syntax check: `python3 -m py_compile mcp_server/mcp_server/**/*.py`
-- [ ] Python tests: `cd mcp_server && python3 -m pytest tests/ -v`
+- [ ] Python tests:
+  `cd mcp_server && uv run --extra dev pytest tests/ -m "not integration" -v --tb=short`
+- [ ] Product smoke:
+  `cd mcp_server && uv run --extra dev sketchup-agent smoke /tmp/sah-pr-smoke --force`
+- [ ] MCP startup: `./mcp_server/start.sh --startup-check`
+- [ ] Ruby tests: `cd su_bridge && bundle exec rspec spec/ --format progress`
+- [ ] Markdown lint: `npx markdownlint-cli2`
 
 ## Checklist
 
