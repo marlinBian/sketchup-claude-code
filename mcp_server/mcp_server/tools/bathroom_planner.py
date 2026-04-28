@@ -55,6 +55,29 @@ def component_dimensions(component: dict[str, Any]) -> dict[str, float]:
     }
 
 
+def component_dimensions_for_rules(
+    component: dict[str, Any],
+    rules: dict[str, Any],
+    rule_set: str = "bathroom",
+) -> dict[str, float]:
+    """Return component dimensions with project rule overrides applied."""
+    dimensions = component_dimensions(component)
+    fixture_dimensions = (
+        rules.get("rule_sets", {})
+        .get(rule_set, {})
+        .get("fixture_dimensions", {})
+    )
+    override = fixture_dimensions.get(component.get("id"))
+    if not override:
+        return dimensions
+
+    return {
+        "width": float(override["width"]),
+        "depth": float(override["depth"]),
+        "height": float(override["height"]),
+    }
+
+
 def make_bounds(
     min_x: float,
     min_y: float,
@@ -103,10 +126,10 @@ def build_bathroom_components(
     vanity_manifest = get_component(component_library, "vanity_wall_600")
     mirror_manifest = get_component(component_library, "mirror_wall_500")
 
-    door = component_dimensions(door_manifest)
-    toilet = component_dimensions(toilet_manifest)
-    vanity = component_dimensions(vanity_manifest)
-    mirror = component_dimensions(mirror_manifest)
+    door = component_dimensions_for_rules(door_manifest, rules)
+    toilet = component_dimensions_for_rules(toilet_manifest, rules)
+    vanity = component_dimensions_for_rules(vanity_manifest, rules)
+    mirror = component_dimensions_for_rules(mirror_manifest, rules)
 
     door_y = (depth - door["width"]) / 2
     toilet_x = (width - toilet["width"]) / 2

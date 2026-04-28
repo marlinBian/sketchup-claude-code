@@ -32,7 +32,7 @@ Set one fixture dimension in millimeters:
 set_fixture_dimension(
     project_path="<project-path>",
     rule_set="bathroom",
-    fixture_name="compact_vanity",
+    fixture_name="vanity_wall_600",
     width=500,
     depth=420,
     height=850
@@ -58,7 +58,7 @@ Use 700 mm as the minimum front clearance for toilets in this project.
 ```
 
 ```text
-Use a 500 mm wide compact vanity as my default for this bathroom project.
+Use a 500 mm wide vanity as my default for this bathroom project.
 ```
 
 Chinese:
@@ -68,7 +68,7 @@ Chinese:
 ```
 
 ```text
-这个卫生间项目默认使用 500 毫米宽的小洗手台。
+这个卫生间项目默认使用 500 毫米宽的洗手台。
 ```
 
 ## Result Handling

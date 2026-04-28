@@ -171,6 +171,7 @@ documentation.
 - load `design_rules.json` when planning into an existing project
 - use project rules in `plan_bathroom`
 - use project rules in `execute_bathroom_plan`
+- use fixture dimension overrides during deterministic placement
 - keep validation reports explicit about failed rule checks
 - avoid overwriting designer preferences with built-in defaults unless creating
   a new project

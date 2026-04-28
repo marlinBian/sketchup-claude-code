@@ -5,7 +5,10 @@ import json
 import pytest
 
 from mcp_server.resources.design_model_schema import validate_design_model
-from mcp_server.resources.design_rules_schema import validate_design_rules
+from mcp_server.resources.design_rules_schema import (
+    create_default_design_rules,
+    validate_design_rules,
+)
 from mcp_server.tools.bathroom_planner import (
     plan_bathroom_project,
     save_bathroom_plan,
@@ -63,6 +66,26 @@ def test_plan_bathroom_project_reports_invalid_small_room():
     ]
     assert "room_width" in failed
     assert "room_depth" in failed
+
+
+def test_plan_bathroom_project_uses_fixture_dimension_rules():
+    rules = create_default_design_rules()
+    rules["rule_sets"]["bathroom"]["fixture_dimensions"]["vanity_wall_600"] = {
+        "width": 500,
+        "depth": 420,
+        "height": 850,
+    }
+
+    result = plan_bathroom_project(rules=rules)
+    vanity = result["design_model"]["components"]["vanity_001"]
+
+    assert vanity["dimensions"] == {
+        "width": 500.0,
+        "depth": 420.0,
+        "height": 850.0,
+    }
+    assert vanity["position"][0] == 1750.0
+    assert vanity["bounds"]["min"] == [1500.0, 0, 0]
 
 
 def test_plan_bathroom_project_rejects_non_positive_dimensions():

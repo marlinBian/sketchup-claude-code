@@ -63,6 +63,29 @@ async def test_plan_bathroom_tool_uses_project_design_rules(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_plan_bathroom_tool_uses_project_fixture_dimensions(tmp_path):
+    from mcp_server.server import plan_bathroom
+
+    rules = create_default_design_rules()
+    rules["rule_sets"]["bathroom"]["fixture_dimensions"]["vanity_wall_600"] = {
+        "width": 500,
+        "depth": 420,
+        "height": 850,
+    }
+    (tmp_path / "design_rules.json").write_text(
+        json.dumps(rules, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    response = await plan_bathroom(project_path=str(tmp_path))
+    data = json.loads(response.text)
+    vanity = data["design_model"]["components"]["vanity_001"]
+
+    assert vanity["dimensions"]["width"] == 500
+    assert vanity["bounds"]["min"] == [1500.0, 0, 0]
+
+
+@pytest.mark.asyncio
 async def test_execute_bathroom_plan_tool_uses_trace_executor(monkeypatch):
     from mcp_server import server
 
