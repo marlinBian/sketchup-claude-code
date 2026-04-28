@@ -4,7 +4,7 @@ import argparse
 import json
 import sys
 
-from mcp_server.bridge_install import install_bridge
+from mcp_server.bridge_install import install_bridge, launch_bridge
 from mcp_server.doctor import run_doctor
 from mcp_server.project_assets import refresh_project_asset_lock
 from mcp_server.project_state import read_project_state
@@ -257,6 +257,47 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show the target paths without copying files.",
     )
 
+    launch_bridge_parser = subparsers.add_parser(
+        "launch-bridge",
+        help="Open SketchUp with a model window and wait for the Ruby bridge socket",
+    )
+    launch_bridge_parser.add_argument(
+        "--sketchup-version",
+        help="SketchUp version to launch, for example 2024.",
+    )
+    launch_bridge_parser.add_argument(
+        "--app-path",
+        help="Explicit SketchUp.app path. Defaults to the newest detected app.",
+    )
+    launch_bridge_parser.add_argument(
+        "--model-path",
+        help="Optional .skp model to open. Defaults to a copied bundled template.",
+    )
+    launch_bridge_parser.add_argument(
+        "--socket-path",
+        default="/tmp/su_bridge.sock",
+        help="SketchUp bridge socket path.",
+    )
+    launch_bridge_parser.add_argument(
+        "--timeout",
+        type=float,
+        default=90.0,
+        help="Seconds to wait for the bridge socket.",
+    )
+    launch_bridge_parser.add_argument(
+        "--clear-quarantine",
+        action="store_true",
+        help="Remove macOS quarantine xattrs from the SketchUp app before launch.",
+    )
+    launch_bridge_parser.add_argument(
+        "--suppress-update-check",
+        action="store_true",
+        help=(
+            "Disable SketchUp update prompts before launch so modal dialogs do "
+            "not block bridge startup."
+        ),
+    )
+
     skills_parser = subparsers.add_parser(
         "install-skills",
         help="Install runtime skills into a design project",
@@ -452,6 +493,18 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
+        if args.command == "launch-bridge":
+            result = launch_bridge(
+                sketchup_version=args.sketchup_version,
+                app_path=args.app_path,
+                model_path=args.model_path,
+                socket_path=args.socket_path,
+                timeout=args.timeout,
+                clear_app_quarantine=args.clear_quarantine,
+                suppress_app_update_check=args.suppress_update_check,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result["socket_ready"] else 1
         if args.command == "install-skills":
             result = install_runtime_skills(
                 project_path=args.project_path,

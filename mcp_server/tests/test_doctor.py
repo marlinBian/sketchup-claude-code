@@ -3,7 +3,7 @@
 import json
 
 from mcp_server.cli import main
-from mcp_server.doctor import bridge_runtime_capability_check, run_doctor
+from mcp_server.doctor import bridge_runtime_capability_check, run_doctor, sketchup_app_check
 from mcp_server.project_init import init_project
 from mcp_server.resources.design_rules_schema import (
     DESIGNER_PROFILE_ENV,
@@ -107,6 +107,25 @@ def test_doctor_fails_on_invalid_project(tmp_path):
     assert result["ok"] is False
     assert project_check["ok"] is False
     assert project_check["severity"] == "error"
+
+
+def test_sketchup_app_check_warns_on_quarantined_app(monkeypatch, tmp_path):
+    app = tmp_path / "Applications" / "SketchUp 2024" / "SketchUp.app"
+    template = app / "Contents" / "Resources" / "en" / "Templates" / "Temp01b - Simple.skp"
+    template.parent.mkdir(parents=True)
+    template.write_text("template", encoding="utf-8")
+    monkeypatch.setattr("mcp_server.doctor.sketchup_app_path", lambda version: app)
+    monkeypatch.setattr(
+        "mcp_server.doctor.quarantine_entries",
+        lambda path: [f"{path}: com.apple.quarantine: test"],
+    )
+
+    result = sketchup_app_check("2024")
+
+    assert result["ok"] is False
+    assert result["severity"] == "warning"
+    assert result["details"]["quarantine_present"] is True
+    assert "launch-bridge --clear-quarantine" in result["message"]
 
 
 def test_bridge_runtime_capability_check_skips_missing_socket(tmp_path):

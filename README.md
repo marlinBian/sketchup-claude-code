@@ -81,6 +81,13 @@ cd mcp_server
 uv run --extra dev sketchup-agent install-bridge --sketchup-version 2024 --dry-run
 ```
 
+Live bridge startup:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent launch-bridge --sketchup-version 2024
+```
+
 Doctor check:
 
 ```bash
@@ -138,8 +145,11 @@ bundle install --path vendor/bundle
 bundle exec rspec spec/ --format progress
 ```
 
-Live SketchUp integration tests require SketchUp to be open with `SuBridge`
-running and `/tmp/su_bridge.sock` available.
+Live SketchUp integration tests require SketchUp to be open in a model window
+with `SuBridge` running and `/tmp/su_bridge.sock` available. Use
+`sketchup-agent launch-bridge` instead of leaving SketchUp on the welcome
+screen. If a SketchUp update prompt blocks the model window, use
+`sketchup-agent launch-bridge --suppress-update-check`.
 
 ## Documentation
 

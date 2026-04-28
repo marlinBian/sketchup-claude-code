@@ -128,9 +128,9 @@ sketchup-agent install-bridge --sketchup-version 2024 --dry-run
 
 The installer copies the `su_bridge/` runtime folder and writes a
 `su_bridge.rb` loader into the SketchUp Plugins directory. SketchUp loads that
-file on startup, so opening SketchUp should start the bridge automatically. On
-macOS, the installer also enables `su_bridge.rb` in SketchUp's private extension
-preferences when that preferences file already exists.
+file when it enters a model session. On macOS, the installer also enables
+`su_bridge.rb` in SketchUp's private extension preferences when that preferences
+file already exists.
 
 The installed Python package includes the Ruby bridge runtime, so designers do
 not need a source checkout for this command. Maintainers running from the source
@@ -157,6 +157,29 @@ RUBY
 
 Open SketchUp after installing. The bridge is ready when
 `/tmp/su_bridge.sock` exists.
+
+The most reliable CLI startup path opens SketchUp with a temporary copy of a
+bundled template, so the app enters a model window instead of stopping on the
+welcome screen:
+
+```bash
+sketchup-agent launch-bridge --sketchup-version 2024
+```
+
+If the SketchUp app still has macOS quarantine attributes, macOS can launch it
+through AppTranslocation and make plugin loading unreliable. `doctor` reports
+this state. To clear quarantine and launch in one step:
+
+```bash
+sketchup-agent launch-bridge --sketchup-version 2024 --clear-quarantine
+```
+
+If SketchUp opens an update prompt before entering a model window, suppress the
+update check before launch:
+
+```bash
+sketchup-agent launch-bridge --sketchup-version 2024 --suppress-update-check
+```
 
 ## Maintainer Setup
 
@@ -201,6 +224,12 @@ non-mutating bridge operations. If it reports missing runtime capabilities,
 restart SketchUp after `install-bridge --force` or reload the bridge before
 running live smoke tests.
 
+If `doctor` reports that the SketchUp app is quarantined, launch with
+`sketchup-agent launch-bridge --clear-quarantine`. If the bridge socket is
+missing while SketchUp is only showing its welcome screen or an update prompt,
+launch with `sketchup-agent launch-bridge --suppress-update-check` or open any
+`.skp` model after dismissing the prompt.
+
 Newer bridge installs expose `get_bridge_info`, which lets `doctor` report the
 loaded bridge version and supported operations. If that operation is missing,
 `doctor` falls back to direct capability probes so stale loaded plugins are
@@ -223,6 +252,7 @@ Run the smoke check against a live SketchUp bridge:
 
 ```bash
 cd mcp_server
+uv run --extra dev sketchup-agent launch-bridge --sketchup-version 2024
 uv run --extra dev sketchup-agent smoke /tmp/sah-smoke --force --with-bridge
 ```
 

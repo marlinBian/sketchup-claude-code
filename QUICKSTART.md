@@ -65,6 +65,26 @@ Open SketchUp after installation. The installed `su_bridge.rb` loader starts
 the bridge automatically, and the bridge is ready when `/tmp/su_bridge.sock`
 exists.
 
+For reliable startup from the CLI, open SketchUp through a model window rather
+than leaving it on the welcome screen:
+
+```bash
+sketchup-agent launch-bridge --sketchup-version 2024
+```
+
+If `doctor` reports macOS quarantine on the SketchUp app, clear it during launch:
+
+```bash
+sketchup-agent launch-bridge --sketchup-version 2024 --clear-quarantine
+```
+
+If SketchUp shows an update prompt before the model window opens, suppress that
+prompt for bridge startup:
+
+```bash
+sketchup-agent launch-bridge --sketchup-version 2024 --suppress-update-check
+```
+
 ## 3. Start an Agent CLI
 
 Open the design project directory, not the source repository:

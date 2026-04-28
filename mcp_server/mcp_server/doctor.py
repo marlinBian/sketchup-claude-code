@@ -12,6 +12,9 @@ from mcp_server.bridge_install import (
     default_plugins_dir,
     installed_sketchup_app_versions,
     installed_sketchup_plugin_dirs,
+    quarantine_entries,
+    sketchup_app_path,
+    sketchup_template_path,
 )
 from mcp_server.bridge.socket_bridge import BridgeConfig, SocketBridge
 from mcp_server.protocol.jsonrpc import JsonRpcRequest
@@ -75,7 +78,15 @@ def bridge_socket_check(socket_path: str = DEFAULT_BRIDGE_SOCKET) -> dict[str, A
         path.exists(),
         {"path": str(path)},
         severity="warning",
-        message=None if path.exists() else "SketchUp bridge socket is not available.",
+        message=(
+            None
+            if path.exists()
+            else (
+                "SketchUp bridge socket is not available. Run `sketchup-agent "
+                "launch-bridge`; if SketchUp shows an update prompt, rerun with "
+                "`--suppress-update-check`."
+            )
+        ),
     )
 
 
@@ -231,6 +242,50 @@ def sketchup_install_check(
     )
 
 
+def sketchup_app_check(sketchup_version: str | None = None) -> dict[str, Any]:
+    """Check whether SketchUp can be launched in a bridge-friendly way."""
+    app_path = sketchup_app_path(sketchup_version)
+    if app_path is None:
+        return check(
+            "sketchup_app",
+            False,
+            {"sketchup_version": sketchup_version},
+            severity="warning",
+            message="SketchUp app was not detected in /Applications.",
+        )
+
+    quarantine = quarantine_entries(app_path)
+    template = sketchup_template_path(app_path)
+    ok = not quarantine and template is not None
+    message = None
+    if quarantine:
+        message = (
+            "SketchUp app has macOS quarantine attributes. This can cause "
+            "AppTranslocation and prevent the installed plugin path from loading "
+            "reliably. Run `sketchup-agent launch-bridge --clear-quarantine` "
+            "or remove quarantine with xattr before live validation."
+        )
+    elif template is None:
+        message = (
+            "No bundled SketchUp template was found. Launch SketchUp with an "
+            "existing .skp model so the Ruby bridge loader runs in a model window."
+        )
+    return check(
+        "sketchup_app",
+        ok,
+        {
+            "app_path": str(app_path),
+            "sketchup_version": sketchup_version,
+            "template_path": str(template) if template else None,
+            "quarantine_present": bool(quarantine),
+            "quarantine_entries": quarantine,
+            "launch_command": "sketchup-agent launch-bridge",
+        },
+        severity="warning",
+        message=message,
+    )
+
+
 def project_check(project_path: str | Path | None) -> dict[str, Any] | None:
     """Validate a project directory when one is provided."""
     if project_path is None:
@@ -310,6 +365,7 @@ def run_doctor(
         console_script_check("sketchup-agent-mcp"),
         bridge_source_check(),
         designer_profile_check(),
+        sketchup_app_check(sketchup_version),
         sketchup_install_check(sketchup_version=sketchup_version, plugins_dir=plugins_dir),
         bridge_socket_check(socket_path),
         bridge_runtime_capability_check(socket_path),

@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
+import subprocess
+import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -75,6 +79,310 @@ def installed_sketchup_app_versions(
             versions.add(version)
 
     return sorted(versions, key=version_sort_value, reverse=True)
+
+
+def sketchup_app_path(
+    sketchup_version: str | None = None,
+    applications_dir: str | Path = "/Applications",
+) -> Path | None:
+    """Return the detected macOS SketchUp app path, newest first by default."""
+    root = Path(applications_dir).expanduser()
+    if not root.exists():
+        return None
+
+    candidates: list[tuple[int, str, Path]] = []
+    for path in root.glob("SketchUp*"):
+        version = sketchup_version_from_name(path.name)
+        if version is None:
+            continue
+        if sketchup_version is not None and version != sketchup_version:
+            continue
+        app_path = path if path.suffix == ".app" else path / "SketchUp.app"
+        if app_path.is_dir():
+            candidates.append((version_sort_value(version), version, app_path))
+
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return candidates[0][2]
+
+
+def sketchup_version_from_app_path(app_path: str | Path) -> str | None:
+    """Infer the SketchUp version from a SketchUp.app path."""
+    path = Path(app_path).expanduser()
+    for candidate in (path.parent.name, path.name):
+        version = sketchup_version_from_name(candidate)
+        if version is not None:
+            return version
+    return None
+
+
+def quarantine_entries(path: str | Path, limit: int = 20) -> list[str]:
+    """Return macOS quarantine xattr lines for a path, when xattr is available."""
+    if shutil.which("xattr") is None:
+        return []
+    target = Path(path).expanduser()
+    if not target.exists():
+        return []
+    completed = subprocess.run(
+        ["xattr", "-lr", str(target)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    output = "\n".join(part for part in [completed.stdout, completed.stderr] if part)
+    entries = [
+        line
+        for line in output.splitlines()
+        if "com.apple.quarantine" in line
+    ]
+    return entries[:limit]
+
+
+def clear_quarantine(path: str | Path) -> dict[str, Any]:
+    """Remove macOS quarantine xattrs from a SketchUp app path."""
+    if shutil.which("xattr") is None:
+        return {"cleared": False, "available": False, "error": "xattr is not available."}
+    target = Path(path).expanduser()
+    completed = subprocess.run(
+        ["xattr", "-dr", "com.apple.quarantine", str(target)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return {
+        "cleared": completed.returncode == 0,
+        "available": True,
+        "returncode": completed.returncode,
+        "stderr": completed.stderr.strip(),
+    }
+
+
+def sketchup_preferences_dir(
+    sketchup_version: str | None = None,
+    home: str | Path | None = None,
+) -> Path:
+    """Return the macOS SketchUp preferences directory for one version."""
+    version = sketchup_version or "2024"
+    return (
+        (Path(home).expanduser() if home is not None else Path.home())
+        / "Library"
+        / "Application Support"
+        / f"SketchUp {version}"
+        / "SketchUp"
+    )
+
+
+def suppress_update_check(
+    sketchup_version: str | None = None,
+    home: str | Path | None = None,
+) -> dict[str, Any]:
+    """Suppress SketchUp update prompts that block non-interactive bridge startup."""
+    preferences_dir = sketchup_preferences_dir(sketchup_version, home=home)
+    result: dict[str, Any] = {
+        "preferences_dir": str(preferences_dir),
+        "updated": False,
+        "files": [],
+    }
+
+    private_path = preferences_dir / "PrivatePreferences.json"
+    if private_path.exists():
+        data = json.loads(private_path.read_text(encoding="utf-8"))
+        root = data.setdefault("This Computer Only", {})
+        changes: dict[str, Any] = {}
+        auto_update = root.setdefault("AutoUpdate", {})
+        previous_remind_on = auto_update.get("RemindOn")
+        auto_update["RemindOn"] = "2099-01-01T00:00:00"
+        changes["AutoUpdate.RemindOn"] = {
+            "previous": previous_remind_on,
+            "current": auto_update["RemindOn"],
+        }
+        common = root.setdefault("Common", {})
+        previous_suppress = common.get("SuppressVersionWarning")
+        common["SuppressVersionWarning"] = True
+        changes["Common.SuppressVersionWarning"] = {
+            "previous": previous_suppress,
+            "current": True,
+        }
+        preferences = root.setdefault("Preferences", {})
+        previous_last_check = preferences.get("LastUpdateCheck")
+        preferences["LastUpdateCheck"] = 9999999999.0
+        changes["Preferences.LastUpdateCheck"] = {
+            "previous": previous_last_check,
+            "current": preferences["LastUpdateCheck"],
+        }
+        private_path.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        result["updated"] = True
+        result["files"].append({"path": str(private_path), "changes": changes})
+
+    shared_path = preferences_dir / "SharedPreferences.json"
+    if shared_path.exists():
+        data = json.loads(shared_path.read_text(encoding="utf-8"))
+        preferences = data.setdefault("Shared for All Computers", {}).setdefault(
+            "Preferences",
+            {},
+        )
+        previous_check = preferences.get("CheckForUpdates")
+        preferences["CheckForUpdates"] = False
+        shared_path.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        result["updated"] = True
+        result["files"].append(
+            {
+                "path": str(shared_path),
+                "changes": {
+                    "Preferences.CheckForUpdates": {
+                        "previous": previous_check,
+                        "current": False,
+                    }
+                },
+            }
+        )
+
+    return result
+
+
+def sketchup_template_path(app_path: str | Path) -> Path | None:
+    """Return a bundled SketchUp template suitable for launching a model window."""
+    root = Path(app_path).expanduser() / "Contents" / "Resources"
+    if not root.exists():
+        return None
+
+    preferred_locales = ["en-US", "en", "zh-cn", "zh_CN", "zh-CN", "zh-TW"]
+    preferred_templates = ["Temp01b - Simple.skp", "Temp01a - Simple.skp"]
+    for locale in preferred_locales:
+        for template_name in preferred_templates:
+            candidate = root / locale / "Templates" / template_name
+            if candidate.exists():
+                return candidate
+
+    matches = sorted(root.glob("*/Templates/Temp01b - Simple.skp"))
+    if matches:
+        return matches[0]
+    matches = sorted(root.glob("*/Templates/*.skp"))
+    return matches[0] if matches else None
+
+
+def prepare_launch_model(
+    app_path: str | Path,
+    model_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Return a model path for SketchUp launch, copying a template when needed."""
+    if model_path is not None:
+        path = Path(model_path).expanduser().resolve()
+        if not path.exists():
+            raise FileNotFoundError(f"SketchUp model not found: {path}")
+        return {
+            "model_path": str(path),
+            "template_source": None,
+            "copied_template": False,
+        }
+
+    template = sketchup_template_path(app_path)
+    if template is None:
+        raise FileNotFoundError(f"No bundled SketchUp template found in {app_path}")
+    handle, target_name = tempfile.mkstemp(
+        prefix="sketchup-agent-harness-launch-",
+        suffix=".skp",
+    )
+    os.close(handle)
+    Path(target_name).unlink(missing_ok=True)
+    target = Path(target_name)
+    shutil.copyfile(template, target)
+    return {
+        "model_path": str(target),
+        "template_source": str(template),
+        "copied_template": True,
+    }
+
+
+def launch_bridge(
+    sketchup_version: str | None = None,
+    app_path: str | Path | None = None,
+    model_path: str | Path | None = None,
+    socket_path: str | Path = "/tmp/su_bridge.sock",
+    timeout: float = 90.0,
+    clear_app_quarantine: bool = False,
+    suppress_app_update_check: bool = False,
+) -> dict[str, Any]:
+    """Launch SketchUp with a model file and wait for the bridge socket."""
+    app = (
+        Path(app_path).expanduser().resolve()
+        if app_path is not None
+        else sketchup_app_path(sketchup_version)
+    )
+    if app is None or not app.exists():
+        raise FileNotFoundError("SketchUp app was not found.")
+    effective_version = sketchup_version or sketchup_version_from_app_path(app)
+
+    quarantine_before = quarantine_entries(app)
+    quarantine_clear_result = None
+    if clear_app_quarantine and quarantine_before:
+        quarantine_clear_result = clear_quarantine(app)
+    quarantine_after = quarantine_entries(app)
+    update_check_result = None
+    if suppress_app_update_check:
+        update_check_result = suppress_update_check(effective_version)
+    launch_model = prepare_launch_model(app, model_path)
+    socket = Path(socket_path).expanduser()
+
+    completed = subprocess.run(
+        ["open", "-a", str(app), launch_model["model_path"]],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(completed.stderr.strip() or completed.stdout.strip())
+
+    started = time.monotonic()
+    socket_ready = socket.exists()
+    while timeout > 0 and not socket_ready:
+        if time.monotonic() - started >= timeout:
+            break
+        time.sleep(1)
+        socket_ready = socket.exists()
+
+    possible_blockers: list[str] = []
+    if not socket_ready:
+        possible_blockers.extend(
+            [
+                "SketchUp may still be on the welcome screen instead of a model window.",
+                "A modal dialog such as an update prompt, sign-in prompt, or license prompt may be blocking plugin loading.",
+                "The Ruby bridge may not be installed or enabled in the selected SketchUp version.",
+            ]
+        )
+        if quarantine_after:
+            possible_blockers.append(
+                "macOS quarantine attributes are still present; rerun with --clear-quarantine."
+            )
+        if not suppress_app_update_check:
+            possible_blockers.append(
+                "If SketchUp shows an update prompt, rerun with --suppress-update-check."
+            )
+
+    return {
+        "app_path": str(app),
+        "sketchup_version": effective_version,
+        "model_path": launch_model["model_path"],
+        "template_source": launch_model["template_source"],
+        "copied_template": launch_model["copied_template"],
+        "socket_path": str(socket),
+        "socket_ready": socket_ready,
+        "timeout": timeout,
+        "elapsed_seconds": round(time.monotonic() - started, 3),
+        "quarantine_present": bool(quarantine_after),
+        "quarantine_entries": quarantine_after,
+        "quarantine_cleared": quarantine_clear_result,
+        "update_check_suppressed": update_check_result,
+        "open_returncode": completed.returncode,
+        "possible_blockers": possible_blockers,
+    }
 
 
 def sketchup_plugins_dir_for_version(home: str | Path, version: str) -> Path:
