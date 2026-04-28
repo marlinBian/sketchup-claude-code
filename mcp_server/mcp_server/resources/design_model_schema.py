@@ -214,6 +214,16 @@ DESIGN_MODEL_SCHEMA: Dict[str, Any] = {
                             "type": "string",
                             "description": "SketchUp entity ID after bridge execution",
                         },
+                        "execution": {
+                            "type": "object",
+                            "description": "Execution metadata for the live SketchUp bridge",
+                            "properties": {
+                                "operation_id": {
+                                    "type": "string",
+                                    "description": "Bridge operation that created or last updated this instance",
+                                },
+                            },
+                        },
                         "source": {
                             "type": "object",
                             "description": "Provenance for generated or imported instances",
@@ -269,8 +279,46 @@ DESIGN_MODEL_SCHEMA: Dict[str, Any] = {
                             },
                             "required": ["anchor", "relationship"],
                         },
+                        "entity_id": {
+                            "type": "string",
+                            "description": "SketchUp entity ID after bridge execution",
+                        },
+                        "execution": {
+                            "type": "object",
+                            "description": "Execution metadata for the live SketchUp bridge",
+                            "properties": {
+                                "operation_id": {
+                                    "type": "string",
+                                    "description": "Bridge operation that created or last updated this instance",
+                                },
+                            },
+                        },
                     },
                     "required": ["type", "position"],
+                },
+            },
+        },
+        "execution": {
+            "type": "object",
+            "description": "Live bridge execution metadata and operation results",
+            "properties": {
+                "bridge_operations": {
+                    "type": "object",
+                    "patternProperties": {
+                        "^[a-zA-Z0-9_]+$": {
+                            "type": "object",
+                            "properties": {
+                                "operation_type": {"type": "string"},
+                                "entity_ids": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "spatial_delta": {"type": "object"},
+                                "status": {"type": "string"},
+                            },
+                            "required": ["operation_type", "entity_ids"],
+                        },
+                    },
                 },
             },
         },

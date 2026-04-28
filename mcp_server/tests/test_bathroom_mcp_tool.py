@@ -140,3 +140,57 @@ async def test_execute_bathroom_plan_tool_uses_project_design_rules(
 
     assert data["validation_report"]["valid"] is False
     assert toilet_front["required"] == 1200
+
+
+@pytest.mark.asyncio
+async def test_execute_bathroom_plan_tool_syncs_entity_ids_to_project(
+    monkeypatch,
+    tmp_path,
+):
+    from mcp_server import server
+
+    def fake_execute(operations, stop_on_error=True):
+        results = []
+        for operation in operations:
+            payload = operation.get("payload", {})
+            entity_id = f"su-{operation['operation_id']}"
+            results.append(
+                {
+                    "operation_id": operation["operation_id"],
+                    "operation_type": operation["operation_type"],
+                    "request": {
+                        "params": {
+                            "payload": payload,
+                        },
+                    },
+                    "response": {
+                        "result": {
+                            "status": "success",
+                            "entity_ids": [entity_id],
+                            "spatial_delta": {},
+                        },
+                    },
+                    "ok": True,
+                }
+            )
+        return {
+            "status": "success",
+            "executed_count": len(operations),
+            "requested_count": len(operations),
+            "results": results,
+        }
+
+    monkeypatch.setattr(server, "execute_bridge_operations", fake_execute)
+
+    response = await server.execute_bathroom_plan(project_path=str(tmp_path))
+    data = json.loads(response.text)
+    design_model = json.loads((tmp_path / "design_model.json").read_text(encoding="utf-8"))
+
+    assert data["execution_sync"]["saved"] is True
+    assert "toilet_001" in data["execution_sync"]["updated_components"]
+    assert "ceiling_light_001" in data["execution_sync"]["updated_lighting"]
+    assert design_model["components"]["toilet_001"]["entity_id"] == "su-place_toilet_001"
+    assert design_model["lighting"]["ceiling_light_001"]["entity_id"] == (
+        "su-place_ceiling_light_001"
+    )
+    assert "place_toilet_001" in design_model["execution"]["bridge_operations"]

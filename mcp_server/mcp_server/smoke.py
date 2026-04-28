@@ -11,7 +11,7 @@ from mcp_server.project_init import (
     init_project,
 )
 from mcp_server.resources.asset_lock_schema import load_assets_lock
-from mcp_server.resources.design_model_schema import load_design_model
+from mcp_server.resources.design_model_schema import load_design_model, save_design_model
 from mcp_server.resources.design_rules_schema import load_design_rules
 from mcp_server.resources.project_files import (
     assets_cache_path,
@@ -23,7 +23,10 @@ from mcp_server.resources.project_files import (
 )
 from mcp_server.resources.snapshot_manifest_schema import load_snapshot_manifest
 from mcp_server.tools.bathroom_planner import plan_bathroom_project
-from mcp_server.tools.trace_executor import execute_bridge_operations
+from mcp_server.tools.trace_executor import (
+    execute_bridge_operations,
+    sync_execution_report_to_design_model,
+)
 
 DEFAULT_SMOKE_PROJECT = "/tmp/sketchup-agent-smoke"
 DEFAULT_BRIDGE_SOCKET = "/tmp/su_bridge.sock"
@@ -230,6 +233,35 @@ def run_smoke(
                         },
                     )
                 )
+                if execution_report.get("status") == "success":
+                    sync_report = sync_execution_report_to_design_model(
+                        plan["design_model"],
+                        execution_report,
+                    )
+                    design_model_file = find_design_model_path(root)
+                    saved, save_errors = save_design_model(
+                        str(design_model_file),
+                        plan["design_model"],
+                    )
+                    sync_report["saved"] = saved
+                    sync_report["errors"] = save_errors
+                    result["execution_sync"] = sync_report
+                    result["checks"].append(
+                        check_result(
+                            "execution_sync",
+                            saved,
+                            {
+                                "recorded_operations": len(
+                                    sync_report["recorded_operations"]
+                                ),
+                                "updated_components": len(
+                                    sync_report["updated_components"]
+                                ),
+                                "updated_lighting": len(sync_report["updated_lighting"]),
+                            },
+                            save_errors,
+                        )
+                    )
             except Exception as error:
                 result["checks"].append(
                     check_result("bridge_execution", False, errors=[str(error)])

@@ -85,6 +85,8 @@ Goal: execute the bathroom slice in SketchUp.
 - keep `design_model.json` synchronized with SketchUp results
 - make the Ruby bridge write canonical `design_model.json` while retaining
   legacy `.design_model.json` read fallback
+- sync bathroom execution entity IDs and operation results back into
+  `design_model.json`
 
 Acceptance:
 

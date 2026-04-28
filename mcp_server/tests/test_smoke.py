@@ -3,6 +3,7 @@
 import json
 
 from mcp_server.project_init import init_project
+from mcp_server import smoke as smoke_module
 from mcp_server.smoke import (
     bridge_socket_check,
     component_refs_from_model,
@@ -58,6 +59,57 @@ def test_run_headless_smoke(tmp_path):
     assert result["ok"] is True
     assert result["headless_plan"]["valid"] is True
     assert result["headless_plan"]["bridge_operation_count"] > 0
+
+
+def test_run_live_smoke_syncs_execution_results(monkeypatch, tmp_path):
+    def fake_execute(operations):
+        results = []
+        for operation in operations:
+            payload = operation.get("payload", {})
+            results.append(
+                {
+                    "operation_id": operation["operation_id"],
+                    "operation_type": operation["operation_type"],
+                    "request": {"params": {"payload": payload}},
+                    "response": {
+                        "result": {
+                            "status": "success",
+                            "entity_ids": [f"su-{operation['operation_id']}"],
+                            "spatial_delta": {},
+                        },
+                    },
+                    "ok": True,
+                }
+            )
+        return {
+            "status": "success",
+            "executed_count": len(operations),
+            "requested_count": len(operations),
+            "results": results,
+        }
+
+    monkeypatch.setattr(smoke_module, "execute_bridge_operations", fake_execute)
+    socket_path = tmp_path / "su_bridge.sock"
+    socket_path.touch()
+    project_path = tmp_path / "smoke"
+
+    result = run_smoke(
+        project_path,
+        overwrite=True,
+        with_bridge=True,
+        socket_path=str(socket_path),
+    )
+    design_model = json.loads((project_path / "design_model.json").read_text())
+
+    assert result["ok"] is True
+    assert result["execution_sync"]["saved"] is True
+    assert "toilet_001" in result["execution_sync"]["updated_components"]
+    assert "ceiling_light_001" in result["execution_sync"]["updated_lighting"]
+    assert design_model["components"]["toilet_001"]["entity_id"] == "su-place_toilet_001"
+    assert design_model["lighting"]["ceiling_light_001"]["entity_id"] == (
+        "su-place_ceiling_light_001"
+    )
+    assert "place_toilet_001" in design_model["execution"]["bridge_operations"]
 
 
 def test_run_smoke_without_force_refuses_existing_project(tmp_path):

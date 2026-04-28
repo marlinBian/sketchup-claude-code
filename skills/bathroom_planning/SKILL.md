@@ -42,6 +42,7 @@ After a tool call, report:
 - failed checks and required distances
 - where project files were written, if any
 - execution status and bridge errors, if any
+- whether SketchUp entity IDs were synced back to `design_model.json`
 
 Keep the response grounded in returned JSON. Do not invent additional geometry
 that is not present in `design_model` or `bridge_operations`.
@@ -49,6 +50,10 @@ that is not present in `design_model` or `bridge_operations`.
 When `project_path` is provided, project-local `design_rules.json` overrides the
 built-in seed rules. Report failed checks from `validation_report`; do not
 silently relax them.
+
+When `execute_bathroom_plan` succeeds with `project_path`, use
+`execution_sync` to report which component and lighting instances received live
+SketchUp `entity_id` values in `design_model.json`.
 
 ## Prompt Examples
 

@@ -105,6 +105,45 @@ class TestValidateDesignModel:
             "toilet_floor_mounted_basic"
         )
 
+    def test_valid_bridge_execution_metadata(self):
+        """Test validation accepts live bridge execution feedback."""
+        data = {
+            "version": "1.0",
+            "project_name": "executed_project",
+            "components": {
+                "toilet_001": {
+                    "type": "toilet",
+                    "name": "Toilet",
+                    "position": [1000, 1100, 0],
+                    "entity_id": "su-toilet",
+                    "execution": {"operation_id": "place_toilet_001"},
+                },
+            },
+            "lighting": {
+                "ceiling_light_001": {
+                    "type": "recessed_light",
+                    "position": [1000, 900, 2400],
+                    "entity_id": "su-light",
+                    "execution": {"operation_id": "place_ceiling_light_001"},
+                },
+            },
+            "execution": {
+                "bridge_operations": {
+                    "place_toilet_001": {
+                        "operation_type": "place_component",
+                        "entity_ids": ["su-toilet"],
+                        "spatial_delta": {},
+                        "status": "success",
+                    },
+                },
+            },
+        }
+
+        is_valid, errors = validate_design_model(data)
+
+        assert is_valid is True
+        assert errors == []
+
     def test_missing_required_fields(self):
         """Test validation fails when required fields are missing."""
         data = {

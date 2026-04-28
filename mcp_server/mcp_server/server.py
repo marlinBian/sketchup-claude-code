@@ -43,7 +43,10 @@ from mcp_server.tools.bathroom_planner import (
     save_bathroom_plan,
 )
 from mcp_server.tools.placement_tools import load_library as load_component_library
-from mcp_server.tools.trace_executor import execute_bridge_operations
+from mcp_server.tools.trace_executor import (
+    execute_bridge_operations,
+    sync_execution_report_to_design_model,
+)
 
 # Create FastMCP server
 mcp = FastMCP("sketchup-mcp")
@@ -1456,6 +1459,16 @@ async def execute_bathroom_plan(
             plan["bridge_operations"],
             stop_on_error=stop_on_error,
         )
+        if project_path and plan["execution_report"].get("status") == "success":
+            sync_report = sync_execution_report_to_design_model(
+                plan["design_model"],
+                plan["execution_report"],
+            )
+            design_model_path = find_design_model_path(project_path)
+            saved, save_errors = save_design_model(str(design_model_path), plan["design_model"])
+            sync_report["saved"] = saved
+            sync_report["errors"] = save_errors
+            plan["execution_sync"] = sync_report
         return TextContent(
             type="text",
             text=json.dumps(plan, ensure_ascii=False, indent=2),

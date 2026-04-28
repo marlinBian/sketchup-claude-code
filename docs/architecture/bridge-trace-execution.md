@@ -51,3 +51,18 @@ slice executable before a real component asset pipeline exists.
 The trace executor runs operations in order. By default it stops on the first
 bridge error and returns a structured execution report with request and response
 records for each attempted operation.
+
+## Project State Feedback
+
+When project-backed execution succeeds, the harness syncs bridge feedback back
+into `design_model.json`:
+
+- `execution.bridge_operations` records each successful operation, returned
+  `entity_ids`, status, and spatial delta.
+- component and lighting instances receive the first returned SketchUp
+  `entity_id`.
+- instance `execution.operation_id` records the bridge operation that created or
+  last updated that instance.
+
+SketchUp remains the live execution view. `design_model.json` remains the
+project truth that later agent calls must read.

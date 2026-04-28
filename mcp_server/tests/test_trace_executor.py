@@ -3,6 +3,7 @@
 from mcp_server.tools.trace_executor import (
     bridge_request_for_operation,
     execute_bridge_operations,
+    sync_execution_report_to_design_model,
 )
 
 
@@ -81,3 +82,63 @@ def test_execute_bridge_operations_stops_on_error_by_default():
     assert report["status"] == "failed"
     assert report["executed_count"] == 1
     assert len(bridge.requests) == 1
+
+
+def test_sync_execution_report_to_design_model_records_entity_ids():
+    design_model = {
+        "components": {
+            "toilet_001": {"type": "toilet", "name": "Toilet", "position": [0, 0, 0]},
+        },
+        "lighting": {
+            "ceiling_light_001": {
+                "type": "recessed_light",
+                "position": [0, 0, 2400],
+            },
+        },
+    }
+    execution_report = {
+        "results": [
+            {
+                "operation_id": "place_toilet_001",
+                "operation_type": "place_component",
+                "request": {
+                    "params": {
+                        "payload": {"instance_id": "toilet_001"},
+                    },
+                },
+                "response": {
+                    "result": {
+                        "status": "success",
+                        "entity_ids": ["su-toilet"],
+                        "spatial_delta": {"bounding_box": {"min": [0, 0, 0]}},
+                    },
+                },
+                "ok": True,
+            },
+            {
+                "operation_id": "place_ceiling_light_001",
+                "operation_type": "place_component",
+                "request": {
+                    "params": {
+                        "payload": {"instance_id": "ceiling_light_001"},
+                    },
+                },
+                "response": {
+                    "result": {
+                        "status": "success",
+                        "entity_ids": ["su-light"],
+                        "spatial_delta": {},
+                    },
+                },
+                "ok": True,
+            },
+        ],
+    }
+
+    sync = sync_execution_report_to_design_model(design_model, execution_report)
+
+    assert sync["updated_components"] == ["toilet_001"]
+    assert sync["updated_lighting"] == ["ceiling_light_001"]
+    assert design_model["components"]["toilet_001"]["entity_id"] == "su-toilet"
+    assert design_model["lighting"]["ceiling_light_001"]["entity_id"] == "su-light"
+    assert "place_toilet_001" in design_model["execution"]["bridge_operations"]
