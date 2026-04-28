@@ -1,4 +1,4 @@
-# Contributing to SCC
+# Contributing to SketchUp Agent Harness
 
 Thank you for your interest in contributing!
 
@@ -37,7 +37,7 @@ cd su_bridge && bundle exec rspec spec/
 
 ## Commit Format
 
-```
+```text
 type: description
 
 Types: feat, fix, refactor, docs, test, chore

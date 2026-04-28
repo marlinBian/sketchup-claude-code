@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "spec_helper"
 require "su_bridge"
 require "su_bridge/command_dispatcher"
 require "su_bridge/entities/face_builder"
@@ -81,7 +82,7 @@ RSpec.describe SuBridge::CommandDispatcher do
         }
 
         response = dispatcher.dispatch(request)
-        expect(response["error"]).to be_present
+        expect(response["error"]).not_to be_nil
         expect(response["error"]["code"]).to eq(-32000)
       end
 
@@ -93,7 +94,7 @@ RSpec.describe SuBridge::CommandDispatcher do
         }
 
         response = dispatcher.dispatch(request)
-        expect(response["error"]).to be_present
+        expect(response["error"]).not_to be_nil
         expect(response["error"]["code"]).to eq(-32000)
       end
     end
@@ -133,11 +134,11 @@ RSpec.describe SuBridge::CommandDispatcher do
 
   describe "export handlers" do
     it "has handle_export_gltf method" do
-      expect(dispatcher).to respond_to(:handle_export_gltf)
+      expect(dispatcher.private_methods).to include(:handle_export_gltf)
     end
 
     it "has handle_export_ifc method" do
-      expect(dispatcher).to respond_to(:handle_export_ifc)
+      expect(dispatcher.private_methods).to include(:handle_export_ifc)
     end
 
     it "dispatcher responds to export_gltf operation" do

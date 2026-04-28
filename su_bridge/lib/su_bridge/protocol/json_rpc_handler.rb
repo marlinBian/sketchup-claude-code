@@ -5,22 +5,22 @@ module SuBridge
   module JsonRpcHandler
     def self.success_response(result, id)
       {
-        jsonrpc: "2.0",
-        result: result,
-        id: id,
+        "jsonrpc" => "2.0",
+        "result" => stringify_keys(result),
+        "id" => id,
       }
     end
 
     def self.error_response(code, message, id, data = nil)
       response = {
-        jsonrpc: "2.0",
-        error: {
-          code: code,
-          message: message,
+        "jsonrpc" => "2.0",
+        "error" => {
+          "code" => code,
+          "message" => message,
         },
-        id: id,
+        "id" => id,
       }
-      response[:error][:data] = data if data
+      response["error"]["data"] = stringify_keys(data) if data
       response
     end
 
@@ -40,6 +40,19 @@ module SuBridge
       end
 
       true
+    end
+
+    def self.stringify_keys(value)
+      case value
+      when Array
+        value.map { |item| stringify_keys(item) }
+      when Hash
+        value.each_with_object({}) do |(key, item), result|
+          result[key.to_s] = stringify_keys(item)
+        end
+      else
+        value
+      end
     end
   end
 end

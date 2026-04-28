@@ -1,77 +1,9 @@
 # frozen_string_literal: true
 
-require "rspec"
+require_relative "spec_helper"
 require "json"
 
-# Mock SketchUp module for testing outside SketchUp
-module SketchUp
-  class UndoManager
-    def self.begin_operation(name, disable_undo = true)
-      # Mock implementation
-    end
-
-    def self.commit_operation
-      # Mock implementation
-    end
-
-    def self.undo
-      # Mock implementation
-    end
-
-    def self.clear
-      # Mock implementation
-    end
-  end
-
-  module Geom
-    class Point3d
-      attr_reader :x, :y, :z
-
-      def initialize(x, y, z)
-        @x = x.to_f
-        @y = y.to_f
-        @z = z.to_f
-      end
-
-      def -(other)
-        Vector3d.new(@x - other.x, @y - other.y, @z - other.z)
-      end
-
-      def cross(other)
-        Vector3d.new(0, 0, 0)
-      end
-
-      def length
-        Math.sqrt(@x**2 + @y**2 + @z**2)
-      end
-    end
-
-    class Vector3d
-      attr_reader :x, :y, :z
-
-      def initialize(x, y, z)
-        @x = x.to_f
-        @y = y.to_f
-        @z = z.to_f
-      end
-
-      def length
-        Math.sqrt(@x**2 + @y**2 + @z**2)
-      end
-    end
-  end
-end
-
-# Mock UI module
-module UI
-  def self.start_timer(interval, repeat = false, &block)
-    # Just execute immediately for testing
-    block.call if block_given?
-  end
-end
-
 # Load the library
-$LOAD_PATH.unshift(File.expand_path("lib", __dir__))
 require "su_bridge/version"
 require "su_bridge/protocol/json_rpc_handler"
 require "su_bridge/undo_manager"
@@ -120,7 +52,7 @@ end
 RSpec.describe SuBridge::JsonRpcHandler do
   describe ".success_response" do
     it "returns valid JSON-RPC success format" do
-      result = { status: "success" }
+      result = { "status" => "success" }
       response = described_class.success_response(result, 1)
 
       expect(response["jsonrpc"]).to eq("2.0")
@@ -140,7 +72,7 @@ RSpec.describe SuBridge::JsonRpcHandler do
     end
 
     it "includes data when provided" do
-      data = { operation_id: "op_123" }
+      data = { "operation_id" => "op_123" }
       response = described_class.error_response(-32001, "Error", 1, data)
 
       expect(response["error"]["data"]).to eq(data)

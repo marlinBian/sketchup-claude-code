@@ -1,109 +1,75 @@
 # SketchUp Agent Harness
 
-让室内设计师使用 Claude CLI 或 Codex CLI 通过自然语言在 SketchUp 中创建、检查和迭代 3D 模型。
+SketchUp Agent Harness is a natural-language control layer for SketchUp through
+agent CLIs such as Claude Code and Codex CLI.
 
----
+Claude and Codex are adapters. The shared core is the MCP server, the SketchUp
+Ruby bridge, the design model schema, component metadata, runtime skills, and
+protocol documentation.
 
-## 项目定位
+Chinese documentation is available in [README.zh-CN.md](README.zh-CN.md).
 
-这个项目原名 `sketchup-claude-code`，正在迁移为 `sketchup-agent-harness`。
-Claude 和 Codex 都只是入口，核心是共享的 MCP Server、SketchUp Ruby bridge、设计模型 JSON、组件规则和设计 workflow skills。
+## Product Boundary
 
-设计师不需要 clone 本仓库。正常使用路径应该是安装插件，然后在自己的设计项目目录中启动 Claude 或 Codex。
+Designers should not clone this repository for normal design work. The target
+workflow is:
 
-## 设计师安装（推荐方式）
+1. Install the harness plugin for the selected agent CLI.
+2. Install or update the SketchUp Ruby bridge.
+3. Create a clean design project directory.
+4. Run Claude or Codex in that design project directory.
+5. Describe the design in natural language.
 
-### Claude CLI
+Runtime skills are authored in `skills/`, but installation must expose them
+through the supported Claude or Codex plugin/skill mechanism. The source tree is
+not the designer's operating surface.
 
-```bash
-# 1. 通过 Claude Code 安装插件
-/plugin marketplace add https://github.com/marlinBian/sketchup-agent-harness
-/plugin install sketchup-agent-harness
+## Current Status
 
-# 2. 复制 SketchUp 插件（一次性操作）
-cp -r ~/.claude/plugins/sketchup-agent-harness/su_bridge ~/Library/Application\ Support/SketchUp/SketchUp\ 2024/SketchUp/Plugins/
+This project is in early development. The current priority is stabilizing the
+baseline, then building the bathroom vertical slice:
 
-# 3. 在 SketchUp Ruby 控制台运行一次
-load '~/Library/Application Support/SketchUp/SketchUp 2024/SketchUp/Plugins/su_bridge/lib/su_bridge.rb'
-SuBridge.start
+> Create a 2m x 1.8m bathroom with a toilet, sink, door, mirror, basic light,
+> and clearance check.
 
-# 4. 创建设计项目目录并开始
-mkdir ~/Design/my-room && cd ~/Design/my-room
-claude
+## Repository Layout
 
-# 5. 开始设计！
-# "创建一个 4米 x 5米的客厅，层高 2.4米"
+```text
+mcp_server/       Python MCP server and tools
+su_bridge/        SketchUp Ruby bridge and socket server
+skills/           Designer-facing runtime skills
+specs/            Protocol and spatial behavior specifications
+docs/             Architecture docs, ADRs, and localized docs
+.claude-plugin/   Claude plugin adapter
+.codex-plugin/    Codex plugin adapter
+.agents/plugins/  Codex local plugin marketplace metadata
 ```
 
-### Codex CLI
+## Development Checks
+
+Python baseline tests, excluding live SketchUp integration tests:
 
 ```bash
-# 1. 添加插件 marketplace
-codex plugin marketplace add marlinBian/sketchup-agent-harness
-
-# 2. 进入设计项目目录
-mkdir ~/Design/my-room && cd ~/Design/my-room
-codex
-
-# 3. 开始设计
-# "创建一个 4米 x 5米的客厅，层高 2.4米"
+cd mcp_server
+uv run --extra dev pytest tests/ -m "not integration" -v --tb=short
 ```
 
----
+Ruby bridge specs:
 
-## 快速开始
+```bash
+cd su_bridge
+bundle install --path vendor/bundle
+bundle exec rspec spec/ --format progress
+```
 
-### 在 SketchUp 中加载插件
+Live SketchUp integration tests require SketchUp to be open with `SuBridge`
+running and `/tmp/su_bridge.sock` available.
 
-1. 确保 `su_bridge` 已复制到 SketchUp 插件目录
-2. 重启 SketchUp
-3. 在 SketchUp Ruby 控制台中运行：
-   ```ruby
-   SuBridge.start
-   ```
+## Documentation
 
-### 开始设计
-
-在 Claude CLI 或 Codex CLI 中切换到项目目录，然后说：
-- "创建一个 4米 x 5米的客厅，层高 2.4米"
-- "添加一套北欧风格的沙发"
-- "在餐桌上方 1.2米 放置吊灯"
-
----
-
-## 常用指令
-
-| 指令 | 功能 |
-|------|------|
-| 开始新项目 | 初始化新设计 |
-| 添加 [家具类型] | 放置家具 |
-| 移动 [物体] 到 [位置] | 调整布局 |
-| 应用 [风格名称] | 应用设计风格 |
-| 帮我拍几张照 | 多角度截图 |
-
----
-
-## 设计风格
-
-- 奶油风（日式+北欧）
-- 北欧风
-- 工业风
-- 地中海风
-- 波西米亚风
-- 现代极简
-
----
-
-## 系统要求
-
-- SketchUp 2021+
-- Python 3.11+
-- Ruby 3.2+
-
----
-
-## 更多信息
-
-- [设计师快速上手](./QUICKSTART.md) - 更详细的操作指南
-- [完整安装指南](./INSTALLATION.md) - 开发者贡献指南
-- [开发文档](./DEVELOPMENT.md) - 项目架构和技术细节
+- [Installation](INSTALLATION.md)
+- [Quickstart](QUICKSTART.md)
+- [Designer Guide](DESIGNER_GUIDE.md)
+- [Development](DEVELOPMENT.md)
+- [Roadmap](docs/roadmap.md)
+- [Runtime vs Development Skills](docs/architecture/runtime-vs-dev-skills.md)

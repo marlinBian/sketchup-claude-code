@@ -19,7 +19,9 @@ build/
 # Ruby
 *.gem
 .bundle/
+su_bridge/Gemfile.lock
 vendor/bundle/
+**/vendor/bundle/
 *.rb~
 *.swp
 .sass-cache/

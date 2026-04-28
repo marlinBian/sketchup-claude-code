@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
-require_relative '../su_bridge'
+require 'json'
 require 'monitor'
+require 'time'
 
 module SuBridge
   # Syncs SketchUp model state to design_model.json file.
@@ -54,6 +55,7 @@ module SuBridge
     # @param data [Hash] Design model data to save
     # @return [Boolean] true if successful
     def save(data)
+      data["updated_at"] = Time.now.utc.iso8601 if data.is_a?(Hash)
       File.write(@design_model_path, JSON.pretty_generate(data))
       true
     rescue IOError, JSON::GeneratorError => e
@@ -355,6 +357,8 @@ module SuBridge
     # @param value [Numeric] Value in inches
     # @return [Float] Value in mm
     def inch_to_mm(value)
+      return value.map { |item| inch_to_mm(item) } if value.is_a?(Array)
+
       (value.to_f * 25.4).round(2)
     end
 

@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "spec_helper"
 require "su_bridge"
 require "su_bridge/entities/door_builder"
 require "su_bridge/entities/window_builder"
@@ -37,9 +38,9 @@ RSpec.describe SuBridge::Entities::DoorBuilder do
   end
 
   describe ".create parameters" do
-    it "accepts wall_id, position, width, height, swing_direction" do
+    it "accepts wall_id, position coordinates, width, height, swing_direction" do
       # Just verify the method signature exists with correct parameters
-      expect(described_class.method(:create).parameters.flatten).to include(:wall_id, :position, :width, :height, :swing_direction)
+      expect(described_class.method(:create).parameters.flatten).to include(:wall_id, :position_x, :position_y, :width, :height, :swing_direction)
     end
   end
 end
@@ -76,8 +77,8 @@ RSpec.describe SuBridge::Entities::WindowBuilder do
   end
 
   describe ".create parameters" do
-    it "accepts wall_id, position, width, height, sill_height" do
-      expect(described_class.method(:create).parameters.flatten).to include(:wall_id, :position, :width, :height, :sill_height)
+    it "accepts wall_id, position coordinates, width, height, sill_height" do
+      expect(described_class.method(:create).parameters.flatten).to include(:wall_id, :position_x, :position_y, :width, :height, :sill_height)
     end
   end
 end
@@ -113,10 +114,14 @@ RSpec.describe SuBridge::Entities::StairsBuilder do
   end
 
   describe ".create parameters" do
-    it "accepts start, end, width, num_steps" do
+    it "accepts start/end coordinates, width, num_steps" do
       params = described_class.method(:create).parameters.flatten
-      expect(params).to include(:start)
-      expect(params).to include(:end_point)
+      expect(params).to include(:start_x)
+      expect(params).to include(:start_y)
+      expect(params).to include(:start_z)
+      expect(params).to include(:end_x)
+      expect(params).to include(:end_y)
+      expect(params).to include(:end_z)
       expect(params).to include(:width)
       expect(params).to include(:num_steps)
     end

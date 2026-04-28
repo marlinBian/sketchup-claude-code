@@ -13,6 +13,9 @@ import time
 from pathlib import Path
 
 
+pytestmark = pytest.mark.integration
+
+
 class TestIntegrationConnection:
     """Test connection to Ruby bridge."""
 

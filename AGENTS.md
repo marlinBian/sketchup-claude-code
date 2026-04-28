@@ -9,7 +9,8 @@ runtime skills, and protocol docs.
 
 - `mcp_server/`: Python MCP server and tools.
 - `su_bridge/`: Ruby SketchUp plugin and socket bridge.
-- `skills/`: runtime skills shipped to designers.
+- `skills/`: runtime skills authored for designers and shipped through Claude,
+  Codex, or future agent CLI plugin/install flows.
 - `specs/`: protocol and spatial behavior specs.
 - `docs/adr/`: architecture decisions.
 - `.claude-plugin/`: Claude plugin adapter.
@@ -22,6 +23,9 @@ kept outside the product repository, under the local `ai4design` workspace.
 
 - Keep Claude-specific and Codex-specific logic out of the core MCP server.
 - Keep designer project files separate from this source repository.
+- Treat `skills/` as the runtime skill authoring source. Installers and plugin
+  manifests must expose those skills in each AI tool's supported runtime
+  location; designers should not need to copy files from the source tree.
 - Use millimeters and Z-up coordinates across protocol boundaries.
 - Add or update tests when changing schemas, MCP tool contracts, or placement behavior.
 - Do not put maintainer workflow skills under `skills/` or ship them in plugin

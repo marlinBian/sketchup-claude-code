@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "spec_helper"
 require "su_bridge"
 
 RSpec.describe SuBridge do
@@ -11,7 +12,7 @@ end
 RSpec.describe SuBridge::JsonRpcHandler do
   describe ".success_response" do
     it "returns valid JSON-RPC success format" do
-      result = { status: "success" }
+      result = { "status" => "success" }
       response = described_class.success_response(result, 1)
 
       expect(response["jsonrpc"]).to eq("2.0")
@@ -31,7 +32,7 @@ RSpec.describe SuBridge::JsonRpcHandler do
     end
 
     it "includes data when provided" do
-      data = { operation_id: "op_123" }
+      data = { "operation_id" => "op_123" }
       response = described_class.error_response(-32001, "Error", 1, data)
 
       expect(response["error"]["data"]).to eq(data)

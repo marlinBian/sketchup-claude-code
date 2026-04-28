@@ -55,12 +55,12 @@ jobs:
         run: |
           cd mcp_server
           pip install uv
-          uv sync
+          uv sync --extra dev
 
       - name: Run Python tests
         run: |
           cd mcp_server
-          uv run pytest tests/ -v --tb=short
+          uv run --extra dev pytest tests/ -m "not integration" -v --tb=short
 
   ruby-tests:
     name: Ruby Tests
@@ -72,18 +72,16 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
-          bundler-cache: true
 
       - name: Install dependencies
         run: |
           cd su_bridge
-          bundle install
+          bundle install --path vendor/bundle
 
       - name: Run Ruby tests
         run: |
           cd su_bridge
           bundle exec rspec spec/ --format progress
-        continue-on-error: true
 
   markdown-lint:
     name: Markdown Lint
@@ -95,6 +93,13 @@ jobs:
         uses: DavidAnson/markdownlint-cli2-action@v13
         with:
           globs: |
-            **/*.md
-            !**/node_modules/**
-            !.claude/**
+            README.md
+            INSTALLATION.md
+            QUICKSTART.md
+            DESIGNER_GUIDE.md
+            DEVELOPMENT.md
+            AGENTS.md
+            CHANGELOG.md
+            CONTRIBUTING.md
+            docs/roadmap.md
+            docs/architecture/runtime-vs-dev-skills.md

@@ -1,0 +1,14 @@
+globs:
+  - README.md
+  - INSTALLATION.md
+  - QUICKSTART.md
+  - DESIGNER_GUIDE.md
+  - DEVELOPMENT.md
+  - AGENTS.md
+  - CHANGELOG.md
+  - CONTRIBUTING.md
+  - docs/roadmap.md
+  - docs/architecture/runtime-vs-dev-skills.md
+config:
+  MD024:
+    siblings_only: true

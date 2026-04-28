@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../spec_helper'
-require_relative '../../lib/su_bridge/design_model_sync'
+require_relative '../lib/su_bridge/design_model_sync'
 
 RSpec.describe SuBridge::DesignModelSync do
   let(:temp_dir) { Dir.mktmpdir("scc_test") }
@@ -15,13 +15,13 @@ RSpec.describe SuBridge::DesignModelSync do
     it "creates with custom project path" do
       sync = described_class.new(temp_dir)
       expect(sync.project_path).to eq(temp_dir)
-      expect(sync.design_model_path).to eq(File.join(temp_dir, "design_model.json"))
+      expect(sync.design_model_path).to eq(File.join(temp_dir, ".design_model.json"))
     end
   end
 
   describe "#design_model_path" do
     it "returns correct path" do
-      expect(sync.design_model_path).to eq(File.join(temp_dir, "design_model.json"))
+      expect(sync.design_model_path).to eq(File.join(temp_dir, ".design_model.json"))
     end
   end
 
@@ -34,7 +34,7 @@ RSpec.describe SuBridge::DesignModelSync do
 
     context "when file exists" do
       before do
-        File.write(File.join(temp_dir, "design_model.json"), '{"version": "1.0", "components": {}}')
+        File.write(File.join(temp_dir, ".design_model.json"), '{"version": "1.0", "components": {}}')
       end
 
       it "returns parsed JSON" do
@@ -46,7 +46,7 @@ RSpec.describe SuBridge::DesignModelSync do
 
     context "when file has invalid JSON" do
       before do
-        File.write(File.join(temp_dir, "design_model.json"), "invalid json")
+        File.write(File.join(temp_dir, ".design_model.json"), "invalid json")
       end
 
       it "returns nil" do
@@ -109,49 +109,49 @@ RSpec.describe SuBridge::DesignModelSync do
 
   describe "Hooks module" do
     after do
-      described_class::Hooks.reset!
+      SuBridge::Hooks.reset!
     end
 
     it "is enabled by default" do
-      described_class::Hooks.reset!
-      expect(described_class::Hooks.enabled?).to be true
+      SuBridge::Hooks.reset!
+      expect(SuBridge::Hooks.enabled?).to be true
     end
 
     it "can be disabled" do
-      described_class::Hooks.enable!
-      described_class::Hooks.disable!
-      expect(described_class::Hooks.enabled?).to be false
+      SuBridge::Hooks.enable!
+      SuBridge::Hooks.disable!
+      expect(SuBridge::Hooks.enabled?).to be false
     end
 
     it "has default debounce of 500ms" do
-      described_class::Hooks.reset!
-      expect(described_class::Hooks.debounce_ms).to eq(500)
+      SuBridge::Hooks.reset!
+      expect(SuBridge::Hooks.debounce_ms).to eq(500)
     end
 
     it "sync_on_undo is disabled by default" do
-      described_class::Hooks.reset!
-      expect(described_class::Hooks.sync_on_undo?).to be false
+      SuBridge::Hooks.reset!
+      expect(SuBridge::Hooks.sync_on_undo?).to be false
     end
 
     describe "#configure" do
       it "allows setting custom debounce_ms" do
-        described_class::Hooks.configure(debounce_ms: 1000)
-        expect(described_class::Hooks.debounce_ms).to eq(1000)
+        SuBridge::Hooks.configure(debounce_ms: 1000)
+        expect(SuBridge::Hooks.debounce_ms).to eq(1000)
       end
 
       it "allows setting sync_on_undo" do
-        described_class::Hooks.configure(sync_on_undo: true)
-        expect(described_class::Hooks.sync_on_undo?).to be true
+        SuBridge::Hooks.configure(sync_on_undo: true)
+        expect(SuBridge::Hooks.sync_on_undo?).to be true
       end
     end
 
     describe "#reset!" do
       it "resets all settings to defaults" do
-        described_class::Hooks.configure(debounce_ms: 1000, sync_on_undo: true)
-        described_class::Hooks.reset!
-        expect(described_class::Hooks.enabled?).to be true
-        expect(described_class::Hooks.debounce_ms).to eq(500)
-        expect(described_class::Hooks.sync_on_undo?).to be false
+        SuBridge::Hooks.configure(debounce_ms: 1000, sync_on_undo: true)
+        SuBridge::Hooks.reset!
+        expect(SuBridge::Hooks.enabled?).to be true
+        expect(SuBridge::Hooks.debounce_ms).to eq(500)
+        expect(SuBridge::Hooks.sync_on_undo?).to be false
       end
     end
   end
