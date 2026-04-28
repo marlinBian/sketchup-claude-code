@@ -2504,7 +2504,10 @@ async def generate_report(project_name: str, project_dir: str = "./designs") -> 
         from mcp_server.tools.report_tools import generate_design_report
 
         result = generate_design_report(project_name, project_dir)
-        return TextContent(type="text", text=str(result))
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
     except Exception as e:
         return TextContent(type="text", text=f"Error generating report: {str(e)}")
 

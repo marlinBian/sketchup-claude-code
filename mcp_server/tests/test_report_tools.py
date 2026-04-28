@@ -34,3 +34,21 @@ async def test_generate_project_report_mcp_tool(tmp_path):
 
     assert data["report_path"].endswith("reports/design_report.md")
     assert data["component_count"] == 4
+
+
+@pytest.mark.asyncio
+async def test_generate_report_compat_tool_returns_json(tmp_path):
+    from mcp_server import server
+
+    project_dir = tmp_path / "designs"
+    project_name = "bathroom"
+    init_project(project_dir / project_name, template="bathroom")
+
+    response = await server.generate_report(
+        project_name=project_name,
+        project_dir=str(project_dir),
+    )
+    data = json.loads(response.text)
+
+    assert data["project_path"].endswith("designs/bathroom")
+    assert data["report_path"].endswith("reports/design_report.md")
