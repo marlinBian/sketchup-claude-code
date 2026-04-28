@@ -17,6 +17,7 @@ from mcp_server.project_init import init_project
 from mcp_server.release_check import run_release_check
 from mcp_server.runtime_skills import install_runtime_skills
 from mcp_server.smoke import DEFAULT_SMOKE_PROJECT, run_smoke, validate_project
+from mcp_server.tools.report_tools import generate_project_report
 from mcp_server.tools.project_executor import (
     build_project_execution_plan,
     execute_project_execution_plan,
@@ -190,6 +191,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-execution",
         action="store_true",
         help="Omit bridge execution feedback summary",
+    )
+
+    report_parser = subparsers.add_parser(
+        "report",
+        help="Generate an English-first Markdown project report",
+    )
+    report_parser.add_argument("project_path", help="Project directory to report")
+    report_parser.add_argument(
+        "--output-path",
+        help="Report output path. Defaults to reports/design_report.md.",
     )
 
     smoke_parser = subparsers.add_parser(
@@ -412,6 +423,13 @@ def main(argv: list[str] | None = None) -> int:
                 include_visual_feedback=not args.no_visual_feedback,
                 include_versions=not args.no_versions,
                 include_execution=not args.no_execution,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "report":
+            result = generate_project_report(
+                args.project_path,
+                output_path=args.output_path,
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0

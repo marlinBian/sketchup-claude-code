@@ -37,6 +37,20 @@ async def test_generate_project_report_mcp_tool(tmp_path):
     assert data["component_count"] == 4
 
 
+def test_cli_report_generates_project_report(tmp_path, capsys):
+    from mcp_server.cli import main
+
+    init_project(tmp_path, template="bathroom")
+
+    exit_code = main(["report", str(tmp_path)])
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert data["report_path"].endswith("reports/design_report.md")
+    assert (tmp_path / "reports" / "design_report.md").exists()
+
+
 @pytest.mark.asyncio
 async def test_generate_report_compat_tool_returns_json(tmp_path):
     from mcp_server import server

@@ -95,6 +95,13 @@ cd mcp_server
 uv run --extra dev sketchup-agent state /tmp/sah-smoke
 ```
 
+Project report generation:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent report /tmp/sah-smoke
+```
+
 Project bridge trace planning without SketchUp:
 
 ```bash
