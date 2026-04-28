@@ -84,6 +84,15 @@ Goal: execute the bathroom slice in SketchUp.
 - capture scene info after execution
 - keep `design_model.json` synchronized with SketchUp results
 
+Acceptance:
+
+```bash
+cd mcp_server && uv run --extra dev pytest \
+  tests/test_trace_executor.py \
+  tests/test_bathroom_mcp_tool.py -q
+cd su_bridge && bundle exec rspec spec/ --format progress
+```
+
 ## P4: Install Flow
 
 Goal: make normal designer use independent of the source checkout.

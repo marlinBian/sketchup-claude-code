@@ -5,7 +5,8 @@ live SketchUp bridge.
 
 ## Input
 
-The MCP tool is `plan_bathroom`.
+The planning MCP tool is `plan_bathroom`. The execution MCP tool is
+`execute_bathroom_plan`.
 
 Default dimensions:
 
@@ -26,6 +27,7 @@ The planner returns JSON with:
 - `validation_report`: deterministic clearance checks with rule provenance
 - `bridge_operations`: a SketchUp operation trace for P3 execution
 - `written_files`: present only when `project_path` is provided
+- `execution_report`: present only when `execute_bathroom_plan` is used
 
 SketchUp is not the source of truth for this slice. The bridge operation trace is
 an execution plan derived from `design_model`, not independent state.

@@ -9,6 +9,7 @@ globs:
   - CONTRIBUTING.md
   - docs/roadmap.md
   - docs/architecture/bathroom-headless-slice.md
+  - docs/architecture/bridge-trace-execution.md
   - docs/architecture/component-registry.md
   - docs/architecture/project-workspace.md
   - docs/architecture/runtime-vs-dev-skills.md

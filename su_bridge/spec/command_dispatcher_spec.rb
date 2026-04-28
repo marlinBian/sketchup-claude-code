@@ -6,6 +6,7 @@ require "su_bridge/command_dispatcher"
 require "su_bridge/entities/face_builder"
 require "su_bridge/entities/wall_builder"
 require "su_bridge/entities/material_applier"
+require "su_bridge/entities/component_manager"
 
 RSpec.describe SuBridge::CommandDispatcher do
   let(:dispatcher) { described_class.new }
@@ -169,6 +170,59 @@ RSpec.describe SuBridge::CommandDispatcher do
           "id" => 1
         })
       }.not_to raise_error
+    end
+  end
+
+  describe "place_component handler" do
+    it "passes procedural fallback payload and returns placement metadata" do
+      allow(SuBridge::Entities::ComponentManager).to receive(:place).and_return(
+        entity_id: "42",
+        definition_name: "Procedural box_fixture",
+        fallback_used: true,
+        fallback_reason: "SKP file not found",
+        bounds: {
+          min: [0, 0, 0],
+          max: [10, 10, 10],
+        },
+        spatial_delta: {
+          bounding_box: {
+            min: [0, 0, 0],
+            max: [600, 460, 850],
+          },
+        }
+      )
+
+      result = dispatcher.send(
+        :handle_place_component,
+        {
+          "skp_path" => "/missing/vanity.skp",
+          "position" => [1700, 0, 0],
+          "rotation" => 0,
+          "scale" => 1,
+          "component_id" => "vanity_wall_600",
+          "instance_id" => "vanity_001",
+          "procedural_fallback" => "box_fixture",
+          "dimensions" => { "width" => 600, "depth" => 460, "height" => 850 },
+          "layer" => "Fixtures",
+          "name" => "Wall vanity 600 mm",
+        }
+      )
+
+      expect(result[:entity_ids]).to eq(["42"])
+      expect(result[:placement_info][:fallback_used]).to eq(true)
+      expect(result[:placement_info][:instance_id]).to eq("vanity_001")
+      expect(SuBridge::Entities::ComponentManager).to have_received(:place).with(
+        skp_path: "/missing/vanity.skp",
+        position: [1700, 0, 0],
+        rotation: 0,
+        scale: 1,
+        component_id: "vanity_wall_600",
+        instance_id: "vanity_001",
+        procedural_fallback: "box_fixture",
+        dimensions: { "width" => 600, "depth" => 460, "height" => 850 },
+        layer: "Fixtures",
+        name: "Wall vanity 600 mm"
+      )
     end
   end
 end

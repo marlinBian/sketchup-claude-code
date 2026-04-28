@@ -48,6 +48,7 @@ def test_plan_bathroom_project_returns_bridge_operation_trace():
     assert "toilet_floor_mounted_basic" in component_ids
     assert "vanity_wall_600" in component_ids
     assert "bathroom_door_700" in component_ids
+    assert operation_types[-1] == "get_scene_info"
     assert all("payload" in operation for operation in operations)
 
 

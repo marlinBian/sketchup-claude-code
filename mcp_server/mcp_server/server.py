@@ -12,6 +12,7 @@ from mcp_server.protocol.jsonrpc import JsonRpcRequest
 from mcp_server.resources import design_model_mcp
 from mcp_server.tools.local_library_search import search_library, get_categories, format_search_results
 from mcp_server.tools.bathroom_planner import plan_bathroom_project, save_bathroom_plan
+from mcp_server.tools.trace_executor import execute_bridge_operations
 
 # Create FastMCP server
 mcp = FastMCP("sketchup-mcp")
@@ -704,6 +705,37 @@ async def plan_bathroom(
         )
     except Exception as e:
         return TextContent(type="text", text=f"Bathroom planning failed: {str(e)}")
+
+
+@mcp.tool()
+async def execute_bathroom_plan(
+    project_name: str = "bathroom_mvp",
+    width: float = 2000,
+    depth: float = 1800,
+    ceiling_height: float = 2400,
+    project_path: str | None = None,
+    stop_on_error: bool = True,
+) -> TextContent:
+    """Plan and execute the seed bathroom operation trace in SketchUp."""
+    try:
+        plan = plan_bathroom_project(
+            project_name=project_name,
+            width=width,
+            depth=depth,
+            ceiling_height=ceiling_height,
+        )
+        if project_path:
+            plan["written_files"] = save_bathroom_plan(project_path, plan)
+        plan["execution_report"] = execute_bridge_operations(
+            plan["bridge_operations"],
+            stop_on_error=stop_on_error,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(plan, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Bathroom execution failed: {str(e)}")
 
 @mcp.tool()
 async def generate_report(project_name: str, project_dir: str = "./designs") -> TextContent:

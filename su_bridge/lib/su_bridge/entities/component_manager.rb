@@ -17,12 +17,23 @@ module SuBridge
       end
 
       COMPONENT_CACHE = {}
+      DEFINITION_CACHE = {}
 
-      def self.place(skp_path:, position:, rotation: 0.0, scale: 1.0, component_id: nil)
+      def self.place(
+        skp_path:,
+        position:,
+        rotation: 0.0,
+        scale: 1.0,
+        component_id: nil,
+        instance_id: nil,
+        procedural_fallback: nil,
+        dimensions: nil,
+        layer: nil,
+        name: nil
+      )
         raise ::SuBridge::UndoManager::ValidationError, "skp_path required" unless skp_path
         raise ::SuBridge::UndoManager::ValidationError, "position required" unless position
 
-        # Load or retrieve component definition
         definition = load_component(skp_path)
 
         # Create transform
@@ -36,17 +47,32 @@ module SuBridge
         {
           entity_id: instance.entityID.to_s,
           definition_name: definition.name,
+          fallback_used: false,
           bounds: get_instance_bounds(instance),
         }
+      rescue ::SuBridge::UndoManager::ValidationError => e
+        raise unless procedural_fallback
+
+        place_procedural(
+          procedural_fallback: procedural_fallback,
+          position: position,
+          rotation: rotation,
+          scale: scale,
+          component_id: component_id,
+          instance_id: instance_id,
+          dimensions: dimensions,
+          layer: layer,
+          name: name,
+          original_error: e.message
+        )
       end
 
       def self.load_component(skp_path)
-        # Check cache first
-        cached = COMPONENT_CACHE.values.find { |path| path == skp_path }
-        return cached if cached
-
-        # Resolve path
         resolved_path = resolve_skp_path(skp_path)
+
+        # Check cache first
+        cached = DEFINITION_CACHE[resolved_path]
+        return cached if cached
 
         unless File.exist?(resolved_path)
           raise ::SuBridge::UndoManager::ValidationError, "SKP file not found: #{resolved_path}"
@@ -64,7 +90,54 @@ module SuBridge
           definition = model.definitions.last
         end
 
+        DEFINITION_CACHE[resolved_path] = definition
         definition
+      end
+
+      def self.place_procedural(
+        procedural_fallback:,
+        position:,
+        rotation: 0.0,
+        scale: 1.0,
+        component_id: nil,
+        instance_id: nil,
+        dimensions: nil,
+        layer: nil,
+        name: nil,
+        original_error: nil
+      )
+        raise ::SuBridge::UndoManager::ValidationError, "dimensions required for procedural fallback" unless dimensions
+
+        width = dimensions.fetch("width")
+        depth = dimensions.fetch("depth")
+        height = dimensions.fetch("height")
+        corner = [
+          position[0] - width / 2.0,
+          position[1],
+          position[2],
+        ]
+        group = SuBridge::Entities::FaceBuilder.create_box(
+          corner,
+          width * scale,
+          depth * scale,
+          height * scale,
+          { "layer" => layer }
+        )
+
+        if group.respond_to?(:name=)
+          group.name = name || instance_id || component_id || procedural_fallback
+        end
+
+        COMPONENT_CACHE[component_id] = group.entityID if component_id
+
+        {
+          entity_id: group.entityID.to_s,
+          definition_name: "Procedural #{procedural_fallback}",
+          fallback_used: true,
+          fallback_reason: original_error,
+          bounds: get_instance_bounds(group),
+          spatial_delta: spatial_delta(group),
+        }
       end
 
       def self.create_transform(position, rotation, scale)
@@ -119,6 +192,7 @@ module SuBridge
 
       def self.clear_cache
         COMPONENT_CACHE.clear
+        DEFINITION_CACHE.clear
       end
 
       private

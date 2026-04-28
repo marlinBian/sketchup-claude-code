@@ -5,6 +5,8 @@ require "su_bridge"
 require "su_bridge/entities/door_builder"
 require "su_bridge/entities/window_builder"
 require "su_bridge/entities/stairs_builder"
+require "su_bridge/entities/component_manager"
+require "su_bridge/entities/face_builder"
 
 RSpec.describe SuBridge::Entities::DoorBuilder do
   describe "module structure" do
@@ -124,6 +126,71 @@ RSpec.describe SuBridge::Entities::StairsBuilder do
       expect(params).to include(:end_z)
       expect(params).to include(:width)
       expect(params).to include(:num_steps)
+    end
+  end
+end
+
+RSpec.describe SuBridge::Entities::ComponentManager do
+  let(:fake_group) do
+    Class.new do
+      attr_accessor :name
+
+      def entityID
+        42
+      end
+    end.new
+  end
+
+  before do
+    described_class.clear_cache
+    allow(described_class).to receive(:get_instance_bounds).and_return(
+      min: [0, 0, 0],
+      max: [10, 10, 10]
+    )
+    allow(described_class).to receive(:spatial_delta).and_return(
+      bounding_box: {
+        min: [0, 0, 0],
+        max: [600, 460, 850],
+      },
+      volume_mm3: 234_600_000
+    )
+  end
+
+  describe ".place" do
+    it "uses procedural fallback when the SKP asset is missing" do
+      allow(SuBridge::Entities::FaceBuilder).to receive(:create_box).and_return(fake_group)
+
+      result = described_class.place(
+        skp_path: "/missing/vanity.skp",
+        position: [1700, 0, 0],
+        component_id: "vanity_wall_600",
+        instance_id: "vanity_001",
+        procedural_fallback: "box_fixture",
+        dimensions: { "width" => 600, "depth" => 460, "height" => 850 },
+        layer: "Fixtures",
+        name: "Wall vanity 600 mm"
+      )
+
+      expect(result[:entity_id]).to eq("42")
+      expect(result[:fallback_used]).to eq(true)
+      expect(result[:definition_name]).to eq("Procedural box_fixture")
+      expect(SuBridge::Entities::FaceBuilder).to have_received(:create_box).with(
+        [1400.0, 0, 0],
+        600,
+        460,
+        850,
+        { "layer" => "Fixtures" }
+      )
+    end
+
+    it "requires dimensions for procedural fallback" do
+      expect {
+        described_class.place(
+          skp_path: "/missing/fixture.skp",
+          position: [0, 0, 0],
+          procedural_fallback: "box_fixture"
+        )
+      }.to raise_error(SuBridge::UndoManager::ValidationError, /dimensions required/)
     end
   end
 end

@@ -293,6 +293,11 @@ module SuBridge
       rotation = payload.fetch("rotation", 0.0)
       scale = payload.fetch("scale", 1.0)
       component_id = payload["component_id"]
+      instance_id = payload["instance_id"]
+      procedural_fallback = payload["procedural_fallback"]
+      dimensions = payload["dimensions"]
+      layer = payload["layer"]
+      name = payload["name"]
 
       raise ::SuBridge::UndoManager::ValidationError, "skp_path required" unless skp_path
       raise ::SuBridge::UndoManager::ValidationError, "position required" unless position
@@ -302,23 +307,34 @@ module SuBridge
         position: position,
         rotation: rotation,
         scale: scale,
-        component_id: component_id
+        component_id: component_id,
+        instance_id: instance_id,
+        procedural_fallback: procedural_fallback,
+        dimensions: dimensions,
+        layer: layer,
+        name: name
       )
+
+      spatial_delta = result[:spatial_delta]
+      unless spatial_delta
+        entity = sketchup.active_model.entities.find { |e| e.entityID.to_s == result[:entity_id] }
+        spatial_delta = SuBridge::Entities::ComponentManager.spatial_delta(entity)
+      end
 
       {
         entity_ids: [result[:entity_id]],
-        spatial_delta: SuBridge::Entities::ComponentManager.spatial_delta(
-          sketchup.active_model.entities.find { |e| e.entityID.to_s == result[:entity_id] }
-        ),
+        spatial_delta: spatial_delta,
         model_revision: 1,
         elapsed_ms: 0,
         placement_info: {
           definition_name: result[:definition_name],
           component_id: component_id,
+          instance_id: instance_id,
+          fallback_used: result[:fallback_used] || false,
+          fallback_reason: result[:fallback_reason],
+          bounds: result[:bounds],
         },
       }
-    rescue FileNotFoundError => e
-      raise ::SuBridge::UndoManager::ValidationError, "SKP file not found: #{e.message}"
     end
 
     def handle_apply_material(payload)

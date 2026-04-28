@@ -353,8 +353,11 @@ def build_bridge_operations(
                 "payload": {
                     "component_id": manifest["id"],
                     "instance_id": instance_id,
+                    "name": instance["name"],
                     "skp_path": resolve_skp_path(component_skp_path(manifest)),
                     "procedural_fallback": manifest["assets"].get("procedural_fallback"),
+                    "dimensions": instance["dimensions"],
+                    "layer": instance["layer"],
                     "position": instance["position"],
                     "rotation": instance["rotation"],
                     "scale": 1,
@@ -371,15 +374,26 @@ def build_bridge_operations(
             "payload": {
                 "component_id": light_manifest["id"],
                 "instance_id": "ceiling_light_001",
+                "name": light_manifest["name"],
                 "skp_path": resolve_skp_path(component_skp_path(light_manifest)),
                 "procedural_fallback": light_manifest["assets"].get(
                     "procedural_fallback"
                 ),
+                "dimensions": component_dimensions(light_manifest),
+                "layer": "Lighting",
                 "position": [width / 2, depth / 2, ceiling_height],
                 "rotation": 0,
                 "scale": 1,
             },
             "rollback_on_failure": True,
+        }
+    )
+    operations.append(
+        {
+            "operation_id": "scene_info_after_bathroom_plan",
+            "operation_type": "get_scene_info",
+            "payload": {},
+            "rollback_on_failure": False,
         }
     )
 
