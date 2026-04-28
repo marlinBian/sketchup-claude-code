@@ -29,6 +29,8 @@ async def test_add_component_instance_writes_design_model_and_asset_lock(tmp_pat
         "toilet_floor_mounted_basic"
     )
     assert design_model["components"]["toilet_001"]["bounds"]["min"] == [310.0, 700.0, 0.0]
+    assert design_model["metadata"]["execution_sync"]["status"] == "dirty"
+    assert design_model["metadata"]["execution_sync"]["reason"] == "component_instance_added"
     assert asset_lock["assets"][0]["component_id"] == "toilet_floor_mounted_basic"
     assert asset_lock["assets"][0]["used_by"] == ["toilet_001"]
 

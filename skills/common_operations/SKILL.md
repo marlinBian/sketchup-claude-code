@@ -36,6 +36,7 @@ Scene and geometry:
 
 Components and layout:
 
+- `set_project_space`
 - `search_components`
 - `get_component_manifest`
 - `register_project_component`
@@ -113,6 +114,25 @@ and the bridge is running. Use `place_component` only for ad hoc execution
 without a project-backed instance.
 
 ### Execute Current Project Truth
+
+Use `set_project_space` when the designer asks to create or resize a room,
+studio, office, hallway, storage area, or other rectangular space in project
+truth:
+
+```python
+set_project_space(
+    project_path="<project-path>",
+    space_id="studio_001",
+    space_type="office",
+    width=4000,
+    depth=5000,
+    height=2800
+)
+```
+
+This writes `spaces.<space_id>.bounds` in `design_model.json`, clears stale wall
+execution feedback for that space, and marks SketchUp sync status dirty until
+`execute_project_model` runs successfully.
 
 Before sending the whole project to SketchUp, build the trace from the current
 `design_model.json`:

@@ -76,6 +76,20 @@ from mcp_server.tools.trace_executor import (
 # Create FastMCP server
 mcp = FastMCP("sketchup-mcp")
 
+SPACE_TYPES = {
+    "living_room",
+    "bedroom",
+    "kitchen",
+    "bathroom",
+    "dining_room",
+    "office",
+    "storage",
+    "hallway",
+    "balcony",
+    "garden",
+    "other",
+}
+
 
 def project_rules_or_default(project_path: str | None) -> dict[str, Any] | None:
     """Load effective design rules from defaults, profile, and project."""
@@ -361,6 +375,42 @@ def mark_execution_sync_dirty(
         "source": source,
         "updated_at": utc_now(),
         "details": details,
+    }
+
+
+def project_space_payload(
+    *,
+    space_type: str,
+    origin_x: float,
+    origin_y: float,
+    origin_z: float,
+    width: float,
+    depth: float,
+    height: float,
+) -> dict[str, Any]:
+    """Build a normalized rectangular design_model space payload."""
+    if space_type not in SPACE_TYPES:
+        raise ValueError(f"space_type must be one of: {', '.join(sorted(SPACE_TYPES))}")
+    if width <= 0 or depth <= 0 or height <= 0:
+        raise ValueError("space width, depth, and height must be positive.")
+
+    minimum = [float(origin_x), float(origin_y), float(origin_z)]
+    maximum = [
+        float(origin_x) + float(width),
+        float(origin_y) + float(depth),
+        float(origin_z) + float(height),
+    ]
+    return {
+        "type": space_type,
+        "bounds": {
+            "min": minimum,
+            "max": maximum,
+        },
+        "center": [
+            minimum[0] + float(width) / 2,
+            minimum[1] + float(depth) / 2,
+            minimum[2] + float(height) / 2,
+        ],
     }
 
 
@@ -879,6 +929,95 @@ async def get_project_state(
         )
     except Exception as e:
         return TextContent(type="text", text=f"Project state failed: {str(e)}")
+
+
+@mcp.tool()
+async def set_project_space(
+    project_path: str,
+    space_id: str,
+    width: float,
+    depth: float,
+    height: float = 2400,
+    space_type: str = "other",
+    origin_x: float = 0,
+    origin_y: float = 0,
+    origin_z: float = 0,
+) -> TextContent:
+    """Create or update a rectangular project space in design_model.json."""
+    try:
+        if not space_id.replace("_", "").isalnum():
+            return TextContent(
+                type="text",
+                text="Project space failed: space_id must contain only letters, numbers, and underscores.",
+            )
+
+        design_model_path = find_design_model_path(project_path)
+        design_model, model_errors = load_design_model(str(design_model_path))
+        if model_errors or design_model is None:
+            return TextContent(
+                type="text",
+                text=f"Project space failed: {'; '.join(model_errors)}",
+            )
+
+        spaces = design_model.setdefault("spaces", {})
+        previous_space = spaces.get(space_id, {})
+        previous_execution = (
+            previous_space.get("execution")
+            if isinstance(previous_space, dict)
+            else None
+        )
+        space = project_space_payload(
+            space_type=space_type,
+            origin_x=origin_x,
+            origin_y=origin_y,
+            origin_z=origin_z,
+            width=width,
+            depth=depth,
+            height=height,
+        )
+        if isinstance(previous_space, dict):
+            preserved = {
+                key: value
+                for key, value in previous_space.items()
+                if key not in {"type", "bounds", "center", "execution"}
+            }
+            space = {**preserved, **space}
+        spaces[space_id] = space
+        design_model["updated_at"] = utc_now()
+        mark_execution_sync_dirty(
+            design_model,
+            reason="space_bounds_changed",
+            source="set_project_space",
+            details={
+                "space_id": space_id,
+                "space_type": space_type,
+                "width": float(width),
+                "depth": float(depth),
+                "height": float(height),
+            },
+        )
+
+        saved, save_errors = save_design_model(str(design_model_path), design_model)
+        if not saved:
+            return TextContent(
+                type="text",
+                text=f"Project space failed: {'; '.join(save_errors)}",
+            )
+
+        response = {
+            "project_path": str(Path(project_path).expanduser().resolve()),
+            "design_model_path": str(design_model_path),
+            "space_id": space_id,
+            "space": space,
+            "previous_execution_cleared": previous_execution is not None,
+            "execution_sync": design_model["metadata"]["execution_sync"],
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(response, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Project space failed: {str(e)}")
 
 
 @mcp.tool()
@@ -2405,6 +2544,16 @@ async def add_component_instance(
 
         design_model.setdefault("components", {})
         design_model["components"][chosen_id] = instance
+        design_model["updated_at"] = utc_now()
+        mark_execution_sync_dirty(
+            design_model,
+            reason="component_instance_added",
+            source="add_component_instance",
+            details={
+                "instance_id": chosen_id,
+                "component_id": component["id"],
+            },
+        )
         saved, save_errors = save_design_model(str(design_model_path), design_model)
         if not saved:
             return TextContent(

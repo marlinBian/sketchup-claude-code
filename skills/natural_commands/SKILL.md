@@ -11,6 +11,10 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
   Use `sketchup-agent init` guidance.
 - Plan a bathroom: "plan a small bathroom", "规划卫生间".
   Use `plan_bathroom`.
+- Create or resize a room: "create a 4m by 5m studio", "建一个4米乘5米的房间".
+  Use `set_project_space` to write rectangular space bounds into
+  `design_model.json`, then use `plan_project_execution` or
+  `execute_project_model` if the designer wants SketchUp updated.
 - Execute a bathroom: "sync to SketchUp", "同步到 SketchUp".
   Use `execute_bathroom_plan`.
 - Execute current project truth: "sync the current design model", "同步当前模型".
