@@ -48,6 +48,9 @@ Use this when the user asks to create or review a small bathroom, especially if
 SketchUp is not open yet. If the project already has `design_rules.json`, the
 planner should use it instead of silently reverting to built-in defaults.
 
+Use `get_design_rules` or `set_design_clearance` when the designer changes a
+project preference before planning.
+
 ### 3. Execute Only When the User Wants SketchUp Updated
 
 Use `execute_bathroom_plan` when the user wants the model updated in SketchUp and

@@ -16,7 +16,11 @@ from mcp_server.resources.snapshot_manifest_schema import (
     snapshot_entry,
     snapshot_output_path,
 )
-from mcp_server.resources.design_rules_schema import load_design_rules
+from mcp_server.resources.design_rules_schema import (
+    create_default_design_rules,
+    load_design_rules,
+    save_design_rules,
+)
 from mcp_server.resources.project_files import design_rules_path, snapshot_manifest_path
 from mcp_server.tools.local_library_search import (
     format_search_results,
@@ -70,6 +74,80 @@ async def get_scene_info() -> TextContent:
         return TextContent(type="text", text=str(result.get("scene_info", {})))
     finally:
         bridge.disconnect()
+
+
+@mcp.tool()
+async def get_design_rules(project_path: str) -> TextContent:
+    """Read project-local design rules."""
+    try:
+        path = design_rules_path(project_path)
+        rules, errors = load_design_rules(path)
+        if errors:
+            return TextContent(type="text", text=f"Design rules failed: {'; '.join(errors)}")
+        return TextContent(
+            type="text",
+            text=json.dumps(rules, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Design rules failed: {str(e)}")
+
+
+@mcp.tool()
+async def set_design_clearance(
+    project_path: str,
+    rule_set: str,
+    clearance_name: str,
+    value: float,
+    source: str = "project_user_override",
+) -> TextContent:
+    """Set one project-local clearance value in millimeters."""
+    try:
+        path = design_rules_path(project_path)
+        if Path(path).exists():
+            rules, errors = load_design_rules(path)
+            if errors:
+                return TextContent(
+                    type="text",
+                    text=f"Design rules failed: {'; '.join(errors)}",
+                )
+            assert rules is not None
+        else:
+            rules = create_default_design_rules()
+
+        rules["source"] = source
+        rules.setdefault("rule_sets", {})
+        rules["rule_sets"].setdefault(
+            rule_set,
+            {
+                "description": f"Project-local {rule_set} rules.",
+                "clearances": {},
+            },
+        )
+        rules["rule_sets"][rule_set].setdefault("clearances", {})
+        rules["rule_sets"][rule_set]["clearances"][clearance_name] = value
+
+        saved, save_errors = save_design_rules(path, rules)
+        if not saved:
+            return TextContent(
+                type="text",
+                text=f"Design rules failed: {'; '.join(save_errors)}",
+            )
+
+        response = {
+            "project_path": str(Path(project_path).expanduser().resolve()),
+            "design_rules_path": str(path),
+            "rule_set": rule_set,
+            "clearance_name": clearance_name,
+            "value": value,
+            "units": "mm",
+            "source": source,
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(response, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Design rules failed: {str(e)}")
 
 
 @mcp.tool()

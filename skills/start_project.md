@@ -47,7 +47,8 @@ Check that the project contains:
 - `snapshots/manifest.json`
 
 Then continue with `plan_bathroom` or `execute_bathroom_plan` for the first
-supported vertical slice.
+supported vertical slice. If the designer gives project preferences, store them
+in `design_rules.json` before planning.
 
 ## User-Facing Guidance
 

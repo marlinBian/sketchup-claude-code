@@ -162,6 +162,8 @@ scattered commands.
 Goal: make project-local design knowledge active instead of static
 documentation.
 
+- expose `get_design_rules`
+- expose `set_design_clearance`
 - load `design_rules.json` when planning into an existing project
 - use project rules in `plan_bathroom`
 - use project rules in `execute_bathroom_plan`
