@@ -108,6 +108,38 @@ async def test_project_version_mcp_tools(tmp_path):
     assert list_data["count"] == 1
 
 
+@pytest.mark.asyncio
+async def test_legacy_version_mcp_tools_use_structured_project_versions(tmp_path):
+    from mcp_server import server
+
+    project_dir = tmp_path / "designs"
+    project_name = "bathroom"
+    init_project(project_dir / project_name, template="bathroom")
+
+    save_response = await server.save_version(
+        project_name=project_name,
+        version_tag="draft_1",
+        description="Compatibility save",
+        project_dir=str(project_dir),
+    )
+    list_response = await server.list_versions(
+        project_name=project_name,
+        project_dir=str(project_dir),
+    )
+    save_data = json.loads(save_response.text)
+    list_data = json.loads(list_response.text)
+
+    version_path = project_dir / project_name / "versions" / "draft_1"
+    assert save_data["compatibility_alias"] == "save_version"
+    assert save_data["preferred_tool"] == "save_project_version"
+    assert save_data["version"] == "draft_1"
+    assert (version_path / "design_model.json").exists()
+    assert list_data["compatibility_alias"] == "list_versions"
+    assert list_data["preferred_tool"] == "list_project_versions"
+    assert list_data["count"] == 1
+    assert list_data["versions"][0]["version"] == "draft_1"
+
+
 def test_cli_project_version_commands(tmp_path, capsys):
     init_project(tmp_path, template="bathroom")
 

@@ -2740,98 +2740,58 @@ async def save_version(
     version_tag: str,
     description: str = "",
     project_dir: str = "./designs",
+    overwrite: bool = False,
 ) -> TextContent:
-    """Save current model state as a versioned snapshot.
+    """Compatibility alias for saving structured project truth as a version.
 
     Args:
         project_name: Name of the project
         version_tag: Version identifier (e.g., "v1.0", "draft_2")
         description: Brief description of this version
         project_dir: Base directory for designs
+        overwrite: Whether to replace an existing version tag
 
     Returns:
-        Path to saved version.
+        JSON summary for the saved project version.
     """
-    import json
-    from datetime import datetime
-    from pathlib import Path
-
-    project_path = Path(project_dir) / project_name
-    project_path.mkdir(parents=True, exist_ok=True)
-
-    version_path = project_path / version_tag
-    version_path.mkdir(exist_ok=True)
-
-    # Capture snapshot of current state
-    bridge = SocketBridge()
     try:
-        bridge.connect()
-        snapshot_path = version_path / f"snapshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-
-        request = JsonRpcRequest(
-            method="execute_operation",
-            params={
-                "operation_id": f"save_{id(save_version)}",
-                "operation_type": "capture_design",
-                "payload": {
-                    "output_path": str(snapshot_path),
-                    "view_preset": "panoramic",
-                    "width": 1920,
-                    "height": 1080,
-                },
-                "rollback_on_failure": False,
-            }
+        result = save_project_version_file(
+            Path(project_dir).expanduser() / project_name,
+            version_tag=version_tag,
+            description=description,
+            overwrite=overwrite,
         )
-        bridge.send(request.to_dict())
-    finally:
-        bridge.disconnect()
-
-    # Create metadata
-    metadata = {
-        "version": version_tag,
-        "created_at": datetime.now().isoformat(),
-        "description": description,
-        "snapshot": snapshot_path.name,
-    }
-
-    metadata_path = version_path / "metadata.json"
-    with open(metadata_path, "w", encoding="utf-8") as f:
-        json.dump(metadata, f, ensure_ascii=False, indent=2)
-
-    return TextContent(type="text", text=f"Version saved: {version_path}")
+        result["compatibility_alias"] = "save_version"
+        result["preferred_tool"] = "save_project_version"
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Project version failed: {str(e)}")
 
 
 @mcp.tool()
 async def list_versions(project_name: str, project_dir: str = "./designs") -> TextContent:
-    """List all versions of a project.
+    """Compatibility alias for listing structured project truth versions.
 
     Args:
         project_name: Name of the project
         project_dir: Base directory for designs
 
     Returns:
-        List of versions with descriptions.
+        JSON summary for saved project versions.
     """
-    import json
-    from pathlib import Path
-
-    project_path = Path(project_dir) / project_name
-    if not project_path.exists():
-        return TextContent(type="text", text="No project found")
-
-    versions = []
-    for v_dir in sorted(project_path.iterdir()):
-        if v_dir.is_dir() and v_dir.name.startswith("v"):
-            metadata_path = v_dir / "metadata.json"
-            info = {"version": v_dir.name, "path": str(v_dir)}
-
-            if metadata_path.exists():
-                with open(metadata_path) as f:
-                    info.update(json.load(f))
-
-            versions.append(info)
-
-    return TextContent(type="text", text=str(versions))
+    try:
+        result = list_project_versions_file(Path(project_dir).expanduser() / project_name)
+        result["compatibility_alias"] = "list_versions"
+        result["preferred_tool"] = "list_project_versions"
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Project versions failed: {str(e)}")
 
 
 @mcp.tool()

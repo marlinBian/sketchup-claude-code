@@ -71,8 +71,8 @@ Views, reporting, and versions:
 - `save_project_version`
 - `list_project_versions`
 - `restore_project_version`
-- `save_version`
-- `list_versions`
+- `save_version` (compatibility alias for `save_project_version`)
+- `list_versions` (compatibility alias for `list_project_versions`)
 
 ## Common Flows
 

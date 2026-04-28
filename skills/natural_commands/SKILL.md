@@ -34,7 +34,8 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
 - Capture view: "take a snapshot", "截图".
   Use `capture_project_snapshot` when a project path is available.
 - Save version: "save this version", "保存一下".
-  Use `save_version`.
+  Use `save_project_version` when a project path is available. `save_version`
+  is only a compatibility alias.
 
 Chinese examples are deliberate bilingual user prompt support. Keep internal
 instructions and tool names English-first.
