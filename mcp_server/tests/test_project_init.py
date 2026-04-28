@@ -147,6 +147,7 @@ def test_cli_state_outputs_project_summaries(tmp_path, capsys):
     assert data["assets_lock"]["asset_count"] == 5
     assert data["visual_feedback"]["pending_action_count"] == 0
     assert data["versions"]["count"] == 0
+    assert data["execution"]["operation_count"] == 0
 
 
 def test_cli_state_can_skip_optional_summaries(tmp_path, capsys):
@@ -161,6 +162,7 @@ def test_cli_state_can_skip_optional_summaries(tmp_path, capsys):
             "--no-assets",
             "--no-visual-feedback",
             "--no-versions",
+            "--no-execution",
         ]
     )
     captured = capsys.readouterr()
@@ -172,6 +174,7 @@ def test_cli_state_can_skip_optional_summaries(tmp_path, capsys):
     assert "assets_lock" not in data
     assert "visual_feedback" not in data
     assert "versions" not in data
+    assert "execution" not in data
 
 
 def test_cli_smoke_outputs_json(tmp_path, capsys):

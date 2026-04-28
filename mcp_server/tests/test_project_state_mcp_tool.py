@@ -5,6 +5,7 @@ import json
 import pytest
 
 from mcp_server.project_init import init_project
+from mcp_server.resources.design_model_schema import load_design_model, save_design_model
 
 
 @pytest.mark.asyncio
@@ -35,6 +36,8 @@ async def test_get_project_state_reads_design_model(tmp_path):
     assert data["visual_feedback"]["snapshot_count"] == 0
     assert data["visual_feedback"]["pending_action_count"] == 0
     assert data["versions"]["count"] == 0
+    assert data["execution"]["operation_count"] == 0
+    assert data["execution"]["has_execution_feedback"] is False
 
 
 @pytest.mark.asyncio
@@ -49,6 +52,7 @@ async def test_get_project_state_can_skip_optional_summaries(tmp_path):
         include_assets=False,
         include_visual_feedback=False,
         include_versions=False,
+        include_execution=False,
     )
     data = json.loads(response.text)
 
@@ -57,6 +61,49 @@ async def test_get_project_state_can_skip_optional_summaries(tmp_path):
     assert "assets_lock" not in data
     assert "visual_feedback" not in data
     assert "versions" not in data
+    assert "execution" not in data
+
+
+@pytest.mark.asyncio
+async def test_get_project_state_summarizes_execution_feedback(tmp_path):
+    from mcp_server.server import get_project_state
+
+    init_project(tmp_path, template="bathroom")
+    design_model_path = tmp_path / "design_model.json"
+    design_model, errors = load_design_model(str(design_model_path))
+    assert errors == []
+    assert design_model is not None
+    design_model["components"]["toilet_001"]["entity_id"] = "su-toilet"
+    design_model["lighting"]["ceiling_light_001"]["entity_id"] = "su-light"
+    design_model["execution"] = {
+        "bridge_operations": {
+            "wall_bathroom_001_south": {
+                "operation_type": "create_wall",
+                "entity_ids": ["su-wall"],
+                "status": "success",
+            },
+            "place_toilet_001": {
+                "operation_type": "place_component",
+                "entity_ids": ["su-toilet"],
+                "status": "success",
+            },
+        }
+    }
+    saved, save_errors = save_design_model(str(design_model_path), design_model)
+    assert saved, save_errors
+
+    response = await get_project_state(str(tmp_path))
+    data = json.loads(response.text)
+
+    assert data["execution"]["operation_count"] == 2
+    assert data["execution"]["operation_type_counts"] == {
+        "create_wall": 1,
+        "place_component": 1,
+    }
+    assert data["execution"]["component_entity_count"] == 1
+    assert data["execution"]["lighting_entity_count"] == 1
+    assert data["execution"]["components_with_entity_ids"] == ["toilet_001"]
+    assert data["execution"]["lighting_with_entity_ids"] == ["ceiling_light_001"]
 
 
 @pytest.mark.asyncio

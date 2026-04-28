@@ -24,6 +24,7 @@ Expected files:
 
 Use `get_project_state` to read the current structured model, effective design
 rules, asset-lock summary, visual feedback summary, and saved version summary. Use
+its execution summary to see whether SketchUp entity IDs have been synced. Use
 `list_project_components` to inspect placed component-like instances, and
 `validate_design_project` before reporting that the project files are internally
 consistent.

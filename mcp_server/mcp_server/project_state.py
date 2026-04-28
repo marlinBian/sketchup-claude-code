@@ -192,12 +192,49 @@ def summarize_snapshot_manifest(project_path: str | Path) -> dict[str, Any]:
     return summary
 
 
+def summarize_execution(design_model: dict[str, Any]) -> dict[str, Any]:
+    """Return compact bridge execution state from design_model.json."""
+    bridge_operations = (
+        design_model.get("execution", {}).get("bridge_operations", {})
+        if isinstance(design_model.get("execution"), dict)
+        else {}
+    )
+    operation_type_counts: dict[str, int] = {}
+    for operation in bridge_operations.values():
+        operation_type = str(operation.get("operation_type", "unknown"))
+        operation_type_counts[operation_type] = (
+            operation_type_counts.get(operation_type, 0) + 1
+        )
+
+    components_with_entity_ids = sorted(
+        component_id
+        for component_id, component in design_model.get("components", {}).items()
+        if component.get("entity_id")
+    )
+    lighting_with_entity_ids = sorted(
+        lighting_id
+        for lighting_id, lighting in design_model.get("lighting", {}).items()
+        if lighting.get("entity_id")
+    )
+
+    return {
+        "operation_count": len(bridge_operations),
+        "operation_type_counts": operation_type_counts,
+        "component_entity_count": len(components_with_entity_ids),
+        "lighting_entity_count": len(lighting_with_entity_ids),
+        "components_with_entity_ids": components_with_entity_ids,
+        "lighting_with_entity_ids": lighting_with_entity_ids,
+        "has_execution_feedback": bool(bridge_operations),
+    }
+
+
 def read_project_state(
     project_path: str | Path,
     include_rules: bool = True,
     include_assets: bool = True,
     include_visual_feedback: bool = True,
     include_versions: bool = True,
+    include_execution: bool = True,
 ) -> dict[str, Any]:
     """Read design_model.json plus optional supporting project summaries."""
     resolved_project_path = Path(project_path).expanduser().resolve()
@@ -227,4 +264,6 @@ def read_project_state(
         state["visual_feedback"] = summarize_snapshot_manifest(resolved_project_path)
     if include_versions:
         state["versions"] = list_project_versions(resolved_project_path)
+    if include_execution:
+        state["execution"] = summarize_execution(design_model)
     return state

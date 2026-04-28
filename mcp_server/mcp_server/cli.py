@@ -185,6 +185,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Omit versions/ summary",
     )
+    state_parser.add_argument(
+        "--no-execution",
+        action="store_true",
+        help="Omit bridge execution feedback summary",
+    )
 
     smoke_parser = subparsers.add_parser(
         "smoke",
@@ -365,6 +370,7 @@ def main(argv: list[str] | None = None) -> int:
                 include_assets=not args.no_assets,
                 include_visual_feedback=not args.no_visual_feedback,
                 include_versions=not args.no_versions,
+                include_execution=not args.no_execution,
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
