@@ -10,6 +10,7 @@ from mcp_server.bridge_install import (
     LOADER_FILENAME,
     default_bridge_source,
     default_plugins_dir,
+    installed_sketchup_app_versions,
     installed_sketchup_plugin_dirs,
 )
 from mcp_server.bridge.socket_bridge import BridgeConfig, SocketBridge
@@ -204,6 +205,7 @@ def sketchup_install_check(
 ) -> dict[str, Any]:
     """Check detected or requested SketchUp plugin installation paths."""
     detected_dirs = installed_sketchup_plugin_dirs()
+    installed_app_versions = installed_sketchup_app_versions()
     target_root = (
         Path(plugins_dir).expanduser().resolve()
         if plugins_dir
@@ -219,6 +221,7 @@ def sketchup_install_check(
             "plugins_dir": str(target_root),
             "bridge_dir": str(bridge_dir),
             "loader": str(loader_file),
+            "installed_app_versions": installed_app_versions,
             "detected_plugins_dirs": [str(path) for path in detected_dirs],
             "bridge_dir_exists": bridge_dir.is_dir(),
             "loader_exists": loader_file.exists(),

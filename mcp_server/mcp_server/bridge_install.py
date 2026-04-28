@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +18,7 @@ IGNORED_BRIDGE_PATTERNS = (
     ".DS_Store",
 )
 LOADER_FILENAME = "su_bridge.rb"
+SKETCHUP_VERSION_RE = re.compile(r"\bSketchUp\s+(\d{4})\b")
 
 
 def repo_root_from_package() -> Path:
@@ -37,13 +39,63 @@ def packaged_bridge_source() -> Path:
     return Path(__file__).resolve().parent / "packaged" / "su_bridge"
 
 
-def installed_sketchup_plugin_dirs(home: str | Path | None = None) -> list[Path]:
-    """Return detected macOS SketchUp plugin directories, newest first."""
-    app_support = (
+def sketchup_version_from_name(name: str) -> str | None:
+    """Return the SketchUp year version embedded in a file or directory name."""
+    match = SKETCHUP_VERSION_RE.search(name)
+    return match.group(1) if match else None
+
+
+def version_sort_value(version: str | None) -> int:
+    """Return a sortable integer for a SketchUp year version."""
+    if version is None:
+        return -1
+    try:
+        return int(version)
+    except ValueError:
+        return -1
+
+
+def installed_sketchup_app_versions(
+    applications_dir: str | Path = "/Applications",
+) -> list[str]:
+    """Return detected macOS SketchUp app versions, newest first."""
+    root = Path(applications_dir).expanduser()
+    if not root.exists():
+        return []
+
+    versions: set[str] = set()
+    for path in root.glob("SketchUp*"):
+        version = sketchup_version_from_name(path.name)
+        if version is None:
+            continue
+        if path.suffix == ".app" and path.is_dir():
+            versions.add(version)
+            continue
+        if path.is_dir() and (path / "SketchUp.app").is_dir():
+            versions.add(version)
+
+    return sorted(versions, key=version_sort_value, reverse=True)
+
+
+def sketchup_plugins_dir_for_version(home: str | Path, version: str) -> Path:
+    """Return the canonical macOS Plugins directory for one SketchUp version."""
+    return (
         Path(home).expanduser()
-        if home is not None
-        else Path.home()
-    ) / "Library" / "Application Support"
+        / "Library"
+        / "Application Support"
+        / f"SketchUp {version}"
+        / "SketchUp"
+        / "Plugins"
+    )
+
+
+def installed_sketchup_plugin_dirs(
+    home: str | Path | None = None,
+    applications_dir: str | Path = "/Applications",
+) -> list[Path]:
+    """Return detected macOS SketchUp plugin directories, newest first."""
+    home_path = Path(home).expanduser() if home is not None else Path.home()
+    app_support = home_path / "Library" / "Application Support"
     candidates: list[Path] = []
 
     for app_dir in app_support.glob("SketchUp *"):
@@ -60,38 +112,37 @@ def installed_sketchup_plugin_dirs(home: str | Path | None = None) -> list[Path]
             if plugins_dir.exists():
                 candidates.append(plugins_dir)
 
-    return sorted(candidates, key=lambda path: path.parent.parent.name, reverse=True)
+    installed_versions = installed_sketchup_app_versions(applications_dir)
+    installed_rank = {version: index for index, version in enumerate(installed_versions)}
+
+    def sort_key(path: Path) -> tuple[int, int, int, str]:
+        version = sketchup_version_from_name(path.parent.parent.name)
+        if version in installed_rank:
+            return (0, installed_rank[version], 0, str(path))
+        return (1, 0, -version_sort_value(version), str(path))
+
+    return sorted(candidates, key=sort_key)
 
 
 def default_plugins_dir(
     sketchup_version: str | None = None,
     home: str | Path | None = None,
+    applications_dir: str | Path = "/Applications",
 ) -> Path:
     """Return the target SketchUp Plugins directory for macOS."""
     home_path = Path(home).expanduser() if home is not None else Path.home()
     if sketchup_version:
-        return (
-            home_path
-            / "Library"
-            / "Application Support"
-            / f"SketchUp {sketchup_version}"
-            / "SketchUp"
-            / "Plugins"
-        )
+        return sketchup_plugins_dir_for_version(home_path, sketchup_version)
 
-    detected = installed_sketchup_plugin_dirs(home_path)
+    app_versions = installed_sketchup_app_versions(applications_dir)
+    if app_versions:
+        return sketchup_plugins_dir_for_version(home_path, app_versions[0])
+
+    detected = installed_sketchup_plugin_dirs(home_path, applications_dir)
     if detected:
         return detected[0]
 
-    return (
-        home_path
-        / "Library"
-        / "Application Support"
-        / "SketchUp"
-        / "SketchUp 2024"
-        / "SketchUp"
-        / "Plugins"
-    )
+    return sketchup_plugins_dir_for_version(home_path, "2024")
 
 
 def bridge_loader_content() -> str:

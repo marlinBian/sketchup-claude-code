@@ -10,8 +10,10 @@ from mcp_server.bridge_install import (
     bridge_loader_content,
     default_plugins_dir,
     install_bridge,
+    installed_sketchup_app_versions,
     installed_sketchup_plugin_dirs,
     packaged_bridge_source,
+    sketchup_version_from_name,
 )
 from mcp_server.cli import main
 
@@ -33,6 +35,59 @@ def test_default_plugins_dir_uses_requested_sketchup_version(tmp_path):
         / "Library"
         / "Application Support"
         / "SketchUp 2025"
+        / "SketchUp"
+        / "Plugins"
+    )
+
+
+def test_sketchup_version_from_name_extracts_year():
+    assert sketchup_version_from_name("SketchUp 2024") == "2024"
+    assert sketchup_version_from_name("SketchUp 2025.app") == "2025"
+    assert sketchup_version_from_name("SketchUp") is None
+
+
+def test_installed_sketchup_app_versions_detects_app_layouts(tmp_path):
+    applications_dir = tmp_path / "Applications"
+    (applications_dir / "SketchUp 2024" / "SketchUp.app").mkdir(parents=True)
+    (applications_dir / "SketchUp 2025.app").mkdir(parents=True)
+    (applications_dir / "SketchUp Viewer.app").mkdir(parents=True)
+
+    assert installed_sketchup_app_versions(applications_dir) == ["2025", "2024"]
+
+
+def test_default_plugins_dir_prefers_installed_app_over_stale_plugin_dir(tmp_path):
+    applications_dir = tmp_path / "Applications"
+    (applications_dir / "SketchUp 2024" / "SketchUp.app").mkdir(parents=True)
+    stale_plugins_dir = (
+        tmp_path
+        / "Library"
+        / "Application Support"
+        / "SketchUp 2026"
+        / "SketchUp"
+        / "Plugins"
+    )
+    stale_plugins_dir.mkdir(parents=True)
+
+    path = default_plugins_dir(home=tmp_path, applications_dir=applications_dir)
+
+    assert path == (
+        tmp_path
+        / "Library"
+        / "Application Support"
+        / "SketchUp 2024"
+        / "SketchUp"
+        / "Plugins"
+    )
+
+
+def test_default_plugins_dir_falls_back_to_canonical_2024_path(tmp_path):
+    path = default_plugins_dir(home=tmp_path, applications_dir=tmp_path / "missing")
+
+    assert path == (
+        tmp_path
+        / "Library"
+        / "Application Support"
+        / "SketchUp 2024"
         / "SketchUp"
         / "Plugins"
     )
@@ -66,6 +121,34 @@ def test_installed_sketchup_plugin_dirs_detects_existing_dirs(tmp_path):
     newer.mkdir(parents=True)
 
     assert installed_sketchup_plugin_dirs(tmp_path) == [newer, older]
+
+
+def test_installed_sketchup_plugin_dirs_prefers_installed_app_version(tmp_path):
+    applications_dir = tmp_path / "Applications"
+    (applications_dir / "SketchUp 2024" / "SketchUp.app").mkdir(parents=True)
+    stale_newer = (
+        tmp_path
+        / "Library"
+        / "Application Support"
+        / "SketchUp 2026"
+        / "SketchUp"
+        / "Plugins"
+    )
+    installed_app_plugins = (
+        tmp_path
+        / "Library"
+        / "Application Support"
+        / "SketchUp 2024"
+        / "SketchUp"
+        / "Plugins"
+    )
+    stale_newer.mkdir(parents=True)
+    installed_app_plugins.mkdir(parents=True)
+
+    assert installed_sketchup_plugin_dirs(
+        tmp_path,
+        applications_dir=applications_dir,
+    ) == [installed_app_plugins, stale_newer]
 
 
 def test_installed_sketchup_plugin_dirs_detects_legacy_layout(tmp_path):
