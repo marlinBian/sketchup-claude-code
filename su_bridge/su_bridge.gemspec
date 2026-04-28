@@ -5,5 +5,6 @@ Gem::Specification.new do |spec|
   spec.description = "Ruby plugin providing bidirectional communication between SketchUp Agent Harness and SketchUp"
   spec.authors = ["SketchUp Agent Harness Team"]
   spec.files = Dir.glob("lib/**/*.rb")
+  spec.add_dependency "matrix", "~> 0.4"
   spec.add_development_dependency "rspec", "~> 3.13"
 end

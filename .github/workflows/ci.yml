@@ -20,9 +20,8 @@ jobs:
 
       - name: Check Ruby syntax
         run: |
-          for f in su_bridge/lib/su_bridge/**/*.rb su_bridge/spec/**/*.rb; do
-            ruby -c "$f" || exit 1
-          done
+          find su_bridge/lib su_bridge/spec -name '*.rb' -print0 \
+            | xargs -0 -n1 ruby -c
 
   python-syntax:
     name: Python Syntax Check
@@ -37,8 +36,8 @@ jobs:
 
       - name: Check Python syntax
         run: |
-          python3 -m py_compile mcp_server/mcp_server/**/*.py
-          python3 -m py_compile mcp_server/tests/**/*.py
+          find mcp_server/mcp_server mcp_server/tests -name '*.py' -print0 \
+            | xargs -0 python3 -m py_compile
 
   python-tests:
     name: Python Tests
