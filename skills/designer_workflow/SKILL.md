@@ -33,6 +33,12 @@ If these files are missing, tell the user to initialize the project with:
 sketchup-agent init <project-path> --template bathroom
 ```
 
+If the user asks whether setup is healthy, guide them to run:
+
+```bash
+sketchup-agent doctor <project-path> --sketchup-version 2024
+```
+
 During source development, the equivalent command is:
 
 ```bash

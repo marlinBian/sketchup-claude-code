@@ -22,13 +22,19 @@ cd ~/Design/my-bathroom
 ```
 
 The project directory now owns `design_model.json`, `design_rules.json`,
-`assets.lock.json`, the `assets/components/` cache directory, and
-`snapshots/manifest.json`.
+`assets.lock.json`, `.mcp.json`, `AGENTS.md`, `CLAUDE.md`, the
+`assets/components/` cache directory, and `snapshots/manifest.json`.
 
 Validate the generated project:
 
 ```bash
-uv run --extra dev sketchup-agent validate ~/Design/my-bathroom
+sketchup-agent validate ~/Design/my-bathroom
+```
+
+Check the local harness and project state:
+
+```bash
+sketchup-agent doctor ~/Design/my-bathroom --sketchup-version 2024
 ```
 
 ## 2. Start SketchUp Bridge
@@ -36,8 +42,7 @@ uv run --extra dev sketchup-agent validate ~/Design/my-bathroom
 Quit SketchUp, then install the Ruby bridge into SketchUp:
 
 ```bash
-cd mcp_server
-uv run --extra dev sketchup-agent install-bridge --sketchup-version 2024 --force
+sketchup-agent install-bridge --sketchup-version 2024 --force
 ```
 
 Open SketchUp after installation. The installed `su_bridge.rb` loader starts

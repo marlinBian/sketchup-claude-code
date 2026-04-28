@@ -43,6 +43,8 @@ Check that the project contains:
 - `design_rules.json`
 - `assets.lock.json`
 - `.mcp.json`
+- `AGENTS.md`
+- `CLAUDE.md`
 - `snapshots/`
 - `snapshots/manifest.json`
 

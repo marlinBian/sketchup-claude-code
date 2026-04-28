@@ -4,8 +4,9 @@ import argparse
 import json
 import sys
 
-from mcp_server.project_init import init_project
 from mcp_server.bridge_install import install_bridge
+from mcp_server.doctor import run_doctor
+from mcp_server.project_init import init_project
 from mcp_server.smoke import DEFAULT_SMOKE_PROJECT, run_smoke, validate_project
 
 
@@ -89,6 +90,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show the target paths without copying files.",
     )
 
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="Check harness install, project files, and SketchUp bridge state",
+    )
+    doctor_parser.add_argument(
+        "project_path",
+        nargs="?",
+        help="Optional design project directory to validate",
+    )
+    doctor_parser.add_argument(
+        "--plugins-dir",
+        help="SketchUp Plugins directory to check.",
+    )
+    doctor_parser.add_argument(
+        "--sketchup-version",
+        help="SketchUp version for the default macOS Plugins path, for example 2024.",
+    )
+    doctor_parser.add_argument(
+        "--socket-path",
+        default="/tmp/su_bridge.sock",
+        help="SketchUp bridge socket path.",
+    )
+
     return parser
 
 
@@ -130,6 +154,15 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
+        if args.command == "doctor":
+            result = run_doctor(
+                project_path=args.project_path,
+                plugins_dir=args.plugins_dir,
+                sketchup_version=args.sketchup_version,
+                socket_path=args.socket_path,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result["ok"] else 1
     except Exception as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1

@@ -20,6 +20,8 @@ from mcp_server.resources.snapshot_manifest_schema import create_empty_snapshot_
 from mcp_server.tools.bathroom_planner import plan_bathroom_project, save_bathroom_plan
 
 PROJECT_MCP_FILENAME = ".mcp.json"
+PROJECT_CODEX_GUIDANCE_FILENAME = "AGENTS.md"
+PROJECT_CLAUDE_GUIDANCE_FILENAME = "CLAUDE.md"
 
 
 def write_json(path: Path, data: dict[str, Any], overwrite: bool) -> None:
@@ -27,6 +29,13 @@ def write_json(path: Path, data: dict[str, Any], overwrite: bool) -> None:
     if path.exists() and not overwrite:
         raise FileExistsError(f"Refusing to overwrite existing file: {path}")
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def write_text(path: Path, content: str, overwrite: bool) -> None:
+    """Write a text file unless it exists and overwrite is disabled."""
+    if path.exists() and not overwrite:
+        raise FileExistsError(f"Refusing to overwrite existing file: {path}")
+    path.write_text(content, encoding="utf-8")
 
 
 def default_assets_lock() -> dict[str, Any]:
@@ -43,6 +52,50 @@ def default_project_mcp_config() -> dict[str, Any]:
             }
         }
     }
+
+
+def default_project_guidance(project_name: str) -> str:
+    """Return project-local runtime guidance for agent CLIs."""
+    return f"""# {project_name}
+
+This is a SketchUp Agent Harness design project.
+
+## Runtime Rules
+
+- Use `design_model.json` as the source of truth for structured project state.
+- Use `design_rules.json` for project-specific ergonomic preferences and
+  clearance rules.
+- Use `assets.lock.json` before relying on component assets.
+- Use `/tmp/su_bridge.sock` only as the live SketchUp execution bridge; SketchUp
+  is the rendered/executed view, not the source of truth.
+- Prefer MCP tools over manual JSON edits when tools exist.
+- Use millimeters for dimensions and coordinates.
+- Treat packaged component fallback boxes as placeholders, not final production
+  assets.
+- Do not claim legal code compliance from seed ergonomic rules.
+
+## First Supported Slice
+
+For a small bathroom, prefer:
+
+1. `plan_bathroom` to create or review structured state and validation.
+2. `execute_bathroom_plan` only when SketchUp is open and the bridge socket is
+   available.
+3. `validate_design_project` after project files change.
+
+## Useful Inspection Tools
+
+- `get_project_state`
+- `list_project_components`
+- `validate_design_project`
+- `get_design_rules`
+- `search_components`
+- `get_component_manifest`
+
+Chinese natural-language prompts are supported as user input, but project file
+keys, schema fields, component IDs, and implementation-facing names should stay
+English-first.
+"""
 
 
 def init_project(
@@ -79,6 +132,8 @@ def init_project(
 
     assets_lock_path = root / ASSETS_LOCK_FILENAME
     mcp_config_path = root / PROJECT_MCP_FILENAME
+    codex_guidance_path = root / PROJECT_CODEX_GUIDANCE_FILENAME
+    claude_guidance_path = root / PROJECT_CLAUDE_GUIDANCE_FILENAME
     assets_cache = assets_cache_path(root)
     snapshots_dir = snapshots_path(root)
     snapshot_manifest = snapshot_manifest_path(root)
@@ -90,6 +145,8 @@ def init_project(
     if not snapshot_manifest.exists() or overwrite:
         write_json(snapshot_manifest, create_empty_snapshot_manifest(), overwrite)
     write_json(mcp_config_path, default_project_mcp_config(), overwrite)
+    write_text(codex_guidance_path, default_project_guidance(name), overwrite)
+    write_text(claude_guidance_path, default_project_guidance(name), overwrite)
 
     return {
         "project_path": str(root),
@@ -101,6 +158,8 @@ def init_project(
             "assets_lock": str(assets_lock_path),
             "assets_cache": str(assets_cache),
             "mcp_config": str(mcp_config_path),
+            "codex_guidance": str(codex_guidance_path),
+            "claude_guidance": str(claude_guidance_path),
             "snapshots": str(snapshots_dir),
             "snapshot_manifest": str(snapshot_manifest),
         },

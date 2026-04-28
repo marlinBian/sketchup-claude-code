@@ -5,7 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from mcp_server.project_init import init_project
+from mcp_server.project_init import (
+    PROJECT_CLAUDE_GUIDANCE_FILENAME,
+    PROJECT_CODEX_GUIDANCE_FILENAME,
+    init_project,
+)
 from mcp_server.resources.asset_lock_schema import load_assets_lock
 from mcp_server.resources.design_model_schema import load_design_model
 from mcp_server.resources.design_rules_schema import load_design_rules
@@ -116,6 +120,20 @@ def validate_project(project_path: str | Path) -> dict[str, Any]:
             manifest_errors if snapshot_dir.is_dir() else ["Snapshots directory is missing."],
         )
     )
+
+    for filename, check_name in (
+        (PROJECT_CODEX_GUIDANCE_FILENAME, "codex_guidance"),
+        (PROJECT_CLAUDE_GUIDANCE_FILENAME, "claude_guidance"),
+    ):
+        guidance_file = root / filename
+        checks.append(
+            check_result(
+                check_name,
+                guidance_file.exists(),
+                {"path": str(guidance_file)},
+                [] if guidance_file.exists() else [f"{filename} is missing."],
+            )
+        )
 
     if design_model is not None and assets_lock is not None:
         refs = component_refs_from_model(design_model)

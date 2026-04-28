@@ -37,6 +37,8 @@ This creates:
 - `assets.lock.json`
 - `assets/components/`
 - `.mcp.json`
+- `AGENTS.md`
+- `CLAUDE.md`
 - `snapshots/`
 - `snapshots/manifest.json`
 
@@ -83,18 +85,17 @@ through `.codex-plugin/plugin.json` and `.mcp.json`.
 
 ## SketchUp Ruby Bridge
 
-Quit SketchUp first, then install or update the bridge from the source checkout:
+Quit SketchUp first, then install or update the bridge from the installed
+package:
 
 ```bash
-cd mcp_server
-uv run --extra dev sketchup-agent install-bridge --sketchup-version 2024 --force
+sketchup-agent install-bridge --sketchup-version 2024 --force
 ```
 
 To inspect the target path first:
 
 ```bash
-cd mcp_server
-uv run --extra dev sketchup-agent install-bridge --sketchup-version 2024 --dry-run
+sketchup-agent install-bridge --sketchup-version 2024 --dry-run
 ```
 
 The installer copies the `su_bridge/` runtime folder and writes a
@@ -102,6 +103,10 @@ The installer copies the `su_bridge/` runtime folder and writes a
 file on startup, so opening SketchUp should start the bridge automatically. On
 macOS, the installer also enables `su_bridge.rb` in SketchUp's private extension
 preferences when that preferences file already exists.
+
+The installed Python package includes the Ruby bridge runtime, so designers do
+not need a source checkout for this command. Maintainers running from the source
+tree can use the same command through `uv run --extra dev sketchup-agent ...`.
 
 When `--force` replaces an existing install, the previous `su_bridge/` folder
 and `su_bridge.rb` loader are moved to timestamped `*.backup-*` paths in the
@@ -145,6 +150,14 @@ Validate a project workspace:
 ```bash
 cd mcp_server
 uv run --extra dev sketchup-agent validate /tmp/sah-bathroom
+```
+
+Check the installed commands, project files, SketchUp bridge install, and live
+socket:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent doctor /tmp/sah-bathroom --sketchup-version 2024
 ```
 
 Run the local smoke check without SketchUp:

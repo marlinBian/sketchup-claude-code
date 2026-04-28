@@ -1,6 +1,9 @@
 """Tests for SketchUp Ruby bridge installation helpers."""
 
 import json
+import shutil
+import subprocess
+import zipfile
 from pathlib import Path
 
 from mcp_server.bridge_install import (
@@ -8,6 +11,7 @@ from mcp_server.bridge_install import (
     default_plugins_dir,
     install_bridge,
     installed_sketchup_plugin_dirs,
+    packaged_bridge_source,
 )
 from mcp_server.cli import main
 
@@ -32,6 +36,13 @@ def test_default_plugins_dir_uses_requested_sketchup_version(tmp_path):
         / "SketchUp"
         / "Plugins"
     )
+
+
+def test_packaged_bridge_source_points_to_installed_runtime():
+    source = packaged_bridge_source()
+
+    assert source.name == "su_bridge"
+    assert source.parent.name == "packaged"
 
 
 def test_installed_sketchup_plugin_dirs_detects_existing_dirs(tmp_path):
@@ -229,3 +240,33 @@ def test_bridge_loader_content_loads_installed_bridge():
     assert "Sketchup.register_extension" in content
     assert "require bridge_path" in content
     assert "SuBridge.start" in content
+
+
+def test_wheel_contains_packaged_bridge_runtime(tmp_path):
+    if shutil.which("uv") is None:
+        return
+
+    project_root = Path(__file__).resolve().parents[1]
+    dist_dir = tmp_path / "dist"
+    subprocess.run(
+        [
+            "uv",
+            "build",
+            "--wheel",
+            "--out-dir",
+            str(dist_dir),
+            str(project_root),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    wheel = next(dist_dir.glob("*.whl"))
+
+    with zipfile.ZipFile(wheel) as archive:
+        names = set(archive.namelist())
+
+    assert "mcp_server/packaged/su_bridge/lib/su_bridge.rb" in names
+    assert "mcp_server/packaged/su_bridge/lib/su_bridge/command_dispatcher.rb" in names
+    assert not any("/vendor/" in name for name in names)
+    assert not any("mcp_server/packaged/su_bridge/spec/" in name for name in names)

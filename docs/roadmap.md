@@ -106,6 +106,8 @@ Goal: make normal designer use independent of the source checkout.
 - expose runtime skills through supported plugin/skill mechanisms
 - install or update the SketchUp Ruby bridge
 - add `sketchup-agent install-bridge` with a SketchUp startup loader
+- package the Ruby bridge runtime with the MCP wheel so designers do not need a
+  source checkout to install the bridge
 - document cleanup and rollback
 
 Acceptance:
@@ -159,6 +161,7 @@ Goal: make maintainers and early users verify the harness without remembering
 scattered commands.
 
 - add `sketchup-agent validate <project-path>`
+- add `sketchup-agent doctor [project-path]`
 - add `sketchup-agent smoke [project-path] --force`
 - add plugin startup smoke for `mcp_server/start.sh`
 - keep the default smoke headless so it works without SketchUp

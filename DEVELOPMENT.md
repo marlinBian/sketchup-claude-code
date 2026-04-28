@@ -70,6 +70,20 @@ cd mcp_server
 uv run --extra dev sketchup-agent install-bridge --sketchup-version 2024 --dry-run
 ```
 
+Doctor check:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent doctor /tmp/sah-bathroom --sketchup-version 2024
+```
+
+Wheel packaging check:
+
+```bash
+cd mcp_server
+uv build --wheel --out-dir /tmp/sah-dist --clear
+```
+
 ## Integration Tests
 
 Live integration tests require SketchUp with the installed bridge loader running

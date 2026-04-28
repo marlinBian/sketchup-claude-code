@@ -75,6 +75,20 @@ jobs:
           cd mcp_server
           uv run --extra dev sketchup-agent install-bridge --plugins-dir /tmp/sah-plugins --dry-run
 
+      - name: Build package wheel
+        run: |
+          cd mcp_server
+          uv build --wheel --out-dir /tmp/sah-dist --clear
+
+      - name: Check installed wheel bridge runtime
+        run: |
+          python3 -m venv /tmp/sah-wheel-venv
+          /tmp/sah-wheel-venv/bin/pip install /tmp/sah-dist/*.whl
+          /tmp/sah-wheel-venv/bin/sketchup-agent install-bridge --plugins-dir /tmp/sah-wheel-plugins --dry-run
+          /tmp/sah-wheel-venv/bin/sketchup-agent install-bridge --plugins-dir /tmp/sah-wheel-plugins
+          test -f /tmp/sah-wheel-plugins/su_bridge/lib/su_bridge.rb
+          test -f /tmp/sah-wheel-plugins/su_bridge.rb
+
   ruby-tests:
     name: Ruby Tests
     runs-on: ubuntu-latest

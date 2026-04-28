@@ -67,6 +67,20 @@ cd mcp_server
 uv run --extra dev sketchup-agent install-bridge --sketchup-version 2024 --dry-run
 ```
 
+Doctor check:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent doctor /tmp/sah-smoke --sketchup-version 2024
+```
+
+Package wheel smoke:
+
+```bash
+cd mcp_server
+uv build --wheel --out-dir /tmp/sah-dist --clear
+```
+
 Python baseline tests, excluding live SketchUp integration tests:
 
 ```bash

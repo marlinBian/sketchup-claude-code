@@ -26,7 +26,15 @@ def repo_root_from_package() -> Path:
 
 def default_bridge_source() -> Path:
     """Return the default bridge source directory."""
-    return repo_root_from_package() / "su_bridge"
+    repo_source = repo_root_from_package() / "su_bridge"
+    if repo_source.exists():
+        return repo_source
+    return packaged_bridge_source()
+
+
+def packaged_bridge_source() -> Path:
+    """Return the packaged bridge runtime directory from an installed wheel."""
+    return Path(__file__).resolve().parent / "packaged" / "su_bridge"
 
 
 def installed_sketchup_plugin_dirs(home: str | Path | None = None) -> list[Path]:

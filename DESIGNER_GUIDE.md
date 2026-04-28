@@ -16,6 +16,9 @@ my-design-project/
   design_model.json
   design_rules.json
   assets.lock.json
+  .mcp.json
+  AGENTS.md
+  CLAUDE.md
   assets/
     components/
   model.skp
