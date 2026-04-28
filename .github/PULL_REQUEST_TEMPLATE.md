@@ -23,6 +23,8 @@
   `cd mcp_server && uv run --extra dev sketchup-agent smoke /tmp/sah-pr-smoke --force`
 - [ ] Release smoke:
   `cd mcp_server && uv run --extra dev sketchup-agent release-check`
+- [ ] Installed wheel smoke, when install or packaging changed:
+  `cd mcp_server && uv run --extra dev sketchup-agent release-check --with-wheel`
 - [ ] MCP startup: `./mcp_server/start.sh --startup-check`
 - [ ] Ruby tests: `cd su_bridge && bundle exec rspec spec/ --format progress`
 - [ ] Markdown lint: `npx markdownlint-cli2`

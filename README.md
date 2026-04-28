@@ -61,6 +61,13 @@ cd mcp_server
 uv run --extra dev sketchup-agent release-check
 ```
 
+Installed wheel release smoke:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent release-check --with-wheel
+```
+
 Plugin startup smoke:
 
 ```bash

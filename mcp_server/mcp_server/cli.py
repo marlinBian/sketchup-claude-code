@@ -309,6 +309,31 @@ def build_parser() -> argparse.ArgumentParser:
         default="/tmp/sah-release-plugins",
         help="Temporary Plugins directory for bridge install dry run.",
     )
+    release_parser.add_argument(
+        "--with-wheel",
+        action="store_true",
+        help="Also build and verify an installed wheel in a temporary venv.",
+    )
+    release_parser.add_argument(
+        "--wheel-dist-dir",
+        default="/tmp/sah-release-dist",
+        help="Temporary wheel output directory used with --with-wheel.",
+    )
+    release_parser.add_argument(
+        "--wheel-venv-dir",
+        default="/tmp/sah-release-wheel-venv",
+        help="Temporary venv directory used with --with-wheel.",
+    )
+    release_parser.add_argument(
+        "--wheel-project-path",
+        default="/tmp/sah-release-wheel-project",
+        help="Temporary installed-package project path used with --with-wheel.",
+    )
+    release_parser.add_argument(
+        "--wheel-plugins-dir",
+        default="/tmp/sah-release-wheel-plugins",
+        help="Temporary installed-package Plugins directory used with --with-wheel.",
+    )
 
     return parser
 
@@ -432,6 +457,11 @@ def main(argv: list[str] | None = None) -> int:
             result = run_release_check(
                 project_path=args.project_path,
                 plugins_dir=args.plugins_dir,
+                include_wheel=args.with_wheel,
+                wheel_dist_dir=args.wheel_dist_dir,
+                wheel_venv_dir=args.wheel_venv_dir,
+                wheel_project_path=args.wheel_project_path,
+                wheel_plugins_dir=args.wheel_plugins_dir,
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result["ok"] else 1

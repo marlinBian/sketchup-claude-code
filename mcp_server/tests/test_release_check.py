@@ -1,11 +1,14 @@
 """Tests for release smoke checks."""
 
 import json
+import sys
 
 from mcp_server.release_check import (
+    _run_command,
     bridge_install_dry_run_check,
     manifest_json_check,
     run_release_check,
+    wheel_install_check,
 )
 
 
@@ -25,6 +28,33 @@ def test_bridge_install_dry_run_check_does_not_install(tmp_path):
     assert not (tmp_path / "Plugins" / "su_bridge").exists()
 
 
+def test_wheel_install_check_reports_missing_uv(monkeypatch, tmp_path):
+    monkeypatch.setattr("mcp_server.release_check.shutil.which", lambda command: None)
+
+    result = wheel_install_check(
+        dist_dir=tmp_path / "dist",
+        venv_dir=tmp_path / "venv",
+        project_path=tmp_path / "project",
+        plugins_dir=tmp_path / "Plugins",
+    )
+
+    assert result["ok"] is False
+    assert result["name"] == "wheel_install"
+    assert "uv is not available" in result["errors"][0]
+
+
+def test_run_command_marks_truncated_output():
+    result = _run_command(
+        [sys.executable, "-c", "print('a' * 4500); print('tail-marker')"]
+    )
+
+    assert result["ok"] is True
+    assert result["stdout_truncated"] is True
+    assert "truncated" in result["stdout"]
+    assert "tail-marker" in result["stdout"]
+    assert len(result["stdout"]) < 4300
+
+
 def test_run_release_check_uses_shared_smoke_paths(tmp_path):
     result = run_release_check(
         project_path=tmp_path / "release-project",
@@ -41,6 +71,7 @@ def test_run_release_check_uses_shared_smoke_paths(tmp_path):
     }
     assert (tmp_path / "release-project" / "design_model.json").exists()
     assert not (tmp_path / "Plugins" / "su_bridge").exists()
+    assert all(check["name"] != "wheel_install" for check in result["checks"])
 
 
 def test_cli_release_check_outputs_json(tmp_path, capsys):

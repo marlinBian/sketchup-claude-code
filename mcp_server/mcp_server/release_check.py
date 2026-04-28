@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +20,7 @@ MANIFEST_PATHS = (
     ".codex-plugin/plugin.json",
     ".agents/plugins/marketplace.json",
 )
+MAX_COMMAND_OUTPUT_CHARS = 4000
 
 
 def _repo_root(repo_root: str | Path | None = None) -> Path:
@@ -69,24 +72,12 @@ def startup_check(repo_root: str | Path | None = None) -> dict[str, Any]:
     """Check the MCP startup script import path."""
     root = _repo_root(repo_root)
     command = [str(root / "mcp_server" / "start.sh"), "--startup-check"]
-    result = subprocess.run(
-        command,
-        cwd=root,
-        capture_output=True,
-        text=True,
-        timeout=60,
-        check=False,
-    )
+    result = _run_command(command, cwd=root, timeout=60)
     return check_result(
         "mcp_startup",
-        result.returncode == 0,
-        {
-            "command": command,
-            "returncode": result.returncode,
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-        },
-        [] if result.returncode == 0 else [result.stderr or result.stdout],
+        result["ok"],
+        result,
+        [] if result["ok"] else [result["stderr"] or result["stdout"]],
     )
 
 
@@ -128,10 +119,196 @@ def product_smoke_check(
     )
 
 
+def _run_command(
+    command: list[str],
+    cwd: str | Path | None = None,
+    timeout: int = 180,
+) -> dict[str, Any]:
+    """Run one release-check subprocess and return a compact result."""
+    result = subprocess.run(
+        command,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+    stdout = _compact_output(result.stdout)
+    stderr = _compact_output(result.stderr)
+    return {
+        "command": command,
+        "cwd": str(cwd) if cwd else None,
+        "returncode": result.returncode,
+        "stdout": stdout["output"],
+        "stderr": stderr["output"],
+        "stdout_truncated": stdout["truncated"],
+        "stderr_truncated": stderr["truncated"],
+        "ok": result.returncode == 0,
+    }
+
+
+def _compact_output(output: str) -> dict[str, Any]:
+    """Keep release-check command output readable in JSON reports."""
+    if len(output) <= MAX_COMMAND_OUTPUT_CHARS:
+        return {"output": output, "truncated": False}
+    omitted = len(output) - MAX_COMMAND_OUTPUT_CHARS
+    head_chars = MAX_COMMAND_OUTPUT_CHARS // 3
+    tail_chars = MAX_COMMAND_OUTPUT_CHARS - head_chars
+    compacted = (
+        output[:head_chars]
+        + f"\n... truncated {omitted} characters ...\n"
+        + output[-tail_chars:]
+    )
+    return {"output": compacted, "truncated": True}
+
+
+def wheel_install_check(
+    repo_root: str | Path | None = None,
+    dist_dir: str | Path = "/tmp/sah-release-dist",
+    venv_dir: str | Path = "/tmp/sah-release-wheel-venv",
+    project_path: str | Path = "/tmp/sah-release-wheel-project",
+    plugins_dir: str | Path = "/tmp/sah-release-wheel-plugins",
+) -> dict[str, Any]:
+    """Build the wheel and verify installed-package project and bridge paths."""
+    root = _repo_root(repo_root)
+    package_root = root / "mcp_server"
+    dist = Path(dist_dir).expanduser().resolve()
+    venv = Path(venv_dir).expanduser().resolve()
+    project = Path(project_path).expanduser().resolve()
+    plugins = Path(plugins_dir).expanduser().resolve()
+    commands: list[dict[str, Any]] = []
+    errors: list[str] = []
+
+    if shutil.which("uv") is None:
+        return check_result(
+            "wheel_install",
+            False,
+            {"error": "uv is not available on PATH."},
+            ["uv is not available on PATH."],
+        )
+
+    if venv.exists():
+        shutil.rmtree(venv)
+
+    build = _run_command(
+        [
+            "uv",
+            "build",
+            "--wheel",
+            "--out-dir",
+            str(dist),
+            "--clear",
+            str(package_root),
+        ],
+        cwd=root,
+        timeout=240,
+    )
+    commands.append(build)
+    if not build["ok"]:
+        errors.append(build["stderr"] or build["stdout"])
+
+    wheels = sorted(dist.glob("*.whl"))
+    if not wheels:
+        errors.append(f"No wheel produced in {dist}.")
+    wheel_path = wheels[-1] if wheels else None
+
+    if not errors:
+        create_venv = _run_command(
+            [sys.executable, "-m", "venv", str(venv)],
+            cwd=root,
+        )
+        commands.append(create_venv)
+        if not create_venv["ok"]:
+            errors.append(create_venv["stderr"] or create_venv["stdout"])
+
+    pip = venv / "bin" / "pip"
+    agent = venv / "bin" / "sketchup-agent"
+    if not errors and wheel_path is not None:
+        install = _run_command(
+            [str(pip), "install", str(wheel_path)],
+            cwd=root,
+            timeout=240,
+        )
+        commands.append(install)
+        if not install["ok"]:
+            errors.append(install["stderr"] or install["stdout"])
+
+    installed_commands = [
+        [
+            str(agent),
+            "install-bridge",
+            "--plugins-dir",
+            str(plugins),
+            "--dry-run",
+        ],
+        [
+            str(agent),
+            "install-bridge",
+            "--plugins-dir",
+            str(plugins),
+            "--force",
+        ],
+        [
+            str(agent),
+            "init",
+            str(project),
+            "--template",
+            "bathroom",
+            "--force",
+        ],
+        [str(agent), "validate", str(project)],
+        [
+            str(agent),
+            "install-skills",
+            str(project),
+            "--target",
+            "all",
+            "--dry-run",
+        ],
+    ]
+    if not errors:
+        for command in installed_commands:
+            command_result = _run_command(command, cwd=root, timeout=180)
+            commands.append(command_result)
+            if not command_result["ok"]:
+                errors.append(command_result["stderr"] or command_result["stdout"])
+                break
+
+    expected_files = [
+        plugins / "su_bridge" / "lib" / "su_bridge.rb",
+        plugins / "su_bridge.rb",
+        project / ".agents" / "skills" / "bathroom_planning" / "SKILL.md",
+        project / ".claude" / "skills" / "bathroom_planning" / "SKILL.md",
+    ]
+    if not errors:
+        missing_files = [str(path) for path in expected_files if not path.exists()]
+        if missing_files:
+            errors.append(f"Missing installed files: {missing_files}")
+
+    return check_result(
+        "wheel_install",
+        not errors,
+        {
+            "dist_dir": str(dist),
+            "venv_dir": str(venv),
+            "project_path": str(project),
+            "plugins_dir": str(plugins),
+            "wheel": str(wheel_path) if wheel_path else None,
+            "commands": commands,
+        },
+        errors,
+    )
+
+
 def run_release_check(
     project_path: str | Path = "/tmp/sah-release-check",
     plugins_dir: str | Path = "/tmp/sah-release-plugins",
     repo_root: str | Path | None = None,
+    include_wheel: bool = False,
+    wheel_dist_dir: str | Path = "/tmp/sah-release-dist",
+    wheel_venv_dir: str | Path = "/tmp/sah-release-wheel-venv",
+    wheel_project_path: str | Path = "/tmp/sah-release-wheel-project",
+    wheel_plugins_dir: str | Path = "/tmp/sah-release-wheel-plugins",
 ) -> dict[str, Any]:
     """Run deterministic release checks that do not require SketchUp UI."""
     root = _repo_root(repo_root)
@@ -141,10 +318,21 @@ def run_release_check(
         product_smoke_check(project_path),
         bridge_install_dry_run_check(plugins_dir),
     ]
+    if include_wheel:
+        checks.append(
+            wheel_install_check(
+                repo_root=root,
+                dist_dir=wheel_dist_dir,
+                venv_dir=wheel_venv_dir,
+                project_path=wheel_project_path,
+                plugins_dir=wheel_plugins_dir,
+            )
+        )
     return {
         "repo_root": str(root),
         "project_path": str(Path(project_path).expanduser().resolve()),
         "plugins_dir": str(Path(plugins_dir).expanduser().resolve()),
+        "include_wheel": include_wheel,
         "ok": all(check["ok"] for check in checks),
         "checks": checks,
     }
