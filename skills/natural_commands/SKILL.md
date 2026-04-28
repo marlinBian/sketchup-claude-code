@@ -43,6 +43,9 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
   Use `apply_style`.
 - Capture view: "take a snapshot", "截图".
   Use `capture_project_snapshot` when a project path is available.
+- Prepare render prompt: "render this view", "生成一张效果图".
+  Use `prepare_render_brief` before calling an image or rendering tool so the
+  generated prompt preserves project geometry and snapshot provenance.
 - Record rendered image: "save this render", "记录这张渲染图".
   Use `record_render_artifact` to preserve renderer/model provenance before
   interpreting the image as feedback.

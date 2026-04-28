@@ -71,6 +71,7 @@ Views, reporting, and versions:
 - `set_camera_view`
 - `capture_design`
 - `capture_project_snapshot`
+- `prepare_render_brief`
 - `record_render_artifact`
 - `record_visual_feedback`
 - `list_visual_feedback`
@@ -194,6 +195,23 @@ capture_project_snapshot(
     label="review"
 )
 ```
+
+### Prepare a Render Brief
+
+```python
+prepare_render_brief(
+    project_path="<project-path>",
+    render_goal="Create a warm minimal concept render.",
+    source_snapshot_id="<snapshot-id>",
+    renderer_tool="image_renderer",
+    renderer_model="image-2"
+)
+```
+
+Use this before a rendering or image generation call so the prompt is grounded
+in `design_model.json` and the source snapshot. After the renderer returns an
+image path or URL, call `record_render_artifact` with the generated prompt and
+renderer provenance.
 
 When the designer accepts or discusses a visual suggestion, record the
 interpretation as structured proposed actions before changing project truth:

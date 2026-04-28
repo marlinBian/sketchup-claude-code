@@ -116,6 +116,8 @@ Snapshot, render, and visual-feedback provenance is stored in
 `snapshots/manifest.json`.
 
 Use `record_render_artifact` for images produced by rendering or image
-generation tools. Use `record_visual_feedback` when a designer wants to convert
-visual observations into explicit component, lighting, material, style, rule, or
-note actions.
+generation tools. Use `prepare_render_brief` before rendering when an agent
+needs a prompt that preserves project geometry, source snapshot provenance, and
+renderer settings. Use `record_visual_feedback` when a designer wants to convert
+visual observations into explicit component, lighting, material, style, rule,
+or note actions.

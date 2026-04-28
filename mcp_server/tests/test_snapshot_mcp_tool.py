@@ -120,6 +120,63 @@ async def test_record_render_artifact_appends_advisory_render(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_prepare_render_brief_uses_project_truth_and_snapshot(
+    monkeypatch,
+    tmp_path,
+):
+    from mcp_server import server
+
+    init_project(tmp_path, template="bathroom")
+    bridge = FakeBridge()
+    monkeypatch.setattr(server, "SocketBridge", lambda: bridge)
+    snapshot_response = await server.capture_project_snapshot(
+        project_path=str(tmp_path),
+        view_preset="top",
+        label="render source",
+        width=1200,
+        height=800,
+    )
+    snapshot = json.loads(snapshot_response.text)["snapshot"]
+
+    response = await server.prepare_render_brief(
+        project_path=str(tmp_path),
+        render_goal="Create a warm minimal bathroom concept render.",
+        style_intent="warm minimal, light tile, soft indirect lighting",
+        source_snapshot_id=snapshot["id"],
+        renderer_tool="image_renderer",
+        renderer_model="image-2",
+        width=1024,
+        height=768,
+    )
+    data = json.loads(response.text)
+
+    assert data["advisory"] is True
+    assert data["source_snapshot"]["id"] == snapshot["id"]
+    assert data["renderer"]["model"] == "image-2"
+    assert data["dimensions"] == {"width": 1024, "height": 768}
+    assert "2000.0w x 1800.0d x 2400.0h mm" in data["prompt"]
+    assert "toilet_001" in data["prompt"]
+    assert data["record_render_artifact_hint"]["source_snapshot_id"] == snapshot["id"]
+
+
+@pytest.mark.asyncio
+async def test_prepare_render_brief_reports_missing_snapshot(tmp_path):
+    from mcp_server import server
+
+    init_project(tmp_path, template="bathroom")
+
+    response = await server.prepare_render_brief(
+        project_path=str(tmp_path),
+        render_goal="Create a review render.",
+        source_snapshot_id="missing_snapshot",
+    )
+    data = json.loads(response.text)
+
+    assert data["source_snapshot"] is None
+    assert "Snapshot not found: missing_snapshot" in data["warnings"]
+
+
+@pytest.mark.asyncio
 async def test_visual_feedback_can_be_listed_and_marked_applied(tmp_path):
     from mcp_server import server
 

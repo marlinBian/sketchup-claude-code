@@ -127,6 +127,12 @@ Use `capture_project_snapshot` when the user asks for a screenshot or visual
 review and a project path is available. Snapshot provenance is recorded in
 `snapshots/manifest.json`.
 
+Before asking a rendering or image generation tool to produce a derived visual,
+use `prepare_render_brief` to produce a prompt from `design_model.json`,
+effective project context, and the source snapshot. The brief must preserve the
+structured layout and should be passed through to `record_render_artifact` after
+the renderer returns an output path or URL.
+
 When a generated or external rendered image is produced from a snapshot, call
 `record_render_artifact` with the output path or URL, renderer tool/model,
 prompt, and source snapshot information. Rendered images remain advisory

@@ -75,6 +75,7 @@ from mcp_server.tools.project_executor import (
     build_project_execution_plan,
     execute_project_execution_plan,
 )
+from mcp_server.tools.render_brief import build_render_brief
 from mcp_server.tools.trace_executor import (
     execute_bridge_operations,
     sync_execution_report_to_design_model,
@@ -1825,6 +1826,39 @@ async def capture_project_snapshot(
         )
     finally:
         bridge.disconnect()
+
+
+@mcp.tool()
+async def prepare_render_brief(
+    project_path: str,
+    render_goal: str,
+    style_intent: str | None = None,
+    source_snapshot_id: str | None = None,
+    source_snapshot_file: str | None = None,
+    renderer_tool: str = "image_renderer",
+    renderer_model: str | None = None,
+    width: int = 1024,
+    height: int = 1024,
+) -> TextContent:
+    """Prepare a renderer prompt from project truth and snapshot provenance."""
+    try:
+        brief = build_render_brief(
+            project_path=project_path,
+            render_goal=render_goal,
+            style_intent=style_intent,
+            source_snapshot_id=source_snapshot_id,
+            source_snapshot_file=source_snapshot_file,
+            renderer_tool=renderer_tool,
+            renderer_model=renderer_model,
+            width=width,
+            height=height,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(brief, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Render brief failed: {str(e)}")
 
 
 @mcp.tool()
