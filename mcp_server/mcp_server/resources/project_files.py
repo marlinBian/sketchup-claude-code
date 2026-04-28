@@ -6,6 +6,7 @@ DESIGN_MODEL_FILENAME = "design_model.json"
 LEGACY_DESIGN_MODEL_FILENAME = ".design_model.json"
 DESIGN_RULES_FILENAME = "design_rules.json"
 ASSETS_LOCK_FILENAME = "assets.lock.json"
+ASSETS_CACHE_DIR = "assets/components"
 
 
 def find_design_model_path(project_path: str | Path) -> Path:
@@ -35,3 +36,8 @@ def design_rules_path(project_path: str | Path) -> Path:
 def assets_lock_path(project_path: str | Path) -> Path:
     """Return the project-local asset lock path."""
     return Path(project_path) / ASSETS_LOCK_FILENAME
+
+
+def assets_cache_path(project_path: str | Path) -> Path:
+    """Return the project-local component asset cache path."""
+    return Path(project_path) / ASSETS_CACHE_DIR

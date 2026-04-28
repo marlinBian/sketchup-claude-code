@@ -74,3 +74,51 @@ The first useful registry should support only a small bathroom scenario:
 
 This is enough to validate component search, placement, clearance rules, and
 SketchUp synchronization without building a large asset marketplace.
+
+## Project Asset Lock
+
+Each designer project gets an `assets.lock.json` file. It records the registry
+components actually referenced by that project, not the entire packaged library.
+
+The lock shape is:
+
+```json
+{
+  "version": "1.0",
+  "cache": {
+    "root": "assets/components",
+    "mode": "on_demand"
+  },
+  "assets": [
+    {
+      "component_id": "toilet_floor_mounted_basic",
+      "component_name": "Basic floor mounted toilet",
+      "category": "fixture",
+      "used_by": ["toilet_001"],
+      "source": {
+        "kind": "seed",
+        "license": "unknown",
+        "redistribution": "Placeholder metadata for procedural seed geometry."
+      },
+      "paths": {
+        "skp": "${SKETCHUP_ASSETS}/fixtures/toilet_floor_mounted_basic.skp"
+      },
+      "cache": {
+        "status": "referenced",
+        "path": "assets/components/toilet_floor_mounted_basic.skp"
+      },
+      "procedural_fallback": "box_fixture"
+    }
+  ]
+}
+```
+
+`assets/components/` is the project-local cache root. The current implementation
+defines the cache contract and writes the directory during project
+initialization; it does not yet download external assets automatically.
+
+## Search Ranking
+
+Search should prefer exact component IDs, names, and aliases before fuzzy or
+tag-only matches. Category filters use canonical manifest category names such as
+`fixture`, but plural user input such as `fixtures` is normalized for CLI use.

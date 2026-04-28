@@ -8,6 +8,7 @@ from pathlib import Path
 from mcp_server.bridge.socket_bridge import SocketBridge
 from mcp_server.protocol.jsonrpc import JsonRpcRequest
 from mcp_server.protocol.spatial import create_bounding_box
+from mcp_server.tools.local_library_search import search_library
 
 
 # Load component library
@@ -60,10 +61,11 @@ def find_component_by_name(name: str) -> dict[str, Any] | None:
     name_lower = name.lower()
 
     for component in library.get("components", []):
-        if any(name_lower in term.lower() for term in component_search_terms(component)):
+        if any(name_lower == term.lower() for term in component_search_terms(component)):
             return component
 
-    return None
+    results = search_library(name, limit=1, library_data=library)
+    return results[0] if results else None
 
 
 def search_components(query: str, limit: int = 10) -> list[dict[str, Any]]:
@@ -76,19 +78,7 @@ def search_components(query: str, limit: int = 10) -> list[dict[str, Any]]:
     Returns:
         List of matching components
     """
-    library = load_library()
-    name_lower = query.lower().strip()
-    results = []
-
-    for component in library.get("components", []):
-        terms = [term.lower() for term in component_search_terms(component)]
-        if any(name_lower in term for term in terms):
-            results.append(component)
-
-        if len(results) >= limit:
-            break
-
-    return results
+    return search_library(query, limit=limit, library_data=load_library())
 
 
 def calculate_wall_offset(

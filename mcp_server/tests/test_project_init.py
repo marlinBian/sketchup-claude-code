@@ -14,11 +14,15 @@ def test_init_project_empty_template_creates_workspace_files(tmp_path):
     assert (project_path / "design_model.json").exists()
     assert (project_path / "design_rules.json").exists()
     assert (project_path / "assets.lock.json").exists()
+    assert (project_path / "assets" / "components").is_dir()
     assert (project_path / ".mcp.json").exists()
     assert (project_path / "snapshots").is_dir()
 
     design_model = json.loads((project_path / "design_model.json").read_text())
+    assets_lock = json.loads((project_path / "assets.lock.json").read_text())
     assert design_model["project_name"] == "My Design"
+    assert assets_lock["cache"]["root"] == "assets/components"
+    assert assets_lock["assets"] == []
 
 
 def test_init_project_bathroom_template_creates_seed_bathroom(tmp_path):
@@ -26,10 +30,16 @@ def test_init_project_bathroom_template_creates_seed_bathroom(tmp_path):
     project_path = tmp_path / "bathroom"
 
     design_model = json.loads((project_path / "design_model.json").read_text())
+    assets_lock = json.loads((project_path / "assets.lock.json").read_text())
+    locked_ids = {asset["component_id"] for asset in assets_lock["assets"]}
 
     assert result["template"] == "bathroom"
     assert design_model["spaces"]["bathroom_001"]["type"] == "bathroom"
     assert "toilet_001" in design_model["components"]
+    assert "toilet_floor_mounted_basic" in locked_ids
+    assert "vanity_wall_600" in locked_ids
+    assert "ceiling_light_basic" in locked_ids
+    assert (project_path / "assets" / "components").is_dir()
 
 
 def test_init_project_refuses_to_overwrite_existing_files(tmp_path):

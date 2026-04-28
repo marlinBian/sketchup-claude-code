@@ -7,6 +7,7 @@ from mcp_server.resources.project_files import (
     DESIGN_MODEL_FILENAME,
     DESIGN_RULES_FILENAME,
     LEGACY_DESIGN_MODEL_FILENAME,
+    assets_cache_path,
     assets_lock_path,
     design_rules_path,
     find_design_model_path,
@@ -39,3 +40,7 @@ def test_design_rules_path(tmp_path):
 
 def test_assets_lock_path(tmp_path):
     assert assets_lock_path(tmp_path) == Path(tmp_path) / ASSETS_LOCK_FILENAME
+
+
+def test_assets_cache_path(tmp_path):
+    assert assets_cache_path(tmp_path) == Path(tmp_path) / "assets" / "components"

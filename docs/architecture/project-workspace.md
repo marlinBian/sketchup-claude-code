@@ -10,6 +10,8 @@ my-design-project/
   design_model.json
   design_rules.json
   assets.lock.json
+  assets/
+    components/
   model.skp
   snapshots/
 ```
@@ -31,9 +33,13 @@ ergonomic defaults, not jurisdictional building code. Validation reports should
 state whether a value came from built-in defaults, an installed profile,
 project-local rules, or the active user instruction.
 
-`assets.lock.json` records the components actually used by this project,
-including component IDs, versions, local cache paths, upstream source URLs, and
-license metadata.
+`assets.lock.json` records the components actually used by this project. It
+includes component IDs, local cache paths, upstream source metadata when known,
+license metadata, and procedural fallback information.
+
+`assets/components/` is the project-local cache root for component geometry. The
+initial implementation creates this directory and records target cache paths.
+External downloads are still explicit actions, not automatic background work.
 
 `model.skp` is the SketchUp model generated or synchronized by the bridge.
 

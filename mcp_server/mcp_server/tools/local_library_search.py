@@ -12,6 +12,32 @@ from typing import Optional
 # Library index path
 LIBRARY_PATH = Path(__file__).parent.parent / "assets" / "library.json"
 
+CATEGORY_ALIASES = {
+    "fixture": "fixture",
+    "fixtures": "fixture",
+    "lighting": "lighting",
+    "lights": "lighting",
+    "light": "lighting",
+    "furniture": "furniture",
+    "furnitures": "furniture",
+    "decor": "decor",
+    "decoration": "decor",
+    "decorations": "decor",
+    "opening": "opening",
+    "openings": "opening",
+    "appliance": "appliance",
+    "appliances": "appliance",
+    "other": "other",
+}
+
+
+def normalize_category(category: str | None) -> str | None:
+    """Normalize category aliases to manifest enum values."""
+    if category is None:
+        return None
+    value = category.strip().lower()
+    return CATEGORY_ALIASES.get(value, value)
+
 
 def component_search_terms(component: dict) -> list[str]:
     """Return searchable names, aliases, and tags for a component."""
@@ -97,6 +123,27 @@ def fuzzy_match(query: str, text: str, threshold: float = 0.3) -> tuple[bool, fl
     return score >= threshold, score
 
 
+def match_score(query: str, term: str) -> float:
+    """Return a normalized relevance score for one search term."""
+    if not query or not term:
+        return 0.0
+
+    query_lower = query.lower().strip()
+    term_lower = term.lower().strip()
+
+    if query_lower == term_lower:
+        return 2.0
+
+    if query_lower in term_lower:
+        return 1.5
+
+    is_match, score = fuzzy_match(query_lower, term_lower, threshold=0.5)
+    if is_match:
+        return score
+
+    return 0.0
+
+
 def search_library(
     query: str,
     category: Optional[str] = None,
@@ -122,18 +169,22 @@ def search_library(
         return []
 
     query_lower = query.lower().strip()
+    normalized_category = normalize_category(category)
     results = []
 
     for comp in components:
         # Filter by category if specified
-        if category and comp.get("category") != category:
+        if normalized_category and normalize_category(comp.get("category")) != normalized_category:
             continue
 
         # Calculate match score across names, aliases, and tags.
-        best_score = 0.0
-        for term in component_search_terms(comp):
-            _, score = fuzzy_match(query_lower, term)
-            best_score = max(best_score, score)
+        if not query_lower:
+            best_score = 0.1
+        else:
+            best_score = max(
+                (match_score(query_lower, term) for term in component_search_terms(comp)),
+                default=0.0,
+            )
 
         # Include partial matches
         if best_score > 0:
@@ -159,7 +210,7 @@ def get_categories(library_data: Optional[dict] = None) -> list[str]:
     categories = set()
     for comp in library_data.get("components", []):
         if "category" in comp:
-            categories.add(comp["category"])
+            categories.add(normalize_category(comp["category"]) or comp["category"])
 
     return sorted(list(categories))
 
@@ -180,9 +231,10 @@ def get_components_by_category(
     if library_data is None:
         library_data = load_library()
 
+    normalized_category = normalize_category(category)
     return [
         comp for comp in library_data.get("components", [])
-        if comp.get("category") == category
+        if normalize_category(comp.get("category")) == normalized_category
     ]
 
 

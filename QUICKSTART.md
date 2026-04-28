@@ -21,7 +21,8 @@ uv run --extra dev sketchup-agent init ~/Design/my-bathroom \
 cd ~/Design/my-bathroom
 ```
 
-The project directory now owns `design_model.json` and `design_rules.json`.
+The project directory now owns `design_model.json`, `design_rules.json`,
+`assets.lock.json`, and the `assets/components/` cache directory.
 
 ## 2. Start SketchUp Bridge
 

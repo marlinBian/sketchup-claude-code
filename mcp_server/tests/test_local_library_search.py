@@ -1,19 +1,16 @@
-"""Tests for local_library_search module."""
+import json
+from pathlib import Path
 
 import pytest
-from pathlib import Path
-import json
-import tempfile
-import os
 
-# Import the module
 from mcp_server.tools.local_library_search import (
+    format_search_results,
     fuzzy_match,
-    search_library,
     get_categories,
     get_components_by_category,
-    format_search_results,
     load_library,
+    normalize_category,
+    search_library,
 )
 
 
@@ -65,9 +62,33 @@ def sample_library():
                 "category": "lighting",
                 "skp_path": "${SKETCHUP_ASSETS}/lighting/chandelier_classic.skp",
                 "style_tags": ["classic", "gold", "crystal"]
-            }
+            },
+            {
+                "id": "toilet_floor_mounted_basic",
+                "name": "Basic Floor-Mounted Toilet",
+                "category": "fixture",
+                "subcategory": "toilet",
+                "aliases": {
+                    "en": ["toilet", "water closet"],
+                    "zh-CN": ["马桶", "坐便器"],
+                },
+                "tags": ["bathroom", "fixture", "toilet"],
+            },
+            {
+                "id": "toilet_roll_holder",
+                "name": "Toilet Roll Holder",
+                "category": "fixture",
+                "subcategory": "accessory",
+                "aliases": {"en": ["toilet paper holder"]},
+                "tags": ["bathroom", "fixture"],
+            },
         ]
     }
+
+
+def test_normalize_category_accepts_plural_alias():
+    assert normalize_category("fixtures") == "fixture"
+    assert normalize_category("lights") == "lighting"
 
 
 class TestFuzzyMatch:
@@ -103,8 +124,9 @@ class TestSearchLibrary:
 
     def test_search_filters_by_category(self, sample_library):
         results = search_library("lamp", category="lighting", library_data=sample_library)
-        assert len(results) == 2
+        assert len(results) == 1
         assert all(r["category"] == "lighting" for r in results)
+        assert results[0]["id"] == "floor_lamp_modern"
 
     def test_search_returns_scores(self, sample_library):
         results = search_library("sofa", library_data=sample_library)
@@ -119,11 +141,35 @@ class TestSearchLibrary:
         scores = [r["_match_score"] for r in results]
         assert scores == sorted(scores, reverse=True)
 
+    def test_search_accepts_plural_category_alias(self, sample_library):
+        results = search_library(
+            "toilet",
+            category="fixtures",
+            library_data=sample_library,
+        )
+        assert {result["id"] for result in results} == {
+            "toilet_floor_mounted_basic",
+            "toilet_roll_holder",
+        }
+
+    def test_exact_alias_ranks_before_substring(self, sample_library):
+        results = search_library(
+            "toilet",
+            category="fixture",
+            library_data=sample_library,
+        )
+        assert results[0]["id"] == "toilet_floor_mounted_basic"
+        assert results[0]["_match_score"] > results[1]["_match_score"]
+
+    def test_search_finds_chinese_alias(self, sample_library):
+        results = search_library("马桶", category="fixture", library_data=sample_library)
+        assert results[0]["id"] == "toilet_floor_mounted_basic"
+
 
 class TestGetCategories:
     def test_returns_all_categories(self, sample_library):
         categories = get_categories(sample_library)
-        assert set(categories) == {"furniture", "lighting"}
+        assert set(categories) == {"fixture", "furniture", "lighting"}
 
     def test_empty_library(self):
         categories = get_categories({"components": []})

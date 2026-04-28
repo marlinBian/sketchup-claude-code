@@ -127,9 +127,9 @@ capabilities.
 
 Goal: turn seed components into a maintainable semantic component system.
 
-- validate component manifests
-- add local cache behavior
-- add `assets.lock.json`
+- validate component manifests and project asset locks
+- add project-local cache shape at `assets/components/`
+- populate `assets.lock.json` from used `component_ref` values
 - track source URL, author, license, and redistribution notes
 - improve search ranking
 - defer a public website until contribution and storage needs are proven

@@ -16,6 +16,8 @@ my-design-project/
   design_model.json
   design_rules.json
   assets.lock.json
+  assets/
+    components/
   model.skp
   snapshots/
 ```

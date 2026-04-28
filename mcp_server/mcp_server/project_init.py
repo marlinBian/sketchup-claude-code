@@ -4,14 +4,21 @@ import json
 from pathlib import Path
 from typing import Any
 
+from mcp_server.resources.asset_lock_schema import (
+    build_assets_lock,
+    create_empty_assets_lock,
+)
 from mcp_server.resources.design_model_schema import create_empty_template
 from mcp_server.resources.design_rules_schema import create_default_design_rules
 from mcp_server.resources.project_files import (
+    ASSETS_CACHE_DIR,
     ASSETS_LOCK_FILENAME,
     DESIGN_MODEL_FILENAME,
     DESIGN_RULES_FILENAME,
+    assets_cache_path,
 )
 from mcp_server.tools.bathroom_planner import plan_bathroom_project, save_bathroom_plan
+from mcp_server.tools.local_library_search import load_library
 
 PROJECT_MCP_FILENAME = ".mcp.json"
 
@@ -25,10 +32,7 @@ def write_json(path: Path, data: dict[str, Any], overwrite: bool) -> None:
 
 def default_assets_lock() -> dict[str, Any]:
     """Return an empty assets lock file."""
-    return {
-        "version": "1.0",
-        "assets": [],
-    }
+    return create_empty_assets_lock(cache_root=ASSETS_CACHE_DIR)
 
 
 def default_project_mcp_config() -> dict[str, Any]:
@@ -67,18 +71,22 @@ def init_project(
         written = save_bathroom_plan(root, plan)
         design_model_path = Path(written["design_model_path"])
         design_rules_path = Path(written["design_rules_path"])
+        assets_lock = build_assets_lock(plan["design_model"], load_library())
     else:
         design_model_path = root / DESIGN_MODEL_FILENAME
         design_rules_path = root / DESIGN_RULES_FILENAME
         write_json(design_model_path, create_empty_template(name), overwrite)
         write_json(design_rules_path, create_default_design_rules(), overwrite)
+        assets_lock = default_assets_lock()
 
     assets_lock_path = root / ASSETS_LOCK_FILENAME
     mcp_config_path = root / PROJECT_MCP_FILENAME
+    assets_cache = assets_cache_path(root)
     snapshots_path = root / "snapshots"
+    assets_cache.mkdir(parents=True, exist_ok=True)
     snapshots_path.mkdir(exist_ok=True)
 
-    write_json(assets_lock_path, default_assets_lock(), overwrite)
+    write_json(assets_lock_path, assets_lock, overwrite)
     write_json(mcp_config_path, default_project_mcp_config(), overwrite)
 
     return {
@@ -89,6 +97,7 @@ def init_project(
             "design_model": str(design_model_path),
             "design_rules": str(design_rules_path),
             "assets_lock": str(assets_lock_path),
+            "assets_cache": str(assets_cache),
             "mcp_config": str(mcp_config_path),
             "snapshots": str(snapshots_path),
         },

@@ -48,13 +48,13 @@ slice, default to the bathroom template and report the exact assumptions.
 Pass Chinese component words directly to `search_local_library` first:
 
 ```python
-search_local_library(query="马桶", category="fixtures", limit=5)
+search_local_library(query="马桶", category="fixture", limit=5)
 ```
 
 If search is weak, retry with a canonical English term:
 
 ```python
-search_local_library(query="toilet", category="fixtures", limit=5)
+search_local_library(query="toilet", category="fixture", limit=5)
 ```
 
 ## Guardrails

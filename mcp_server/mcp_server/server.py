@@ -646,7 +646,7 @@ async def search_local_library(
 
     Args:
         query: Search query (e.g., "sofa", "dining table", "北欧风格")
-        category: Optional category filter - "furniture", "fixtures", "lighting"
+        category: Optional category filter - "furniture", "fixture", "lighting"
         limit: Maximum number of results (default 10)
 
     Returns:
@@ -665,7 +665,7 @@ async def list_local_library_categories() -> TextContent:
     """List all available categories in the local component library.
 
     Returns:
-        List of categories like "furniture", "fixtures", "lighting".
+        List of categories like "furniture", "fixture", "lighting".
     """
     try:
         categories = get_categories()

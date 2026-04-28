@@ -29,13 +29,13 @@ Chinese aliases are deliberate search data. For example, the user can ask for
 Use `search_local_library` first:
 
 ```python
-search_local_library(query="toilet", category="fixtures", limit=5)
+search_local_library(query="toilet", category="fixture", limit=5)
 ```
 
 For Chinese user prompts, pass the user's natural words directly first:
 
 ```python
-search_local_library(query="马桶", category="fixtures", limit=5)
+search_local_library(query="马桶", category="fixture", limit=5)
 ```
 
 If the result is weak, retry with an English design term such as `toilet`,
@@ -111,7 +111,7 @@ When adding or reviewing registry entries, preserve these fields where possible:
 {
   "id": "toilet_floor_mounted_basic",
   "name": "Basic Floor-Mounted Toilet",
-  "category": "fixtures",
+  "category": "fixture",
   "subcategory": "toilet",
   "dimensions": {
     "width": 380,

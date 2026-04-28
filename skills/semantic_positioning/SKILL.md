@@ -40,7 +40,7 @@ or use a clearly labeled placeholder.
 ## Example
 
 ```python
-search_local_library(query="mirror", category="fixtures", limit=5)
+search_local_library(query="mirror", category="fixture", limit=5)
 place_component(
     component_name="Basic Wall Mirror 500",
     position_x=1200,
