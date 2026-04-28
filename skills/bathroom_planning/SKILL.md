@@ -12,6 +12,8 @@ Use `plan_bathroom` when:
 - The user asks to preview, validate, or create a bathroom plan.
 - You need a structured `design_model`, `design_rules`, validation report, and
   bridge operation trace.
+- The project has `design_rules.json` preferences that should influence the
+  plan.
 
 Use `execute_bathroom_plan` when:
 
@@ -43,6 +45,10 @@ After a tool call, report:
 
 Keep the response grounded in returned JSON. Do not invent additional geometry
 that is not present in `design_model` or `bridge_operations`.
+
+When `project_path` is provided, project-local `design_rules.json` overrides the
+built-in seed rules. Report failed checks from `validation_report`; do not
+silently relax them.
 
 ## Prompt Examples
 

@@ -4,6 +4,8 @@ import json
 
 import pytest
 
+from mcp_server.resources.design_rules_schema import create_default_design_rules
+
 
 @pytest.mark.asyncio
 async def test_plan_bathroom_tool_returns_json_text():
@@ -38,6 +40,29 @@ async def test_plan_bathroom_tool_writes_project_files(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_plan_bathroom_tool_uses_project_design_rules(tmp_path):
+    from mcp_server.server import plan_bathroom
+
+    rules = create_default_design_rules()
+    rules["rule_sets"]["bathroom"]["clearances"]["toilet_front_clearance"] = 1200
+    (tmp_path / "design_rules.json").write_text(
+        json.dumps(rules, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    response = await plan_bathroom(project_path=str(tmp_path), depth=1800)
+    data = json.loads(response.text)
+    toilet_front = next(
+        check
+        for check in data["validation_report"]["checks"]
+        if check["name"] == "toilet_front_clearance"
+    )
+
+    assert data["validation_report"]["valid"] is False
+    assert toilet_front["required"] == 1200
+
+
+@pytest.mark.asyncio
 async def test_execute_bathroom_plan_tool_uses_trace_executor(monkeypatch):
     from mcp_server import server
 
@@ -57,3 +82,38 @@ async def test_execute_bathroom_plan_tool_uses_trace_executor(monkeypatch):
     assert data["design_model"]["project_name"] == "execute_fixture"
     assert data["execution_report"]["status"] == "success"
     assert data["execution_report"]["executed_count"] == 10
+
+
+@pytest.mark.asyncio
+async def test_execute_bathroom_plan_tool_uses_project_design_rules(
+    monkeypatch,
+    tmp_path,
+):
+    from mcp_server import server
+
+    def fake_execute(operations, stop_on_error=True):
+        return {
+            "status": "success",
+            "executed_count": len(operations),
+            "requested_count": len(operations),
+            "results": [],
+        }
+
+    rules = create_default_design_rules()
+    rules["rule_sets"]["bathroom"]["clearances"]["toilet_front_clearance"] = 1200
+    (tmp_path / "design_rules.json").write_text(
+        json.dumps(rules, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(server, "execute_bridge_operations", fake_execute)
+
+    response = await server.execute_bathroom_plan(project_path=str(tmp_path))
+    data = json.loads(response.text)
+    toilet_front = next(
+        check
+        for check in data["validation_report"]["checks"]
+        if check["name"] == "toilet_front_clearance"
+    )
+
+    assert data["validation_report"]["valid"] is False
+    assert toilet_front["required"] == 1200

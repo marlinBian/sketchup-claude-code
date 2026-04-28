@@ -45,7 +45,8 @@ For the first vertical slice, prefer `plan_bathroom` before mutation. It returns
 - `bridge_operations`
 
 Use this when the user asks to create or review a small bathroom, especially if
-SketchUp is not open yet.
+SketchUp is not open yet. If the project already has `design_rules.json`, the
+planner should use it instead of silently reverting to built-in defaults.
 
 ### 3. Execute Only When the User Wants SketchUp Updated
 

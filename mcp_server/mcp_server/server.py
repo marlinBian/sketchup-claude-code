@@ -1,6 +1,7 @@
 """FastMCP entry point for SketchUp Agent Harness MCP server."""
 
 import json
+from pathlib import Path
 from typing import Any
 from mcp.server import Server
 from mcp.types import Tool, Resource, TextContent
@@ -15,7 +16,8 @@ from mcp_server.resources.snapshot_manifest_schema import (
     snapshot_entry,
     snapshot_output_path,
 )
-from mcp_server.resources.project_files import snapshot_manifest_path
+from mcp_server.resources.design_rules_schema import load_design_rules
+from mcp_server.resources.project_files import design_rules_path, snapshot_manifest_path
 from mcp_server.tools.local_library_search import (
     format_search_results,
     get_categories,
@@ -26,6 +28,21 @@ from mcp_server.tools.trace_executor import execute_bridge_operations
 
 # Create FastMCP server
 mcp = FastMCP("sketchup-mcp")
+
+
+def project_rules_or_default(project_path: str | None) -> dict[str, Any] | None:
+    """Load project design rules when project_path has design_rules.json."""
+    if not project_path:
+        return None
+
+    path = design_rules_path(project_path)
+    if not Path(path).exists():
+        return None
+
+    rules, errors = load_design_rules(path)
+    if errors:
+        raise ValueError("; ".join(errors))
+    return rules
 
 
 @mcp.tool()
@@ -795,6 +812,7 @@ async def plan_bathroom(
             width=width,
             depth=depth,
             ceiling_height=ceiling_height,
+            rules=project_rules_or_default(project_path),
         )
         if project_path:
             plan["written_files"] = save_bathroom_plan(project_path, plan)
@@ -822,6 +840,7 @@ async def execute_bathroom_plan(
             width=width,
             depth=depth,
             ceiling_height=ceiling_height,
+            rules=project_rules_or_default(project_path),
         )
         if project_path:
             plan["written_files"] = save_bathroom_plan(project_path, plan)

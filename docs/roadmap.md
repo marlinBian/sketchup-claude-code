@@ -156,3 +156,15 @@ scattered commands.
 - add optional bridge execution with `--with-bridge`
 - validate project files, asset locks, snapshot manifests, and headless planning
 - make release checks use the same smoke path
+
+## P9: Project Rule Overrides
+
+Goal: make project-local design knowledge active instead of static
+documentation.
+
+- load `design_rules.json` when planning into an existing project
+- use project rules in `plan_bathroom`
+- use project rules in `execute_bathroom_plan`
+- keep validation reports explicit about failed rule checks
+- avoid overwriting designer preferences with built-in defaults unless creating
+  a new project
