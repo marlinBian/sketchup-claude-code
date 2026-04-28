@@ -26,6 +26,7 @@ from mcp_server.resources.project_files import (
 from mcp_server.resources.snapshot_manifest_schema import load_snapshot_manifest
 from mcp_server.runtime_skills import RUNTIME_SKILL_TARGETS
 from mcp_server.tools.bathroom_planner import plan_bathroom_project
+from mcp_server.tools.project_executor import build_project_execution_plan
 from mcp_server.tools.trace_executor import (
     execute_bridge_operations,
     sync_execution_report_to_design_model,
@@ -238,6 +239,28 @@ def run_smoke(
             {"checked": len(project_validation["checks"])},
         )
     )
+
+    try:
+        execution_plan = build_project_execution_plan(root)
+        result["project_execution_plan"] = {
+            "bridge_operation_count": execution_plan["operation_count"],
+            "skipped_count": execution_plan["skipped_count"],
+        }
+        result["checks"].append(
+            check_result(
+                "project_execution_plan",
+                execution_plan["operation_count"] > 0
+                and execution_plan["skipped_count"] == 0,
+                result["project_execution_plan"],
+                [
+                    f"Skipped instances: {execution_plan['skipped_instances']}"
+                ] if execution_plan["skipped_instances"] else [],
+            )
+        )
+    except Exception as error:
+        result["checks"].append(
+            check_result("project_execution_plan", False, errors=[str(error)])
+        )
 
     plan = plan_bathroom_project(project_name=root.name)
     plan_ok = bool(plan["validation_report"]["valid"]) and len(plan["bridge_operations"]) > 0

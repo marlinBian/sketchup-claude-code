@@ -83,6 +83,8 @@ Goal: execute the bathroom slice in SketchUp.
 - support procedural fallback geometry when a `.skp` asset is unavailable
 - capture scene info after execution
 - keep `design_model.json` synchronized with SketchUp results
+- derive and execute a generic project trace from the current
+  `design_model.json`
 - make the Ruby bridge write canonical `design_model.json` while retaining
   legacy `.design_model.json` read fallback
 - sync bathroom execution entity IDs and operation results back into
@@ -171,9 +173,11 @@ scattered commands.
 - add `sketchup-agent state <project-path>`
 - add `sketchup-agent doctor [project-path]`
 - add `sketchup-agent smoke [project-path] --force`
+- add `sketchup-agent plan-execution <project-path>`
 - add plugin startup smoke for `mcp_server/start.sh`
 - keep the default smoke headless so it works without SketchUp
 - add optional bridge execution with `--with-bridge`
+- verify the current project can build a bridge trace without skipped instances
 - validate project files, asset locks, snapshot manifests, and headless planning
 - probe live bridge runtime capabilities so stale loaded plugins are visible
 - expose live bridge version and supported operation metadata

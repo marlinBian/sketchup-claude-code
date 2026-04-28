@@ -81,6 +81,13 @@ cd mcp_server
 uv run --extra dev sketchup-agent state /tmp/sah-smoke
 ```
 
+Project bridge trace planning without SketchUp:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent plan-execution /tmp/sah-smoke
+```
+
 Package wheel smoke:
 
 ```bash

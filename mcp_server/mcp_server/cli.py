@@ -16,6 +16,7 @@ from mcp_server.project_versions import (
 from mcp_server.project_init import init_project
 from mcp_server.runtime_skills import install_runtime_skills
 from mcp_server.smoke import DEFAULT_SMOKE_PROJECT, run_smoke, validate_project
+from mcp_server.tools.project_executor import build_project_execution_plan
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -51,6 +52,35 @@ def build_parser() -> argparse.ArgumentParser:
     refresh_assets_parser.add_argument(
         "project_path",
         help="Project directory whose asset lock should be refreshed",
+    )
+
+    plan_execution_parser = subparsers.add_parser(
+        "plan-execution",
+        help="Build a bridge operation trace from current project truth",
+    )
+    plan_execution_parser.add_argument(
+        "project_path",
+        help="Project directory whose design_model.json should be planned",
+    )
+    plan_execution_parser.add_argument(
+        "--no-spaces",
+        action="store_true",
+        help="Omit space wall operations",
+    )
+    plan_execution_parser.add_argument(
+        "--no-components",
+        action="store_true",
+        help="Omit component placement operations",
+    )
+    plan_execution_parser.add_argument(
+        "--no-lighting",
+        action="store_true",
+        help="Omit lighting operations",
+    )
+    plan_execution_parser.add_argument(
+        "--no-scene-info",
+        action="store_true",
+        help="Omit final scene info operation",
     )
 
     save_version_parser = subparsers.add_parser(
@@ -243,6 +273,16 @@ def main(argv: list[str] | None = None) -> int:
             result = refresh_project_asset_lock(args.project_path)
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
+        if args.command == "plan-execution":
+            result = build_project_execution_plan(
+                args.project_path,
+                include_spaces=not args.no_spaces,
+                include_components=not args.no_components,
+                include_lighting=not args.no_lighting,
+                include_scene_info=not args.no_scene_info,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result["skipped_count"] == 0 else 1
         if args.command == "save-version":
             result = save_project_version(
                 args.project_path,

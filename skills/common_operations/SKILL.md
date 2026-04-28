@@ -42,6 +42,8 @@ Components and layout:
 - `register_selected_component`
 - `add_component_instance`
 - `execute_component_instance`
+- `plan_project_execution`
+- `execute_project_model`
 - `search_local_library`
 - `place_component`
 - `move_entity`
@@ -102,6 +104,29 @@ place_component(
 Use `execute_component_instance` when the designer also wants SketchUp updated
 and the bridge is running. Use `place_component` only for ad hoc execution
 without a project-backed instance.
+
+### Execute Current Project Truth
+
+Before sending the whole project to SketchUp, build the trace from the current
+`design_model.json`:
+
+```python
+plan_project_execution(project_path="<project-path>")
+```
+
+If `skipped_count` is greater than zero, report the skipped instances and fix
+the project truth or registry metadata before execution. Do not silently omit
+components.
+
+When the trace is clean and SketchUp bridge is running:
+
+```python
+execute_project_model(project_path="<project-path>")
+```
+
+Use `execute_project_model` for project-backed synchronization. It records
+returned SketchUp entity IDs and operation metadata back into `design_model.json`
+when execution succeeds.
 
 ### Create Simple Geometry
 

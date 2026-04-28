@@ -13,6 +13,9 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
   Use `plan_bathroom`.
 - Execute a bathroom: "sync to SketchUp", "同步到 SketchUp".
   Use `execute_bathroom_plan`.
+- Execute current project truth: "sync the current design model", "同步当前模型".
+  Use `plan_project_execution` first, then `execute_project_model` when the
+  trace has no skipped instances and the bridge is running.
 - Search components: "find a sofa", "找一个马桶".
   Use `search_local_library`.
 - Place component: "place the sofa here", "放一个沙发".

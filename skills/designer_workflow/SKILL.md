@@ -76,6 +76,16 @@ planning.
 Use `execute_bathroom_plan` when the user wants the model updated in SketchUp and
 the Ruby bridge is running.
 
+For an existing project that already has `design_model.json`, prefer
+`plan_project_execution` before whole-project synchronization. It derives the
+bridge trace from current project truth. If it returns skipped instances, report
+them and fix the missing space bounds, component references, or registry entries
+before executing.
+
+Use `execute_project_model` when the designer wants the current project truth
+sent to SketchUp. On success, use `execution_sync` to report which component and
+lighting instances received SketchUp `entity_id` values.
+
 Before calling it, confirm the bridge is expected to be available at
 `/tmp/su_bridge.sock`. If execution fails because SketchUp is not running, report
 that as an environment issue and keep the structured plan available.
@@ -88,6 +98,9 @@ After planning or execution, summarize:
 - failed clearance checks, if any
 - files written, if `project_path` was provided
 - execution status, if `execute_bathroom_plan` was used
+- skipped instances, if `plan_project_execution` refused to convert part of the
+  project truth
+- execution sync details, if `execute_project_model` was used
 
 Do not replace structured output with only prose. The design model remains the
 canonical state.
@@ -133,6 +146,10 @@ clearance check.
 Execute the bathroom plan in SketchUp.
 ```
 
+```text
+Sync the current design_model.json to SketchUp.
+```
+
 Chinese examples:
 
 ```text
@@ -141,6 +158,10 @@ Chinese examples:
 
 ```text
 把这个卫生间方案同步到 SketchUp。
+```
+
+```text
+把当前 design_model.json 同步到 SketchUp。
 ```
 
 ## Guardrails

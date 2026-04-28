@@ -62,6 +62,10 @@ from mcp_server.tools.bathroom_planner import (
     plan_bathroom_project,
     save_bathroom_plan,
 )
+from mcp_server.tools.project_executor import (
+    bridge_operation_for_component_instance,
+    build_project_execution_plan,
+)
 from mcp_server.tools.trace_executor import (
     execute_bridge_operations,
     sync_execution_report_to_design_model,
@@ -186,36 +190,6 @@ def refresh_project_assets_lock(
         encoding="utf-8",
     )
     return lock_path
-
-
-def bridge_operation_for_component_instance(
-    instance_id: str,
-    instance: dict[str, Any],
-    component: dict[str, Any],
-) -> dict[str, Any]:
-    """Build one bridge operation from a design model component instance."""
-    return {
-        "operation_id": f"place_{instance_id}",
-        "operation_type": "place_component",
-        "payload": {
-            "component_id": component["id"],
-            "instance_id": instance_id,
-            "name": instance["name"],
-            "skp_path": instance.get(
-                "skp_path",
-                placement_tools.resolve_skp_path(
-                    placement_tools.component_skp_path(component)
-                ),
-            ),
-            "procedural_fallback": component["assets"].get("procedural_fallback"),
-            "dimensions": instance["dimensions"],
-            "layer": instance["layer"],
-            "position": instance["position"],
-            "rotation": instance.get("rotation", 0),
-            "scale": 1,
-        },
-        "rollback_on_failure": True,
-    }
 
 
 def selection_info_from_bridge(limit: int = 100) -> dict[str, Any]:
@@ -2361,6 +2335,7 @@ async def execute_component_instance(
             instance_id=instance_id,
             instance=instance,
             component=component,
+            project_path=project_path,
         )
         execution_report = execute_bridge_operations(
             [operation],
@@ -2396,6 +2371,93 @@ async def execute_component_instance(
         )
     except Exception as e:
         return TextContent(type="text", text=f"Component execution failed: {str(e)}")
+
+
+@mcp.tool()
+async def plan_project_execution(
+    project_path: str,
+    include_spaces: bool = True,
+    include_components: bool = True,
+    include_lighting: bool = True,
+    include_scene_info: bool = True,
+) -> TextContent:
+    """Build a bridge operation trace from current design_model.json truth."""
+    try:
+        plan = build_project_execution_plan(
+            project_path,
+            include_spaces=include_spaces,
+            include_components=include_components,
+            include_lighting=include_lighting,
+            include_scene_info=include_scene_info,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(plan, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Project execution failed: {str(e)}")
+
+
+@mcp.tool()
+async def execute_project_model(
+    project_path: str,
+    stop_on_error: bool = True,
+    allow_partial: bool = False,
+    include_spaces: bool = True,
+    include_components: bool = True,
+    include_lighting: bool = True,
+    include_scene_info: bool = True,
+) -> TextContent:
+    """Execute current design_model.json truth against the SketchUp bridge."""
+    try:
+        plan = build_project_execution_plan(
+            project_path,
+            include_spaces=include_spaces,
+            include_components=include_components,
+            include_lighting=include_lighting,
+            include_scene_info=include_scene_info,
+        )
+        if plan["skipped_instances"] and not allow_partial:
+            response = {
+                **plan,
+                "status": "not_executed",
+                "reason": (
+                    "Project execution plan has skipped instances. Pass "
+                    "allow_partial=True to execute only planned operations."
+                ),
+            }
+            return TextContent(
+                type="text",
+                text=json.dumps(response, ensure_ascii=False, indent=2),
+            )
+
+        execution_report = execute_bridge_operations(
+            plan["bridge_operations"],
+            stop_on_error=stop_on_error,
+        )
+        plan["execution_report"] = execution_report
+        plan["status"] = execution_report.get("status")
+
+        if execution_report.get("status") == "success":
+            sync_report = sync_execution_report_to_design_model(
+                plan["design_model"],
+                execution_report,
+            )
+            design_model_path = find_design_model_path(project_path)
+            saved, save_errors = save_design_model(
+                str(design_model_path),
+                plan["design_model"],
+            )
+            sync_report["saved"] = saved
+            sync_report["errors"] = save_errors
+            plan["execution_sync"] = sync_report
+
+        return TextContent(
+            type="text",
+            text=json.dumps(plan, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Project execution failed: {str(e)}")
 
 
 @mcp.tool()

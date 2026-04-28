@@ -60,6 +60,10 @@ Agents can inspect project state through MCP tools:
   `design_model.json` and refreshes `assets.lock.json`
 - `execute_component_instance` executes a project-backed component instance in
   SketchUp and records the returned entity ID when available
+- `plan_project_execution` derives a deterministic bridge trace from the whole
+  current `design_model.json` without requiring SketchUp
+- `execute_project_model` runs that project trace against the bridge and records
+  returned entity IDs and operation metadata back into `design_model.json`
 
 `snapshots/` stores captures used for review, regression checks, and visual
 handoff. `snapshots/manifest.json` records provenance for each artifact and

@@ -145,6 +145,11 @@ The current tool places by component display name, not by arbitrary external
 asset path. It does not replace `add_component_instance` as the project source
 of truth.
 
+After several project-backed component changes, use `plan_project_execution` to
+verify the current `design_model.json` can be converted into a full bridge trace.
+If the trace has no skipped instances and the designer wants SketchUp updated,
+use `execute_project_model` instead of executing every component one at a time.
+
 ### 3. Prefer Slice Tools for Bathroom Layouts
 
 When the user asks for a complete small bathroom, prefer the bathroom planning
