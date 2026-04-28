@@ -52,13 +52,15 @@ register_selected_component(
     category="furniture",
     subcategory="display_plinth",
     anchor_bottom="floor",
-    aliases_en=["display stand"]
+    aliases_en=["display stand"],
+    export_asset=True
 )
 ```
 
 Use `get_selection_info` first only when the agent needs to choose between
 multiple selected entities or explain why registration cannot proceed. If
-SketchUp is not running, register metadata explicitly:
+SketchUp is not running, or if the selected object should not be saved as a
+project-local `.skp` asset, register metadata explicitly:
 
 ```python
 register_project_component(

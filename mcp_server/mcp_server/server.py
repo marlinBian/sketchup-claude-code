@@ -210,6 +210,57 @@ def selection_info_from_bridge(limit: int = 100) -> dict[str, Any]:
         bridge.disconnect()
 
 
+def component_asset_paths(
+    project_path: str,
+    component_id: str,
+    skp_path: str | None = None,
+) -> tuple[str, str]:
+    """Return manifest and absolute output paths for a project-local SKP asset."""
+    manifest_path = skp_path or f"assets/components/{component_id}.skp"
+    output_path = Path(manifest_path).expanduser()
+    if not output_path.is_absolute():
+        output_path = Path(project_path).expanduser().resolve() / manifest_path
+    return manifest_path, str(output_path)
+
+
+def save_selected_component_asset_to_bridge(
+    output_path: str,
+    selection_index: int = 0,
+    selection_entity_id: str | None = None,
+    definition_name: str | None = None,
+) -> dict[str, Any]:
+    """Ask the SketchUp bridge to save the selected component as a SKP asset."""
+    bridge = SocketBridge()
+    try:
+        bridge.connect()
+        request = JsonRpcRequest(
+            method="execute_operation",
+            params={
+                "operation_id": (
+                    "save_selected_component_"
+                    f"{id(save_selected_component_asset_to_bridge)}"
+                ),
+                "operation_type": "save_selected_component",
+                "payload": {
+                    "output_path": output_path,
+                    "selection_index": selection_index,
+                    "entity_id": selection_entity_id,
+                    "definition_name": definition_name,
+                },
+                "rollback_on_failure": False,
+            }
+        )
+        response = bridge.send(request.to_dict())
+        if "error" in response:
+            raise RuntimeError(response["error"]["message"])
+        result = response.get("result")
+        if not isinstance(result, dict):
+            raise RuntimeError("Bridge response did not include result.")
+        return result
+    finally:
+        bridge.disconnect()
+
+
 def bounds_dimensions(bounds: dict[str, Any]) -> dict[str, float]:
     """Return positive dimensions from a SketchUp bounding box in millimeters."""
     minimum = bounds.get("min")
@@ -1511,6 +1562,7 @@ async def register_selected_component(
     aliases_en: list[str] | None = None,
     aliases_zh_cn: list[str] | None = None,
     tags: list[str] | None = None,
+    export_asset: bool = False,
     license_type: str = "project_local",
     license_author: str | None = None,
     license_url: str | None = None,
@@ -1537,6 +1589,51 @@ async def register_selected_component(
             if tag not in merged_tags:
                 merged_tags.append(tag)
 
+        manifest_skp_path = skp_path
+        asset_export = None
+        if export_asset:
+            project_library, errors = load_project_library(project_path)
+            if errors:
+                return TextContent(
+                    type="text",
+                    text=(
+                        "Project component from selection failed: "
+                        f"{'; '.join(errors)}"
+                    ),
+                )
+            packaged = get_component_by_id(component_id)
+            project_existing = get_component_by_id(
+                component_id,
+                library_data=project_library,
+            )
+            if packaged is not None and project_existing is None:
+                return TextContent(
+                    type="text",
+                    text=(
+                        "Project component from selection failed: component ID "
+                        f"already exists in packaged registry: {component_id}"
+                    ),
+                )
+            if project_existing is not None and not overwrite:
+                return TextContent(
+                    type="text",
+                    text=(
+                        "Project component from selection failed: component already "
+                        f"exists: {component_id}"
+                    ),
+                )
+            manifest_skp_path, output_path = component_asset_paths(
+                project_path,
+                component_id,
+                skp_path,
+            )
+            asset_export = save_selected_component_asset_to_bridge(
+                output_path=output_path,
+                selection_index=selection_index,
+                selection_entity_id=selection_entity_id,
+                definition_name=str(inferred_name),
+            )
+
         response = await register_project_component(
             project_path=project_path,
             component_id=component_id,
@@ -1546,7 +1643,7 @@ async def register_selected_component(
             depth=dimensions["depth"],
             height=dimensions["height"],
             subcategory=subcategory,
-            skp_path=skp_path,
+            skp_path=manifest_skp_path,
             procedural_fallback=procedural_fallback,
             insertion_offset_x=dimensions["width"] / 2,
             insertion_offset_y=0,
@@ -1588,6 +1685,8 @@ async def register_selected_component(
             "bounding_box": entity.get("bounding_box"),
         }
         data["selection_count"] = selection_info.get("selected_count")
+        if asset_export is not None:
+            data["asset_export"] = asset_export
         return TextContent(
             type="text",
             text=json.dumps(data, ensure_ascii=False, indent=2),

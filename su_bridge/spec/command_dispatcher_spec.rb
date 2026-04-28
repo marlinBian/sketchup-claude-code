@@ -29,6 +29,7 @@ RSpec.describe SuBridge::CommandDispatcher do
         query_model_info
         get_scene_info
         get_selection_info
+        save_selected_component
         place_component
         place_lighting
         set_camera_view
@@ -45,6 +46,77 @@ RSpec.describe SuBridge::CommandDispatcher do
       required_operations.each do |op|
         expect(SuBridge::CommandDispatcher::OPERATION_HANDLERS).to have_key(op),
           "Missing handler for #{op}"
+      end
+    end
+  end
+
+  describe "#handle_save_selected_component" do
+    class FakeComponentDefinition
+      attr_accessor :name
+
+      def initialize(name = "Selected Definition")
+        @name = name
+      end
+
+      def save_as(path)
+        File.write(path, "skp")
+        true
+      end
+    end
+
+    class FakeBounds
+      attr_reader :min, :max
+
+      def initialize
+        @min = Geom::Point3d.new(0, 0, 0)
+        @max = Geom::Point3d.new(10, 20, 30)
+      end
+    end
+
+    class FakeLayer
+      attr_reader :name
+
+      def initialize(name)
+        @name = name
+      end
+    end
+
+    class FakeComponentInstance < Sketchup::ComponentInstance
+      attr_reader :entityID, :definition, :layer
+      attr_accessor :name
+
+      def initialize
+        @entityID = 123
+        @definition = FakeComponentDefinition.new
+        @layer = FakeLayer.new("Furniture")
+        @name = "Selected instance"
+      end
+
+      def bounds
+        FakeBounds.new
+      end
+    end
+
+    it "saves the selected component definition as a skp asset" do
+      entity = FakeComponentInstance.new
+      model = instance_double("SketchupModel", selection: [entity])
+      allow(Sketchup).to receive(:active_model).and_return(model)
+
+      Dir.mktmpdir do |dir|
+        output_path = File.join(dir, "assets", "components", "selected.skp")
+        result = dispatcher.send(
+          :handle_save_selected_component,
+          {
+            "output_path" => output_path,
+            "selection_index" => 0,
+          }
+        )
+
+        expect(File).to exist(output_path)
+        expect(result[:entity_ids]).to eq(["123"])
+        expect(result[:asset_info][:output_path]).to eq(output_path)
+        expect(result[:asset_info][:definition_name]).to eq("Selected Definition")
+        expect(result[:selected_entity][:type]).to eq("component")
       end
     end
   end

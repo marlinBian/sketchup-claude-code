@@ -183,6 +183,126 @@ async def test_register_selected_component_infers_manifest_from_selection(
 
 
 @pytest.mark.asyncio
+async def test_register_selected_component_can_export_project_asset(
+    monkeypatch,
+    tmp_path,
+):
+    import mcp_server.server as server
+
+    init_project(tmp_path, template="empty")
+    exported = {}
+
+    monkeypatch.setattr(
+        server,
+        "selection_info_from_bridge",
+        lambda limit=100: {
+            "selected_count": 1,
+            "entities": [
+                {
+                    "entityID": "51",
+                    "type": "component",
+                    "layer": "Furniture",
+                    "name": "Selected shelf",
+                    "definition_name": "Shelf definition",
+                    "bounding_box": {
+                        "min": [0, 0, 0],
+                        "max": [1200, 300, 1800],
+                    },
+                }
+            ],
+        },
+    )
+
+    def fake_save_asset(
+        output_path,
+        selection_index=0,
+        selection_entity_id=None,
+        definition_name=None,
+    ):
+        exported["output_path"] = output_path
+        exported["selection_index"] = selection_index
+        exported["selection_entity_id"] = selection_entity_id
+        exported["definition_name"] = definition_name
+        return {
+            "asset_info": {
+                "format": "skp",
+                "output_path": output_path,
+                "definition_name": definition_name,
+                "source_entity_id": "51",
+                "bytes": 1024,
+            }
+        }
+
+    monkeypatch.setattr(server, "save_selected_component_asset_to_bridge", fake_save_asset)
+
+    response = await server.register_selected_component(
+        project_path=str(tmp_path),
+        component_id="selected_shelf",
+        category="furniture",
+        export_asset=True,
+    )
+    data = json.loads(response.text)
+
+    assert exported["output_path"] == str(
+        tmp_path / "assets" / "components" / "selected_shelf.skp"
+    )
+    assert exported["definition_name"] == "Shelf definition"
+    assert data["component"]["assets"]["skp_path"] == "assets/components/selected_shelf.skp"
+    assert data["asset_export"]["asset_info"]["source_entity_id"] == "51"
+
+
+@pytest.mark.asyncio
+async def test_register_selected_component_does_not_export_duplicate_asset(
+    monkeypatch,
+    tmp_path,
+):
+    import mcp_server.server as server
+
+    init_project(tmp_path, template="empty")
+    called = {"save": False}
+
+    monkeypatch.setattr(
+        server,
+        "selection_info_from_bridge",
+        lambda limit=100: {
+            "selected_count": 1,
+            "entities": [
+                {
+                    "entityID": "51",
+                    "type": "component",
+                    "layer": "Furniture",
+                    "name": "Selected shelf",
+                    "definition_name": "Shelf definition",
+                    "bounding_box": {
+                        "min": [0, 0, 0],
+                        "max": [1200, 300, 1800],
+                    },
+                }
+            ],
+        },
+    )
+
+    def fake_save_asset(*args, **kwargs):
+        called["save"] = True
+        return {}
+
+    monkeypatch.setattr(server, "save_selected_component_asset_to_bridge", fake_save_asset)
+
+    response = await server.register_selected_component(
+        project_path=str(tmp_path),
+        component_id="toilet_floor_mounted_basic",
+        category="fixture",
+        export_asset=True,
+    )
+
+    assert called["save"] is False
+    assert response.text == (
+        "Project component from selection failed: component ID already exists "
+        "in packaged registry: toilet_floor_mounted_basic"
+    )
+
+
+@pytest.mark.asyncio
 async def test_register_selected_component_reports_empty_selection(monkeypatch, tmp_path):
     import mcp_server.server as server
 

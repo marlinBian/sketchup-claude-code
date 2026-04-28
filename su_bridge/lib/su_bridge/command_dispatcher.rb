@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "fileutils"
 require "securerandom"
 require "set"
 
@@ -12,6 +13,7 @@ module SuBridge
       create_door create_window create_stairs
       move_entity rotate_entity scale_entity
       delete_entity
+      save_selected_component
     ]).freeze
 
     OPERATION_HANDLERS = {
@@ -30,6 +32,7 @@ module SuBridge
       "query_model_info" => :handle_query_model_info,
       "get_scene_info" => :handle_get_scene_info,
       "get_selection_info" => :handle_get_selection_info,
+      "save_selected_component" => :handle_save_selected_component,
       "move_entity" => :handle_move_entity,
       "rotate_entity" => :handle_rotate_entity,
       "scale_entity" => :handle_scale_entity,
@@ -756,6 +759,44 @@ module SuBridge
       }
     end
 
+    def handle_save_selected_component(payload)
+      output_path = payload["output_path"]
+      selection_index = payload.fetch("selection_index", 0).to_i
+      entity_id = payload["entity_id"]
+      definition_name = payload["definition_name"]
+
+      raise ::SuBridge::UndoManager::ValidationError, "output_path required" unless output_path
+
+      entity = selected_entity(selection_index, entity_id)
+      component_instance = component_instance_for_export(entity)
+      definition = component_instance.definition
+      if definition_name && definition.respond_to?(:name=) && definition.name.to_s.empty?
+        definition.name = definition_name
+      end
+
+      ::FileUtils.mkdir_p(::File.dirname(output_path))
+      saved = definition.save_as(output_path)
+      unless saved
+        raise ::SuBridge::UndoManager::ValidationError, "Component save failed: #{output_path}"
+      end
+
+      summary = entity_summary(component_instance)
+      {
+        entity_ids: [summary[:entityID]],
+        spatial_delta: { bounding_box: summary[:bounding_box] },
+        model_revision: 1,
+        elapsed_ms: 0,
+        asset_info: {
+          format: "skp",
+          output_path: output_path,
+          definition_name: definition.name.to_s,
+          source_entity_id: summary[:entityID],
+          bytes: ::File.exist?(output_path) ? ::File.size(output_path) : nil,
+        },
+        selected_entity: summary,
+      }
+    end
+
     def handle_query_model_info(payload)
       # Delegate to get_scene_info
       handle_get_scene_info(payload)
@@ -786,6 +827,34 @@ module SuBridge
         summary[:definition_name] = entity.definition.name.to_s
       end
       summary
+    end
+
+    def selected_entity(selection_index, entity_id = nil)
+      selection = sketchup.active_model.selection.to_a
+      if entity_id
+        entity = selection.find { |item| item.entityID.to_s == entity_id.to_s }
+        raise ::SuBridge::UndoManager::EntityNotFoundError, "Selected entity not found: #{entity_id}" unless entity
+
+        return entity
+      end
+
+      entity = selection[selection_index]
+      raise ::SuBridge::UndoManager::ValidationError, "No SketchUp entity selected" unless entity
+
+      entity
+    end
+
+    def component_instance_for_export(entity)
+      if entity.is_a?(sketchup.const_get("ComponentInstance"))
+        return entity
+      end
+
+      if entity.is_a?(sketchup.const_get("Group")) && entity.respond_to?(:to_component)
+        return entity.to_component
+      end
+
+      raise ::SuBridge::UndoManager::ValidationError,
+        "Selected entity must be a group or component instance"
     end
 
     def overall_bounding_box(entities)

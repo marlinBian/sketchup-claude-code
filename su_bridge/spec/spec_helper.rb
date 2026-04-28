@@ -9,6 +9,8 @@ $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
 
 module Sketchup
   class ModelObserver; end
+  class Face; end
+  class Edge; end
   class Group; end
   class ComponentInstance; end
 

@@ -136,10 +136,11 @@ yet extract a selected SketchUp entity into a `.skp` asset automatically.
 
 `register_selected_component` is the first bridge-assisted registration path.
 It reads the current SketchUp selection, infers dimensions from the selected
-entity bounds, and writes a project-local component manifest. It does not yet
-export the selected geometry into a reusable `.skp` asset; until export is
-implemented, the manifest points at the expected project-local asset path and
-keeps a procedural fallback.
+entity bounds, and writes a project-local component manifest. When
+`export_asset` is enabled, it also asks the SketchUp bridge to save the selected
+group or component definition into `assets/components/<component_id>.skp`.
+When asset export is disabled or unavailable, the manifest can still point at
+the expected project-local asset path and keep a procedural fallback.
 
 `get_selection_info` remains the bridge-side inspection primitive for cases
 where an agent needs to choose between multiple selected entities or explain why
