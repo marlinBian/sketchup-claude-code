@@ -29,6 +29,8 @@ async def test_get_project_state_reads_design_model(tmp_path):
     assert data["design_rules"]["effective_rules"]["units"] == "mm"
     assert data["assets_lock"]["valid"] is True
     assert data["assets_lock"]["asset_count"] == 5
+    assert data["assets_lock"]["referenced_asset_count"] == 5
+    assert data["assets_lock"]["cached_asset_count"] == 0
     assert data["visual_feedback"]["valid"] is True
     assert data["visual_feedback"]["snapshot_count"] == 0
     assert data["visual_feedback"]["pending_action_count"] == 0

@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Any
 
+from mcp_server.project_assets import asset_lock_counts
 from mcp_server.resources.asset_lock_schema import load_assets_lock
 from mcp_server.resources.design_model_schema import load_design_model
 from mcp_server.resources.design_rules_schema import (
@@ -77,6 +78,8 @@ def summarize_assets_lock(project_path: str | Path) -> dict[str, Any]:
         "exists": path.exists(),
         "valid": False,
         "asset_count": 0,
+        "cached_asset_count": 0,
+        "referenced_asset_count": 0,
         "missing_asset_count": 0,
         "assets": [],
     }
@@ -104,12 +107,7 @@ def summarize_assets_lock(project_path: str | Path) -> dict[str, Any]:
     summary.update(
         {
             "valid": True,
-            "asset_count": len(assets),
-            "missing_asset_count": sum(
-                1
-                for asset in assets
-                if asset.get("cache", {}).get("status") == "missing"
-            ),
+            **asset_lock_counts(assets_lock),
             "assets": compact_assets,
         }
     )
