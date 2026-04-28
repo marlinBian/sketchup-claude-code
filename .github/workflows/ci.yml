@@ -61,40 +61,17 @@ jobs:
           cd mcp_server
           uv run --extra dev pytest tests/ -m "not integration" -v --tb=short
 
-      - name: Check plugin startup path
-        run: ./mcp_server/start.sh --startup-check
-
-      - name: Run headless product smoke
+      - name: Run release smoke
         run: |
           cd mcp_server
-          uv run --extra dev sketchup-agent smoke /tmp/sah-ci-smoke --force
-
-      - name: Check bridge installer dry run
-        run: |
-          cd mcp_server
-          uv run --extra dev sketchup-agent install-bridge --plugins-dir /tmp/sah-plugins --dry-run
-
-      - name: Build package wheel
-        run: |
-          cd mcp_server
-          uv build --wheel --out-dir /tmp/sah-dist --clear
-
-      - name: Check installed wheel bridge runtime
-        run: |
-          python3 -m venv /tmp/sah-wheel-venv
-          /tmp/sah-wheel-venv/bin/pip install /tmp/sah-dist/*.whl
-          /tmp/sah-wheel-venv/bin/sketchup-agent install-bridge --plugins-dir /tmp/sah-wheel-plugins --dry-run
-          /tmp/sah-wheel-venv/bin/sketchup-agent install-bridge --plugins-dir /tmp/sah-wheel-plugins
-          test -f /tmp/sah-wheel-plugins/su_bridge/lib/su_bridge.rb
-          test -f /tmp/sah-wheel-plugins/su_bridge.rb
-
-      - name: Check installed wheel project initialization
-        run: |
-          /tmp/sah-wheel-venv/bin/sketchup-agent init /tmp/sah-wheel-project --template bathroom --force
-          /tmp/sah-wheel-venv/bin/sketchup-agent validate /tmp/sah-wheel-project
-          /tmp/sah-wheel-venv/bin/sketchup-agent install-skills /tmp/sah-wheel-project --target all --dry-run
-          test -f /tmp/sah-wheel-project/.agents/skills/bathroom_planning/SKILL.md
-          test -f /tmp/sah-wheel-project/.claude/skills/bathroom_planning/SKILL.md
+          uv run --extra dev sketchup-agent release-check \
+            --with-wheel \
+            --project-path /tmp/sah-ci-release \
+            --plugins-dir /tmp/sah-ci-release-plugins \
+            --wheel-dist-dir /tmp/sah-ci-dist \
+            --wheel-venv-dir /tmp/sah-ci-wheel-venv \
+            --wheel-project-path /tmp/sah-ci-wheel-project \
+            --wheel-plugins-dir /tmp/sah-ci-wheel-plugins
 
   ruby-tests:
     name: Ruby Tests
