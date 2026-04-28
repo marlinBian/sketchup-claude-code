@@ -16,8 +16,10 @@ from mcp_server.resources.component_manifest_schema import validate_component_li
 from mcp_server.resources.design_model_schema import load_design_model, save_design_model
 from mcp_server.resources.snapshot_manifest_schema import (
     append_snapshot_entry,
+    append_visual_feedback_entry,
     snapshot_entry,
     snapshot_output_path,
+    visual_feedback_entry,
 )
 from mcp_server.resources.design_rules_schema import (
     create_default_design_rules,
@@ -1085,6 +1087,48 @@ async def capture_project_snapshot(
         )
     finally:
         bridge.disconnect()
+
+
+@mcp.tool()
+async def record_visual_feedback(
+    project_path: str,
+    summary: str,
+    actions: list[dict[str, Any]],
+    source_snapshot_id: str | None = None,
+    source_snapshot_file: str | None = None,
+    prompt: str | None = None,
+    reviewer: str = "agent",
+    renderer_tool: str | None = None,
+    renderer_model: str | None = None,
+) -> TextContent:
+    """Record advisory visual feedback as structured proposed actions.
+
+    This tool does not mutate design_model.json. It stores the interpretation
+    step that must happen between visual review and structured model changes.
+    """
+    try:
+        entry = visual_feedback_entry(
+            summary=summary,
+            actions=actions,
+            source_snapshot_id=source_snapshot_id,
+            source_snapshot_file=source_snapshot_file,
+            prompt=prompt,
+            reviewer=reviewer,
+            renderer_tool=renderer_tool,
+            renderer_model=renderer_model,
+        )
+        append_visual_feedback_entry(project_path, entry)
+        response_payload = {
+            "visual_feedback": entry,
+            "manifest_path": str(snapshot_manifest_path(project_path)),
+            "advisory": True,
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(response_payload, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Visual feedback failed: {str(e)}")
 
 
 @mcp.tool()

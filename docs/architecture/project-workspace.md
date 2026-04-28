@@ -57,7 +57,7 @@ Agents can inspect project state through MCP tools:
 
 `snapshots/` stores captures used for review, regression checks, and visual
 handoff. `snapshots/manifest.json` records provenance for each artifact and
-marks visual outputs as advisory.
+marks visual outputs and visual feedback action plans as advisory.
 
 ## Rule Precedence
 

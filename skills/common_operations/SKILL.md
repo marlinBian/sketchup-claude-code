@@ -59,6 +59,7 @@ Views, reporting, and versions:
 - `set_camera_view`
 - `capture_design`
 - `capture_project_snapshot`
+- `record_visual_feedback`
 - `generate_report`
 - `save_version`
 - `list_versions`
@@ -124,6 +125,25 @@ capture_project_snapshot(
 )
 ```
 
+When the designer accepts or discusses a visual suggestion, record the
+interpretation as structured proposed actions before changing project truth:
+
+```python
+record_visual_feedback(
+    project_path="<project-path>",
+    summary="The vanity feels too heavy in the captured view.",
+    actions=[
+        {
+            "type": "component",
+            "target": "vanity_001",
+            "intent": "Replace with a narrower wall-mounted vanity.",
+            "status": "proposed"
+        }
+    ],
+    source_snapshot_id="<snapshot-id>"
+)
+```
+
 ## Useful Dimensions
 
 | Item | Typical Millimeters |
@@ -144,3 +164,5 @@ capture_project_snapshot(
 - Do not promise legal code compliance from ergonomic seed values.
 - Do not describe placeholder boxes as final production assets.
 - Treat snapshots and rendered images as advisory review artifacts.
+- Do not mutate `design_model.json` directly from image pixels; record
+  structured visual feedback actions first.

@@ -57,6 +57,76 @@ SNAPSHOT_MANIFEST_SCHEMA: dict[str, Any] = {
                 "additionalProperties": False,
             },
         },
+        "reviews": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "id",
+                    "created_at",
+                    "source_model",
+                    "advisory",
+                    "summary",
+                    "actions",
+                ],
+                "properties": {
+                    "id": {"type": "string"},
+                    "created_at": {"type": "string"},
+                    "source_model": {"type": "string"},
+                    "advisory": {"type": "boolean"},
+                    "source_snapshot_id": {"type": "string"},
+                    "source_snapshot_file": {"type": "string"},
+                    "prompt": {"type": "string"},
+                    "reviewer": {"type": "string"},
+                    "renderer": {
+                        "type": "object",
+                        "properties": {
+                            "tool": {"type": "string"},
+                            "model": {"type": "string"},
+                        },
+                        "additionalProperties": False,
+                    },
+                    "summary": {"type": "string"},
+                    "actions": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["type", "target", "intent", "status"],
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": [
+                                        "component",
+                                        "geometry",
+                                        "lighting",
+                                        "material",
+                                        "rule",
+                                        "style",
+                                        "camera",
+                                        "note",
+                                    ],
+                                },
+                                "target": {"type": "string"},
+                                "intent": {"type": "string"},
+                                "status": {
+                                    "type": "string",
+                                    "enum": [
+                                        "proposed",
+                                        "accepted",
+                                        "rejected",
+                                        "applied",
+                                    ],
+                                },
+                                "payload": {"type": "object"},
+                                "rationale": {"type": "string"},
+                            },
+                            "additionalProperties": False,
+                        },
+                    },
+                },
+                "additionalProperties": False,
+            },
+        },
     },
     "additionalProperties": False,
 }
@@ -77,6 +147,7 @@ def create_empty_snapshot_manifest() -> dict[str, Any]:
     return {
         "version": "1.0",
         "snapshots": [],
+        "reviews": [],
     }
 
 
@@ -136,6 +207,43 @@ def snapshot_entry(
     return entry
 
 
+def visual_feedback_entry(
+    summary: str,
+    actions: list[dict[str, Any]],
+    source_snapshot_id: str | None = None,
+    source_snapshot_file: str | None = None,
+    prompt: str | None = None,
+    reviewer: str = "agent",
+    renderer_tool: str | None = None,
+    renderer_model: str | None = None,
+    created_at: str | None = None,
+) -> dict[str, Any]:
+    """Create one advisory visual feedback action plan entry."""
+    timestamp = created_at or utc_now()
+    entry: dict[str, Any] = {
+        "id": f"visual_review_{slugify_snapshot_label(timestamp)}",
+        "created_at": timestamp,
+        "source_model": DESIGN_MODEL_FILENAME,
+        "advisory": True,
+        "reviewer": reviewer,
+        "summary": summary,
+        "actions": actions,
+    }
+    if source_snapshot_id:
+        entry["source_snapshot_id"] = source_snapshot_id
+    if source_snapshot_file:
+        entry["source_snapshot_file"] = source_snapshot_file
+    if prompt:
+        entry["prompt"] = prompt
+    if renderer_tool or renderer_model:
+        entry["renderer"] = {}
+        if renderer_tool:
+            entry["renderer"]["tool"] = renderer_tool
+        if renderer_model:
+            entry["renderer"]["model"] = renderer_model
+    return entry
+
+
 def validate_snapshot_manifest(data: dict[str, Any]) -> tuple[bool, list[str]]:
     """Validate a snapshot manifest."""
     if data is None or not isinstance(data, dict):
@@ -190,6 +298,35 @@ def append_snapshot_entry(
         manifest = create_empty_snapshot_manifest()
 
     manifest["snapshots"].append(entry)
+    is_valid, errors = validate_snapshot_manifest(manifest)
+    if not is_valid:
+        raise ValueError("; ".join(errors))
+
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return manifest
+
+
+def append_visual_feedback_entry(
+    project_path: str | Path,
+    entry: dict[str, Any],
+) -> dict[str, Any]:
+    """Append a visual feedback action plan entry to the project manifest."""
+    manifest_path = snapshot_manifest_path(project_path)
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if manifest_path.exists():
+        manifest, errors = load_snapshot_manifest(manifest_path)
+        if errors:
+            raise ValueError("; ".join(errors))
+        assert manifest is not None
+        manifest.setdefault("reviews", [])
+    else:
+        manifest = create_empty_snapshot_manifest()
+
+    manifest["reviews"].append(entry)
     is_valid, errors = validate_snapshot_manifest(manifest)
     if not is_valid:
         raise ValueError("; ".join(errors))

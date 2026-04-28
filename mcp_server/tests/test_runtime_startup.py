@@ -62,6 +62,7 @@ runpy.run_module("mcp_server.server", run_name="__main__")
     tools = json.loads(result.stdout.strip().splitlines()[-1])
     assert {
         "get_selection_info",
+        "record_visual_feedback",
         "register_project_component",
         "register_selected_component",
         "rotate_entity",

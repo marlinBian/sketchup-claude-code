@@ -11,6 +11,9 @@ The first supported visual workflow is project snapshot capture:
 2. The user asks for a visual review artifact.
 3. `capture_project_snapshot` captures a SketchUp view into `snapshots/`.
 4. The tool appends provenance to `snapshots/manifest.json`.
+5. If the user wants to act on visual feedback, `record_visual_feedback`
+   records structured proposed actions in the same manifest before any model
+   mutation happens.
 
 The manifest records:
 
@@ -20,6 +23,14 @@ The manifest records:
 - camera preset
 - width and height
 - optional user prompt
+- `advisory: true`
+
+The manifest can also record visual reviews. A review contains:
+
+- source snapshot ID or file, when available
+- summary of the visual observation
+- renderer or reviewer provenance, when available
+- proposed structured actions with a target, intent, payload, and status
 - `advisory: true`
 
 ## Project Files

@@ -41,6 +41,7 @@ def test_init_project_empty_template_creates_workspace_files(tmp_path):
     assert assets_lock["assets"] == []
     assert component_library["components"] == []
     assert snapshot_manifest["snapshots"] == []
+    assert snapshot_manifest["reviews"] == []
     assert mcp_config["mcpServers"]["sketchup-mcp"]["command"] == "sketchup-agent-mcp"
     assert "design_model.json" in (project_path / "AGENTS.md").read_text(encoding="utf-8")
     assert "design_rules.json" in (project_path / "CLAUDE.md").read_text(encoding="utf-8")

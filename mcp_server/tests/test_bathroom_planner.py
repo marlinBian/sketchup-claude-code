@@ -116,3 +116,4 @@ def test_save_bathroom_plan_writes_project_files(tmp_path):
     assert "toilet_floor_mounted_basic" in locked_ids
     assert (tmp_path / "assets" / "components").is_dir()
     assert snapshot_manifest["snapshots"] == []
+    assert snapshot_manifest["reviews"] == []

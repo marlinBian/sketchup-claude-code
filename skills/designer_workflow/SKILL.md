@@ -90,6 +90,11 @@ Use `capture_project_snapshot` when the user asks for a screenshot or visual
 review and a project path is available. Snapshot provenance is recorded in
 `snapshots/manifest.json`.
 
+If the user wants to act on a screenshot or rendered image, call
+`record_visual_feedback` first with proposed structured actions. Only mutate
+`design_model.json`, components, rules, materials, or styles after the visual
+feedback has been converted into explicit actions.
+
 ## Supported User Prompts
 
 English examples:
@@ -120,4 +125,6 @@ Chinese examples:
   defaults.
 - Do not use image rendering as source of truth.
 - Treat snapshots as advisory artifacts.
+- Do not directly apply visual pixels as geometry; convert accepted visual
+  feedback into structured actions first.
 - Do not write maintainer workflow instructions into designer project files.
