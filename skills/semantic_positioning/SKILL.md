@@ -23,15 +23,23 @@ or use a clearly labeled placeholder.
 | --- | --- |
 | `centered_in_space` | Center of rectangular `spaces.<space_id>.bounds` |
 | `against_wall` | Rectangular space side, component dimensions, wall side |
+| `above` | Reference component bounds and optional wall provenance |
+| `beside` | Reference component bounds, side, and gap |
 
 Use the MCP tool `add_component_instance_semantic` for these relationships when
-a project path and rectangular space exist. It writes `design_model.json`,
-refreshes `assets.lock.json`, records `relative_to=<space_id>`, and stores the
-semantic placement provenance under the instance source.
+a project path and rectangular space exist: `centered_in_space` and
+`against_wall`. It writes `design_model.json`, refreshes `assets.lock.json`,
+records `relative_to=<space_id>`, and stores the semantic placement provenance
+under the instance source.
 
-Other relationships such as `above`, `beside`, `in_front_of`, or
-`aligned_with` are not yet generic project-backed tools. Resolve them manually
-only when dimensions and anchors are explicit, and report the assumption.
+Use `add_component_instance_relative` for component-to-component relationships:
+`above` and `beside`. If the reference component was placed against a wall, the
+tool reuses that wall side to keep wall-mounted components such as mirrors on
+the same wall plane.
+
+Other relationships such as `in_front_of` or `aligned_with` are not yet generic
+project-backed tools. Resolve them manually only when dimensions and anchors are
+explicit, and report the assumption.
 
 ## Workflow
 
@@ -39,8 +47,9 @@ only when dimensions and anchors are explicit, and report the assumption.
 2. Read dimensions, anchors, and clearances.
 3. Convert the relationship into absolute coordinates.
 4. Check fit using project space bounds, `design_rules.json`, and registry data.
-5. Call `add_component_instance_semantic` for supported project-backed
-   placement.
+5. Call `add_component_instance_semantic` for supported space-relative
+   placement, or `add_component_instance_relative` for supported
+   component-relative placement.
 6. Use `plan_project_execution` or `execute_project_model` if the designer wants
    SketchUp updated.
 7. Report assumptions and validation warnings.
@@ -60,6 +69,16 @@ add_component_instance_semantic(
     space_id="bathroom_001",
     relation="against_wall",
     wall_side="north"
+)
+```
+
+```python
+add_component_instance_relative(
+    project_path="<project-path>",
+    component_id="mirror_wall_500",
+    reference_instance_id="vanity_001",
+    relation="above",
+    gap=150
 )
 ```
 

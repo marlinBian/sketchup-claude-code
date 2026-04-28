@@ -103,8 +103,8 @@ placement.
 
 After registration, pass `project_path` to `search_components`,
 `get_component_manifest`, `add_component_instance`,
-`add_component_instance_semantic`, and `execute_component_instance` so
-project-local metadata is included.
+`add_component_instance_semantic`, `add_component_instance_relative`, and
+`execute_component_instance` so project-local metadata is included.
 
 `search_local_library` remains available only for simple human-readable result
 summaries:
@@ -156,6 +156,24 @@ Supported relations are currently `centered_in_space` and `against_wall`.
 Supported wall sides are `north`, `south`, `east`, and `west`. The tool checks
 component bounds against the target space bounds, writes semantic provenance,
 and still leaves full collision or clearance review to validation tools.
+
+When the user gives a relationship to an existing component instance, use the
+relative project-backed path:
+
+```python
+add_component_instance_relative(
+    project_path="<project-path>",
+    component_id="mirror_wall_500",
+    reference_instance_id="vanity_001",
+    relation="above",
+    gap=150
+)
+```
+
+Supported relative relations are currently `above` and `beside`. For `beside`,
+include `side` as `north`, `south`, `east`, or `west`. If the reference
+component was placed against a wall, wall-mounted components keep the same wall
+plane when placed `above`.
 
 If a project-local `.skp` asset is added, exported, or removed after placement,
 use `refresh_project_asset_lock` to regenerate `assets.lock.json` before

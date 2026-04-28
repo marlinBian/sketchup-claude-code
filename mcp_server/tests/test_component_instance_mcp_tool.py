@@ -210,7 +210,99 @@ async def test_add_component_instance_semantic_places_against_north_wall(tmp_pat
     assert vanity["bounds"]["max"][1] == 3000.0
     assert vanity["rotation"] == 180.0
     assert vanity["semantic_anchor"] == "back"
+    assert vanity["anchors"]["back"] == [2000.0, 3000.0, 0.0]
     assert vanity["source"]["semantic_placement"]["wall_side"] == "north"
+
+
+@pytest.mark.asyncio
+async def test_add_component_instance_relative_places_mirror_above_vanity(tmp_path):
+    from mcp_server.server import (
+        add_component_instance_relative,
+        add_component_instance_semantic,
+        set_project_space,
+    )
+
+    init_project(tmp_path, template="empty")
+    await set_project_space(
+        project_path=str(tmp_path),
+        space_id="bathroom_001",
+        space_type="bathroom",
+        width=4000,
+        depth=3000,
+        height=2400,
+    )
+    await add_component_instance_semantic(
+        project_path=str(tmp_path),
+        component_id="vanity_wall_600",
+        space_id="bathroom_001",
+        relation="against_wall",
+        wall_side="north",
+    )
+
+    response = await add_component_instance_relative(
+        project_path=str(tmp_path),
+        component_id="mirror_wall_500",
+        reference_instance_id="vanity_001",
+        relation="above",
+        gap=150,
+    )
+    data = json.loads(response.text)
+    design_model = json.loads((tmp_path / "design_model.json").read_text())
+    mirror = design_model["components"]["mirror_001"]
+
+    assert data["instance_id"] == "mirror_001"
+    assert mirror["position"] == [2000.0, 2960.0, 1350.0]
+    assert mirror["bounds"]["min"] == [1750.0, 2960.0, 1000.0]
+    assert mirror["bounds"]["max"] == [2250.0, 3000.0, 1700.0]
+    assert mirror["rotation"] == 180.0
+    assert mirror["relative_to"] == "vanity_001"
+    assert mirror["semantic_anchor"] == "above"
+    assert mirror["anchors"]["back"] == [2000.0, 3000.0, 1350.0]
+    assert mirror["source"]["semantic_placement"]["relation"] == "above"
+    assert mirror["source"]["semantic_placement"]["space_id"] == "bathroom_001"
+    assert design_model["metadata"]["execution_sync"]["source"] == (
+        "add_component_instance_relative"
+    )
+
+
+@pytest.mark.asyncio
+async def test_add_component_instance_relative_rejects_space_overflow(tmp_path):
+    from mcp_server.server import (
+        add_component_instance_relative,
+        add_component_instance_semantic,
+        set_project_space,
+    )
+
+    init_project(tmp_path, template="empty")
+    await set_project_space(
+        project_path=str(tmp_path),
+        space_id="bathroom_001",
+        space_type="bathroom",
+        width=4000,
+        depth=3000,
+        height=1600,
+    )
+    await add_component_instance_semantic(
+        project_path=str(tmp_path),
+        component_id="vanity_wall_600",
+        space_id="bathroom_001",
+        relation="against_wall",
+        wall_side="north",
+    )
+
+    response = await add_component_instance_relative(
+        project_path=str(tmp_path),
+        component_id="mirror_wall_500",
+        reference_instance_id="vanity_001",
+        relation="above",
+        gap=150,
+    )
+    design_model = json.loads((tmp_path / "design_model.json").read_text())
+
+    assert response.text.startswith(
+        "Relative component placement failed: component bounds exceed space bounds:"
+    )
+    assert "mirror_001" not in design_model["components"]
 
 
 @pytest.mark.asyncio

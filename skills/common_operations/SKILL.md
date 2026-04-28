@@ -50,6 +50,7 @@ Components and layout:
 - `register_project_component`
 - `register_selected_component`
 - `add_component_instance`
+- `add_component_instance_relative`
 - `add_component_instance_semantic`
 - `execute_component_instance`
 - `plan_project_execution`
@@ -138,6 +139,22 @@ Use this path for user wording such as "against the north wall", "center it in
 the room", "靠北墙", or "放在房间中间". It checks component bounds against the
 space bounds and records the semantic placement provenance in
 `design_model.json`. It does not prove full collision-free layout.
+
+Project-backed relative component placement:
+
+```python
+add_component_instance_relative(
+    project_path="<project-path>",
+    component_id="mirror_wall_500",
+    reference_instance_id="vanity_001",
+    relation="above",
+    gap=150
+)
+```
+
+Use this path for user wording such as "put the mirror above the vanity" or
+"把镜子放在洗手台上方". Supported relations are `above` and `beside`. For
+`beside`, include `side` as `north`, `south`, `east`, or `west`.
 
 Ad hoc live SketchUp placement without project truth:
 

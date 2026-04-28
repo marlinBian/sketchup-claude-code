@@ -40,6 +40,9 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
   When a project path and rectangular space exist, use
   `add_component_instance_semantic` with `relation="against_wall"` or
   `relation="centered_in_space"`. Use `wall_side` only for `against_wall`.
+- Place component relative to another component: "put the mirror above the
+  vanity", "把镜子放在洗手台上方". Use `add_component_instance_relative` with
+  `relation="above"` after confirming the reference instance ID.
 - Create primitive: "make a box", "建一个柜体占位".
   Use `create_box`.
 - Change material: "make it white", "改成白色".

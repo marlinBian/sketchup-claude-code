@@ -109,6 +109,11 @@ updates `design_model.json`, and records the placement assumption. It checks the
 component's bounds against the space bounds, but it is not a complete collision
 or code-compliance solver.
 
+Use `add_component_instance_relative` when the request is relative to an
+existing component instance, such as placing a mirror above a vanity. It can
+reuse wall provenance from the reference component so wall-mounted objects stay
+on the same wall plane.
+
 Use `execute_component_instance` when that project-backed instance should be
 sent to SketchUp and linked to the returned SketchUp entity ID.
 

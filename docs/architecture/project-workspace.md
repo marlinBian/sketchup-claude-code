@@ -67,6 +67,9 @@ Agents can inspect project state through MCP tools:
   such as `centered_in_space` or `against_wall` against rectangular space
   bounds, then records the component instance and semantic provenance in
   `design_model.json`
+- `add_component_instance_relative` resolves supported component-to-component
+  relationships such as `above` and `beside`, then records the derived instance
+  and provenance in `design_model.json`
 - `execute_component_instance` executes a project-backed component instance in
   SketchUp and records the returned entity ID when available
 - `plan_project_execution` derives a deterministic bridge trace from the whole

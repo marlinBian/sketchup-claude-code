@@ -77,12 +77,16 @@ planning.
 Use `search_components` or `get_component_manifest` before placing reusable
 objects. If the designer gives exact coordinates, call `add_component_instance`.
 If the designer gives a supported relationship to a rectangular space, call
-`add_component_instance_semantic`.
+`add_component_instance_semantic`. If the designer gives a supported
+relationship to another component instance, call `add_component_instance_relative`.
 
 Supported semantic placement relations are:
 
 - `centered_in_space`
 - `against_wall` with `wall_side` as `north`, `south`, `east`, or `west`
+- `above` a reference component
+- `beside` a reference component with `side` as `north`, `south`, `east`, or
+  `west`
 
 After component placement, use `plan_project_execution` to confirm the updated
 `design_model.json` can be converted into a bridge trace. Use
@@ -191,6 +195,10 @@ Sync the current design_model.json to SketchUp.
 Put the vanity against the north wall of bathroom_001.
 ```
 
+```text
+Put the mirror above vanity_001 with a 150 mm gap.
+```
+
 Chinese examples:
 
 ```text
@@ -207,6 +215,10 @@ Chinese examples:
 
 ```text
 把洗手台靠 bathroom_001 的北墙放。
+```
+
+```text
+把镜子放在 vanity_001 上方，留 150 mm 间距。
 ```
 
 ## Guardrails

@@ -146,6 +146,8 @@ Goal: turn seed components into a maintainable semantic component system.
 - expose `add_component_instance` for source-of-truth component insertion
 - expose `add_component_instance_semantic` for project-backed rectangular-space
   relations such as centering in a space or placing against a wall
+- expose `add_component_instance_relative` for project-backed
+  component-relative relations such as placing a mirror above a vanity
 - expose `execute_component_instance` for project-backed SketchUp execution
 - validate component manifests and project asset locks
 - add project-local cache shape at `assets/components/`
