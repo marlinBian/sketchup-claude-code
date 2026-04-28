@@ -19,6 +19,7 @@ def test_generate_project_report_writes_english_markdown(tmp_path):
     assert result["asset_count"] == 5
     assert "# " in report
     assert "Project Summary" in report
+    assert "SketchUp sync status: not_executed" in report
     assert "Effective Design Rules" in report
     assert not re.search(r"[\u4e00-\u9fff]", report)
 

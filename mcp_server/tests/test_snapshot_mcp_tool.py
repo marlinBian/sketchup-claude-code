@@ -227,6 +227,17 @@ async def test_apply_visual_feedback_style_action_updates_metadata(tmp_path):
 
     assert data["applied"] == {"style": "scandinavian"}
     assert design_model["metadata"]["style"] == "scandinavian"
+    assert design_model["metadata"]["execution_sync"]["status"] == "dirty"
+    assert (
+        design_model["metadata"]["execution_sync"]["reason"]
+        == "visual_feedback_action_applied"
+    )
+    assert design_model["metadata"]["execution_sync"]["details"] == {
+        "review_id": review_id,
+        "action_index": 0,
+        "type": "style",
+        "target": "project",
+    }
     assert data["assets_lock_path"] is None
 
 

@@ -194,6 +194,16 @@ def summarize_snapshot_manifest(project_path: str | Path) -> dict[str, Any]:
 
 def summarize_execution(design_model: dict[str, Any]) -> dict[str, Any]:
     """Return compact bridge execution state from design_model.json."""
+    metadata = (
+        design_model.get("metadata", {})
+        if isinstance(design_model.get("metadata"), dict)
+        else {}
+    )
+    execution_sync = (
+        metadata.get("execution_sync", {})
+        if isinstance(metadata.get("execution_sync"), dict)
+        else {}
+    )
     bridge_operations = (
         design_model.get("execution", {}).get("bridge_operations", {})
         if isinstance(design_model.get("execution"), dict)
@@ -227,6 +237,11 @@ def summarize_execution(design_model: dict[str, Any]) -> dict[str, Any]:
             if isinstance(wall, dict) and wall.get("entity_ids"):
                 space_walls_with_entity_ids.append(f"{space_id}.{wall_side}")
 
+    has_execution_feedback = bool(bridge_operations)
+    sync_status = execution_sync.get("status")
+    if sync_status is None:
+        sync_status = "synced" if has_execution_feedback else "not_executed"
+
     return {
         "operation_count": len(bridge_operations),
         "operation_type_counts": operation_type_counts,
@@ -236,7 +251,9 @@ def summarize_execution(design_model: dict[str, Any]) -> dict[str, Any]:
         "space_walls_with_entity_ids": sorted(space_walls_with_entity_ids),
         "components_with_entity_ids": components_with_entity_ids,
         "lighting_with_entity_ids": lighting_with_entity_ids,
-        "has_execution_feedback": bool(bridge_operations),
+        "has_execution_feedback": has_execution_feedback,
+        "sync_status": sync_status,
+        "sync_metadata": execution_sync,
     }
 
 

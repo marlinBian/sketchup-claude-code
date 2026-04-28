@@ -38,6 +38,7 @@ async def test_get_project_state_reads_design_model(tmp_path):
     assert data["versions"]["count"] == 0
     assert data["execution"]["operation_count"] == 0
     assert data["execution"]["has_execution_feedback"] is False
+    assert data["execution"]["sync_status"] == "not_executed"
 
 
 @pytest.mark.asyncio
@@ -115,6 +116,7 @@ async def test_get_project_state_summarizes_execution_feedback(tmp_path):
     assert data["execution"]["space_walls_with_entity_ids"] == ["bathroom_001.south"]
     assert data["execution"]["components_with_entity_ids"] == ["toilet_001"]
     assert data["execution"]["lighting_with_entity_ids"] == ["ceiling_light_001"]
+    assert data["execution"]["sync_status"] == "synced"
 
 
 @pytest.mark.asyncio

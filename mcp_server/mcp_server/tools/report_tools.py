@@ -56,6 +56,7 @@ def build_project_report(state: dict[str, Any]) -> str:
     assets = state.get("assets_lock", {})
     visual_feedback = state.get("visual_feedback", {})
     design_rules = state.get("design_rules", {})
+    execution = state.get("execution", {})
 
     lines = [
         f"# {design_model.get('project_name', 'SketchUp Design')} Design Report",
@@ -69,6 +70,7 @@ def build_project_report(state: dict[str, Any]) -> str:
         f"- Spaces: {len(design_model.get('spaces', {}))}",
         f"- Components: {len(design_model.get('components', {}))}",
         f"- Lighting items: {len(design_model.get('lighting', {}))}",
+        f"- SketchUp sync status: {execution.get('sync_status', 'unknown')}",
         "",
         "## Validation",
         "",

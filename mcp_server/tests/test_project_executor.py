@@ -114,6 +114,8 @@ def test_execute_project_execution_plan_accepts_injected_executor(tmp_path):
         "entity_ids"
     ] == ["su-wall_bathroom_001_south"]
     assert design_model["components"]["toilet_001"]["entity_id"] == "su-place_toilet_001"
+    assert design_model["metadata"]["execution_sync"]["status"] == "synced"
+    assert design_model["metadata"]["execution_sync"]["operation_count"] == 10
 
 
 @pytest.mark.asyncio
@@ -181,6 +183,7 @@ async def test_execute_project_model_syncs_entity_ids_to_project(monkeypatch, tm
         "entity_ids"
     ] == ["su-wall_bathroom_001_west"]
     assert "wall_bathroom_001_south" in design_model["execution"]["bridge_operations"]
+    assert design_model["metadata"]["execution_sync"]["status"] == "synced"
 
 
 @pytest.mark.asyncio

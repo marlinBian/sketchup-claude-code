@@ -1,6 +1,7 @@
 """FastMCP entry point for SketchUp Agent Harness MCP server."""
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from mcp.server import Server
@@ -338,6 +339,29 @@ def selected_visual_feedback_action(
     if not isinstance(action, dict):
         return review, None, "visual feedback action must be an object."
     return review, action, None
+
+
+def utc_now() -> str:
+    """Return an ISO8601 UTC timestamp."""
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def mark_execution_sync_dirty(
+    design_model: dict[str, Any],
+    *,
+    reason: str,
+    source: str,
+    details: dict[str, Any],
+) -> None:
+    """Mark live SketchUp execution feedback stale after project truth changes."""
+    design_model.setdefault("metadata", {})
+    design_model["metadata"]["execution_sync"] = {
+        "status": "dirty",
+        "reason": reason,
+        "source": source,
+        "updated_at": utc_now(),
+        "details": details,
+    }
 
 
 def component_manifest_insertion_offset(
@@ -1646,6 +1670,17 @@ async def apply_visual_feedback_action(
             "type": action_type,
             "target": target,
         }
+        mark_execution_sync_dirty(
+            design_model,
+            reason="visual_feedback_action_applied",
+            source="apply_visual_feedback_action",
+            details={
+                "review_id": review_id,
+                "action_index": action_index,
+                "type": action_type,
+                "target": target,
+            },
+        )
 
         saved, save_errors = save_design_model(str(design_model_path), design_model)
         if not saved:

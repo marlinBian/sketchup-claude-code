@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,11 @@ from mcp_server.tools.trace_executor import (
 
 
 DEFAULT_WALL_THICKNESS = 100.0
+
+
+def utc_now() -> str:
+    """Return an ISO8601 UTC timestamp."""
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def _xyz(value: Any, field_name: str) -> list[float]:
@@ -372,6 +378,13 @@ def execute_project_execution_plan(
             plan["design_model"],
             execution_report,
         )
+        plan["design_model"].setdefault("metadata", {})
+        plan["design_model"]["metadata"]["execution_sync"] = {
+            "status": "synced",
+            "source": "execute_project_execution_plan",
+            "updated_at": utc_now(),
+            "operation_count": execution_report.get("executed_count", 0),
+        }
         design_model_path = find_design_model_path(project_path)
         saved, save_errors = save_design_model(
             str(design_model_path),
