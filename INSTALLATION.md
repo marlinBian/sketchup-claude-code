@@ -176,6 +176,13 @@ cd mcp_server
 uv run --extra dev sketchup-agent validate /tmp/sah-bathroom
 ```
 
+Inspect current project truth and compact supporting summaries:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent state /tmp/sah-bathroom
+```
+
 Check the installed commands, project files, SketchUp bridge install, and live
 socket:
 

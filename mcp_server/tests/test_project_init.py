@@ -133,6 +133,41 @@ def test_cli_validate_outputs_json(tmp_path, capsys):
     assert data["ok"] is True
 
 
+def test_cli_state_outputs_project_summaries(tmp_path, capsys):
+    project_path = tmp_path / "cli-project"
+    init_project(project_path, template="bathroom")
+
+    exit_code = main(["state", str(project_path)])
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert data["design_model"]["spaces"]["bathroom_001"]["type"] == "bathroom"
+    assert data["assets_lock"]["asset_count"] == 5
+    assert data["visual_feedback"]["pending_action_count"] == 0
+
+
+def test_cli_state_can_skip_optional_summaries(tmp_path, capsys):
+    project_path = tmp_path / "cli-project"
+    init_project(project_path, template="bathroom")
+
+    exit_code = main(
+        [
+            "state",
+            str(project_path),
+            "--no-assets",
+            "--no-visual-feedback",
+        ]
+    )
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert "design_model" in data
+    assert "assets_lock" not in data
+    assert "visual_feedback" not in data
+
+
 def test_cli_smoke_outputs_json(tmp_path, capsys):
     exit_code = main(["smoke", str(tmp_path / "smoke"), "--force"])
     captured = capsys.readouterr()

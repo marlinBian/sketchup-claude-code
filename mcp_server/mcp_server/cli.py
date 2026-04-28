@@ -6,6 +6,7 @@ import sys
 
 from mcp_server.bridge_install import install_bridge
 from mcp_server.doctor import run_doctor
+from mcp_server.project_state import read_project_state
 from mcp_server.project_init import init_project
 from mcp_server.runtime_skills import install_runtime_skills
 from mcp_server.smoke import DEFAULT_SMOKE_PROJECT, run_smoke, validate_project
@@ -36,6 +37,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate a design project workspace",
     )
     validate_parser.add_argument("project_path", help="Project directory to validate")
+
+    state_parser = subparsers.add_parser(
+        "state",
+        help="Inspect design_model.json and supporting project summaries",
+    )
+    state_parser.add_argument("project_path", help="Project directory to inspect")
+    state_parser.add_argument(
+        "--no-assets",
+        action="store_true",
+        help="Omit assets.lock.json summary",
+    )
+    state_parser.add_argument(
+        "--no-visual-feedback",
+        action="store_true",
+        help="Omit snapshots/manifest.json visual feedback summary",
+    )
 
     smoke_parser = subparsers.add_parser(
         "smoke",
@@ -162,6 +179,14 @@ def main(argv: list[str] | None = None) -> int:
             result = validate_project(args.project_path)
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result["ok"] else 1
+        if args.command == "state":
+            result = read_project_state(
+                args.project_path,
+                include_assets=not args.no_assets,
+                include_visual_feedback=not args.no_visual_feedback,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
         if args.command == "smoke":
             result = run_smoke(
                 args.project_path,

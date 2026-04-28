@@ -166,6 +166,7 @@ Goal: make maintainers and early users verify the harness without remembering
 scattered commands.
 
 - add `sketchup-agent validate <project-path>`
+- add `sketchup-agent state <project-path>`
 - add `sketchup-agent doctor [project-path]`
 - add `sketchup-agent smoke [project-path] --force`
 - add plugin startup smoke for `mcp_server/start.sh`
@@ -201,6 +202,7 @@ Goal: make CLI agents inspect project truth without parsing files manually.
 
 - expose `get_project_state`
 - include asset-lock and visual-feedback summaries in project state inspection
+- expose the same project-state reader through `sketchup-agent state`
 - expose `list_project_components`
 - expose `validate_design_project`
 - keep validation behavior shared with `sketchup-agent validate`

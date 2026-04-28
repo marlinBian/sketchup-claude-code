@@ -74,6 +74,13 @@ cd mcp_server
 uv run --extra dev sketchup-agent doctor /tmp/sah-smoke --sketchup-version 2024
 ```
 
+Project state inspection:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent state /tmp/sah-smoke
+```
+
 Package wheel smoke:
 
 ```bash

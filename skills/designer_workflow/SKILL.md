@@ -39,6 +39,13 @@ If the user asks whether setup is healthy, guide them to run:
 sketchup-agent doctor <project-path> --sketchup-version 2024
 ```
 
+If the user asks to inspect current files without opening an agent tool call,
+guide them to run:
+
+```bash
+sketchup-agent state <project-path>
+```
+
 During source development, the equivalent command is:
 
 ```bash
