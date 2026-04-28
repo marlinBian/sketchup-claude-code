@@ -14,6 +14,7 @@ my-design-project/
     components/
   model.skp
   snapshots/
+    manifest.json
 ```
 
 ## Files
@@ -44,7 +45,8 @@ External downloads are still explicit actions, not automatic background work.
 `model.skp` is the SketchUp model generated or synchronized by the bridge.
 
 `snapshots/` stores captures used for review, regression checks, and visual
-handoff.
+handoff. `snapshots/manifest.json` records provenance for each artifact and
+marks visual outputs as advisory.
 
 ## Rule Precedence
 

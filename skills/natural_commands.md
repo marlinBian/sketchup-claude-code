@@ -24,7 +24,7 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
 - Apply style: "use Scandinavian style", "换成北欧风".
   Use `apply_style`.
 - Capture view: "take a snapshot", "截图".
-  Use `capture_design`.
+  Use `capture_project_snapshot` when a project path is available.
 - Save version: "save this version", "保存一下".
   Use `save_version`.
 

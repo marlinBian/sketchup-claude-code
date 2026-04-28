@@ -22,7 +22,8 @@ cd ~/Design/my-bathroom
 ```
 
 The project directory now owns `design_model.json`, `design_rules.json`,
-`assets.lock.json`, and the `assets/components/` cache directory.
+`assets.lock.json`, the `assets/components/` cache directory, and
+`snapshots/manifest.json`.
 
 ## 2. Start SketchUp Bridge
 

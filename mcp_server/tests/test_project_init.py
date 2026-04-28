@@ -17,12 +17,17 @@ def test_init_project_empty_template_creates_workspace_files(tmp_path):
     assert (project_path / "assets" / "components").is_dir()
     assert (project_path / ".mcp.json").exists()
     assert (project_path / "snapshots").is_dir()
+    assert (project_path / "snapshots" / "manifest.json").exists()
 
     design_model = json.loads((project_path / "design_model.json").read_text())
     assets_lock = json.loads((project_path / "assets.lock.json").read_text())
+    snapshot_manifest = json.loads(
+        (project_path / "snapshots" / "manifest.json").read_text()
+    )
     assert design_model["project_name"] == "My Design"
     assert assets_lock["cache"]["root"] == "assets/components"
     assert assets_lock["assets"] == []
+    assert snapshot_manifest["snapshots"] == []
 
 
 def test_init_project_bathroom_template_creates_seed_bathroom(tmp_path):
@@ -40,6 +45,7 @@ def test_init_project_bathroom_template_creates_seed_bathroom(tmp_path):
     assert "vanity_wall_600" in locked_ids
     assert "ceiling_light_basic" in locked_ids
     assert (project_path / "assets" / "components").is_dir()
+    assert (project_path / "snapshots" / "manifest.json").exists()
 
 
 def test_init_project_refuses_to_overwrite_existing_files(tmp_path):

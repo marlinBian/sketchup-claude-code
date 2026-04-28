@@ -51,6 +51,7 @@ Views, reporting, and versions:
 
 - `set_camera_view`
 - `capture_design`
+- `capture_project_snapshot`
 - `generate_report`
 - `save_version`
 - `list_versions`
@@ -94,8 +95,11 @@ apply_style(style_name="scandinavian")
 ### Capture a View
 
 ```python
-set_camera_view(view_preset="top")
-capture_design(output_path="snapshots/top.png", view_preset="top")
+capture_project_snapshot(
+    project_path="<project-path>",
+    view_preset="top",
+    label="review"
+)
 ```
 
 ## Useful Dimensions
@@ -116,3 +120,4 @@ capture_design(output_path="snapshots/top.png", view_preset="top")
 - Do not place unknown components without searching the registry first.
 - Do not promise legal code compliance from ergonomic seed values.
 - Do not describe placeholder boxes as final production assets.
+- Treat snapshots and rendered images as advisory review artifacts.

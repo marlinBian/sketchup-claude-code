@@ -138,8 +138,8 @@ Goal: turn seed components into a maintainable semantic component system.
 
 Goal: use screenshots and image generation as advisory design feedback.
 
-- capture SketchUp camera views
-- store snapshots with provenance
+- capture SketchUp camera views through `capture_project_snapshot`
+- store snapshots with provenance in `snapshots/manifest.json`
 - pass screenshots or line views to rendering/image tools
 - map accepted visual feedback back into structured model changes
 - keep generated visuals advisory; `design_model.json` remains the source of

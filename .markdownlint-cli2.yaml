@@ -15,6 +15,7 @@ globs:
   - docs/architecture/component-registry.md
   - docs/architecture/project-workspace.md
   - docs/architecture/runtime-vs-dev-skills.md
+  - docs/architecture/visual-loop.md
 config:
   MD024:
     siblings_only: true

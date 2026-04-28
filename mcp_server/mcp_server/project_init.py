@@ -16,7 +16,10 @@ from mcp_server.resources.project_files import (
     DESIGN_MODEL_FILENAME,
     DESIGN_RULES_FILENAME,
     assets_cache_path,
+    snapshot_manifest_path,
+    snapshots_path,
 )
+from mcp_server.resources.snapshot_manifest_schema import create_empty_snapshot_manifest
 from mcp_server.tools.bathroom_planner import plan_bathroom_project, save_bathroom_plan
 from mcp_server.tools.local_library_search import load_library
 
@@ -82,11 +85,13 @@ def init_project(
     assets_lock_path = root / ASSETS_LOCK_FILENAME
     mcp_config_path = root / PROJECT_MCP_FILENAME
     assets_cache = assets_cache_path(root)
-    snapshots_path = root / "snapshots"
+    snapshots_dir = snapshots_path(root)
+    snapshot_manifest = snapshot_manifest_path(root)
     assets_cache.mkdir(parents=True, exist_ok=True)
-    snapshots_path.mkdir(exist_ok=True)
+    snapshots_dir.mkdir(exist_ok=True)
 
     write_json(assets_lock_path, assets_lock, overwrite)
+    write_json(snapshot_manifest, create_empty_snapshot_manifest(), overwrite)
     write_json(mcp_config_path, default_project_mcp_config(), overwrite)
 
     return {
@@ -99,6 +104,7 @@ def init_project(
             "assets_lock": str(assets_lock_path),
             "assets_cache": str(assets_cache),
             "mcp_config": str(mcp_config_path),
-            "snapshots": str(snapshots_path),
+            "snapshots": str(snapshots_dir),
+            "snapshot_manifest": str(snapshot_manifest),
         },
     }

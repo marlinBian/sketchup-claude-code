@@ -44,6 +44,7 @@ Check that the project contains:
 - `assets.lock.json`
 - `.mcp.json`
 - `snapshots/`
+- `snapshots/manifest.json`
 
 Then continue with `plan_bathroom` or `execute_bathroom_plan` for the first
 supported vertical slice.

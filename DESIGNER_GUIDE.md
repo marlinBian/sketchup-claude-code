@@ -20,6 +20,7 @@ my-design-project/
     components/
   model.skp
   snapshots/
+    manifest.json
 ```
 
 ## Example Requests
@@ -54,3 +55,4 @@ Rule precedence is:
 
 Screenshots and generated renderings are review artifacts. They can guide design
 decisions, but `design_model.json` remains the source of truth for the model.
+Snapshot provenance is stored in `snapshots/manifest.json`.

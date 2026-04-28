@@ -38,6 +38,7 @@ This creates:
 - `assets/components/`
 - `.mcp.json`
 - `snapshots/`
+- `snapshots/manifest.json`
 
 The generated `.mcp.json` starts the MCP server with:
 

@@ -11,6 +11,8 @@ from mcp_server.resources.project_files import (
     assets_lock_path,
     design_rules_path,
     find_design_model_path,
+    snapshot_manifest_path,
+    snapshots_path,
 )
 
 
@@ -44,3 +46,13 @@ def test_assets_lock_path(tmp_path):
 
 def test_assets_cache_path(tmp_path):
     assert assets_cache_path(tmp_path) == Path(tmp_path) / "assets" / "components"
+
+
+def test_snapshots_path(tmp_path):
+    assert snapshots_path(tmp_path) == Path(tmp_path) / "snapshots"
+
+
+def test_snapshot_manifest_path(tmp_path):
+    assert snapshot_manifest_path(tmp_path) == (
+        Path(tmp_path) / "snapshots" / "manifest.json"
+    )

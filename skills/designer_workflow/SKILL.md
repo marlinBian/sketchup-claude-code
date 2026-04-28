@@ -20,6 +20,7 @@ Expected files:
 - `assets.lock.json`
 - `.mcp.json`
 - `snapshots/`
+- `snapshots/manifest.json`
 
 If these files are missing, tell the user to initialize the project with:
 
@@ -67,6 +68,12 @@ After planning or execution, summarize:
 Do not replace structured output with only prose. The design model remains the
 canonical state.
 
+### 5. Capture Visual Review Artifacts
+
+Use `capture_project_snapshot` when the user asks for a screenshot or visual
+review and a project path is available. Snapshot provenance is recorded in
+`snapshots/manifest.json`.
+
 ## Supported User Prompts
 
 English examples:
@@ -96,4 +103,5 @@ Chinese examples:
 - Do not claim jurisdictional code compliance. Current rules are ergonomic seed
   defaults.
 - Do not use image rendering as source of truth.
+- Treat snapshots as advisory artifacts.
 - Do not write maintainer workflow instructions into designer project files.

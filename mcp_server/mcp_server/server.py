@@ -10,7 +10,17 @@ from mcp_server.tools import model_tools, query_tools, placement_tools
 from mcp_server.bridge.socket_bridge import SocketBridge
 from mcp_server.protocol.jsonrpc import JsonRpcRequest
 from mcp_server.resources import design_model_mcp
-from mcp_server.tools.local_library_search import search_library, get_categories, format_search_results
+from mcp_server.resources.snapshot_manifest_schema import (
+    append_snapshot_entry,
+    snapshot_entry,
+    snapshot_output_path,
+)
+from mcp_server.resources.project_files import snapshot_manifest_path
+from mcp_server.tools.local_library_search import (
+    format_search_results,
+    get_categories,
+    search_library,
+)
 from mcp_server.tools.bathroom_planner import plan_bathroom_project, save_bathroom_plan
 from mcp_server.tools.trace_executor import execute_bridge_operations
 
@@ -437,6 +447,95 @@ async def capture_design(
                 capture_info["image_base64_error"] = str(e)
 
         return TextContent(type="text", text=str(capture_info))
+    finally:
+        bridge.disconnect()
+
+
+@mcp.tool()
+async def capture_project_snapshot(
+    project_path: str,
+    view_preset: str | None = "top",
+    label: str | None = None,
+    width: int = 1920,
+    height: int = 1080,
+    return_base64: bool = False,
+    prompt: str | None = None,
+) -> TextContent:
+    """Capture a project snapshot and record provenance.
+
+    Args:
+        project_path: Designer project directory containing design_model.json.
+        view_preset: Optional SketchUp camera preset.
+        label: Optional filename-safe label. Defaults to view preset.
+        width: Image width in pixels.
+        height: Image height in pixels.
+        return_base64: If True, return base64 encoded image for vision review.
+        prompt: Optional user prompt that requested this visual artifact.
+
+    Returns:
+        JSON string with capture info and the snapshot manifest entry.
+    """
+    output_path = snapshot_output_path(
+        project_path=project_path,
+        view_preset=view_preset,
+        label=label,
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    bridge = SocketBridge()
+    try:
+        bridge.connect()
+
+        request = JsonRpcRequest(
+            method="execute_operation",
+            params={
+                "operation_id": f"snapshot_{id(capture_project_snapshot)}",
+                "operation_type": "capture_design",
+                "payload": {
+                    "output_path": str(output_path),
+                    "view_preset": view_preset,
+                    "width": width,
+                    "height": height,
+                    "return_base64": return_base64,
+                },
+                "rollback_on_failure": False,
+            }
+        )
+        response = bridge.send(request.to_dict())
+        if "error" in response:
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
+
+        result = response.get("result", {})
+        capture_info = result.get("capture_info", {})
+
+        if return_base64:
+            import base64
+            try:
+                with open(output_path, "rb") as f:
+                    img_data = base64.b64encode(f.read()).decode("utf-8")
+                capture_info["image_base64"] = img_data
+            except Exception as e:
+                capture_info["image_base64_error"] = str(e)
+
+        entry = snapshot_entry(
+            project_path=project_path,
+            output_path=output_path,
+            view_preset=view_preset,
+            width=width,
+            height=height,
+            prompt=prompt,
+        )
+        append_snapshot_entry(project_path, entry)
+
+        response_payload = {
+            "capture_info": capture_info,
+            "snapshot": entry,
+            "manifest_path": str(snapshot_manifest_path(project_path)),
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(response_payload, ensure_ascii=False),
+        )
     finally:
         bridge.disconnect()
 
