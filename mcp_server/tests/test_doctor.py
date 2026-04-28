@@ -27,13 +27,37 @@ def test_doctor_reports_project_validation(tmp_path):
         check for check in result["checks"] if check["name"] == "sketchup_bridge_install"
     )
     socket_check = next(check for check in result["checks"] if check["name"] == "bridge_socket")
+    skills_check = next(check for check in result["checks"] if check["name"] == "runtime_skills")
 
     assert result["ok"] is True
     assert project_check["ok"] is True
+    assert skills_check["ok"] is True
     assert bridge_install_check["ok"] is False
     assert bridge_install_check["severity"] == "warning"
     assert socket_check["ok"] is False
     assert socket_check["severity"] == "warning"
+
+
+def test_doctor_warns_on_modified_runtime_skills(tmp_path):
+    project_path = tmp_path / "bathroom"
+    init_project(project_path, template="bathroom")
+    skill_file = project_path / ".agents" / "skills" / "designer_workflow" / "SKILL.md"
+    skill_file.write_text("# Local Edit\n", encoding="utf-8")
+
+    result = run_doctor(
+        project_path=project_path,
+        plugins_dir=tmp_path / "missing-plugins",
+        socket_path=str(tmp_path / "missing.sock"),
+    )
+    skills_check = next(check for check in result["checks"] if check["name"] == "runtime_skills")
+
+    assert result["ok"] is True
+    assert skills_check["ok"] is False
+    assert skills_check["severity"] == "warning"
+    assert skills_check["details"]["checks"]["codex"]["modified_files"] == [
+        "designer_workflow/SKILL.md"
+    ]
+    assert "install-skills" in skills_check["message"]
 
 
 def test_doctor_reports_configured_designer_profile(monkeypatch, tmp_path):

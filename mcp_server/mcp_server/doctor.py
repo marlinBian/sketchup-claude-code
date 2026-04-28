@@ -19,6 +19,7 @@ from mcp_server.resources.design_rules_schema import (
     designer_profile_path_from_env,
     load_designer_profile_rules,
 )
+from mcp_server.runtime_skills import runtime_skill_status
 from mcp_server.smoke import DEFAULT_BRIDGE_SOCKET, validate_project
 
 
@@ -240,6 +241,35 @@ def project_check(project_path: str | Path | None) -> dict[str, Any] | None:
     )
 
 
+def runtime_skills_check(project_path: str | Path | None) -> dict[str, Any] | None:
+    """Check project-local Claude and Codex runtime skill installs."""
+    if project_path is None:
+        return None
+    try:
+        status = runtime_skill_status(project_path)
+    except Exception as error:
+        return check(
+            "runtime_skills",
+            False,
+            {"project_path": str(Path(project_path).expanduser().resolve())},
+            severity="warning",
+            message=f"Could not inspect runtime skills: {error}",
+        )
+
+    return check(
+        "runtime_skills",
+        status["ok"],
+        status,
+        severity="warning",
+        message=(
+            None
+            if status["ok"]
+            else "Project runtime skills differ from the current harness. Run "
+            "`sketchup-agent install-skills <project-path> --target all --force`."
+        ),
+    )
+
+
 def designer_profile_check() -> dict[str, Any]:
     """Check configured reusable designer profile rules."""
     path = designer_profile_path_from_env()
@@ -284,6 +314,9 @@ def run_doctor(
     project_validation = project_check(project_path)
     if project_validation is not None:
         checks.append(project_validation)
+    runtime_validation = runtime_skills_check(project_path)
+    if runtime_validation is not None:
+        checks.append(runtime_validation)
 
     blocking_failures = [
         item for item in checks if not item["ok"] and item.get("severity") == "error"

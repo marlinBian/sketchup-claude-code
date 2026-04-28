@@ -58,6 +58,10 @@ agent skill directories. To refresh those skills in an existing project:
 sketchup-agent install-skills ~/Design/my-bathroom --target all --force
 ```
 
+`sketchup-agent doctor <project-path>` compares the installed project-local
+runtime skills with the current harness package and reports missing, stale, or
+locally modified skill files.
+
 Optional designer profile rules can be installed as a reusable JSON file and
 activated with:
 

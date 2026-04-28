@@ -11,6 +11,7 @@ from mcp_server.runtime_skills import (
     RUNTIME_SKILL_MANIFEST,
     install_runtime_skills,
     packaged_runtime_skills_source,
+    runtime_skill_status,
     skill_target_paths,
 )
 
@@ -45,6 +46,15 @@ def test_install_runtime_skills_copies_codex_and_claude_targets(tmp_path):
     assert (project_path / ".agents" / "skills" / "styles" / "SKILL.md").exists()
     assert result["installs"]["codex"]["file_count"] == 2
     assert result["installs"]["claude"]["file_count"] == 2
+    manifest = json.loads(
+        (
+            project_path / ".agents" / "skills" / RUNTIME_SKILL_MANIFEST
+        ).read_text(encoding="utf-8")
+    )
+    assert set(manifest["hashes"]) == {
+        "bathroom_planning/SKILL.md",
+        "styles/SKILL.md",
+    }
 
 
 def test_install_runtime_skills_dry_run_does_not_copy(tmp_path):
@@ -106,6 +116,37 @@ def test_install_runtime_skills_force_removes_previously_installed_stale_files(t
     assert not stale_target.exists()
     manifest = project_path / ".agents" / "skills" / RUNTIME_SKILL_MANIFEST
     assert manifest.exists()
+
+
+def test_runtime_skill_status_reports_clean_install(tmp_path):
+    source = make_runtime_skill_source(tmp_path)
+    project_path = tmp_path / "design"
+    install_runtime_skills(project_path, source_dir=source)
+
+    status = runtime_skill_status(project_path, source_dir=source)
+
+    assert status["ok"] is True
+    assert status["checks"]["codex"]["matching_count"] == 2
+    assert status["checks"]["claude"]["matching_count"] == 2
+    assert status["checks"]["codex"]["modified_files"] == []
+
+
+def test_runtime_skill_status_detects_modified_and_missing_files(tmp_path):
+    source = make_runtime_skill_source(tmp_path)
+    project_path = tmp_path / "design"
+    install_runtime_skills(project_path, source_dir=source)
+    codex_skill = project_path / ".agents" / "skills" / "bathroom_planning" / "SKILL.md"
+    claude_skill = project_path / ".claude" / "skills" / "styles" / "SKILL.md"
+    codex_skill.write_text("# Local Edit\n", encoding="utf-8")
+    claude_skill.unlink()
+
+    status = runtime_skill_status(project_path, source_dir=source)
+
+    assert status["ok"] is False
+    assert status["checks"]["codex"]["modified_files"] == [
+        "bathroom_planning/SKILL.md"
+    ]
+    assert status["checks"]["claude"]["missing_files"] == ["styles/SKILL.md"]
 
 
 def test_cli_install_skills_outputs_json(tmp_path, capsys):

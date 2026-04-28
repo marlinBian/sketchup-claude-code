@@ -46,6 +46,13 @@ Check the local harness and project state:
 sketchup-agent doctor ~/Design/my-bathroom --sketchup-version 2024
 ```
 
+If `doctor` reports stale or modified runtime skills, refresh the project-local
+Claude and Codex skill copies:
+
+```bash
+sketchup-agent install-skills ~/Design/my-bathroom --target all --force
+```
+
 ## 2. Start SketchUp Bridge
 
 Quit SketchUp, then install the Ruby bridge into SketchUp:
