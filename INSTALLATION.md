@@ -83,9 +83,25 @@ through `.codex-plugin/plugin.json` and `.mcp.json`.
 
 ## SketchUp Ruby Bridge
 
-Until the installer is automated, install the bridge manually.
+Install or update the bridge from the source checkout:
 
-macOS example:
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent install-bridge --sketchup-version 2024 --force
+```
+
+To inspect the target path first:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent install-bridge --sketchup-version 2024 --dry-run
+```
+
+The command prints the Ruby Console command needed to load and start the bridge.
+After installation, open SketchUp Ruby Console and run that `load ...;
+SuBridge.start` command.
+
+Manual macOS fallback:
 
 ```bash
 mkdir -p ~/Library/Application\ Support/SketchUp/SketchUp\ 2024/SketchUp/Plugins/

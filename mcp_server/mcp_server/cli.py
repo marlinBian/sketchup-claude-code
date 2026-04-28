@@ -5,6 +5,7 @@ import json
 import sys
 
 from mcp_server.project_init import init_project
+from mcp_server.bridge_install import install_bridge
 from mcp_server.smoke import DEFAULT_SMOKE_PROJECT, run_smoke, validate_project
 
 
@@ -61,6 +62,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also execute the bathroom trace against a live SketchUp bridge",
     )
 
+    bridge_parser = subparsers.add_parser(
+        "install-bridge",
+        help="Install the SketchUp Ruby bridge into a SketchUp Plugins directory",
+    )
+    bridge_parser.add_argument(
+        "--plugins-dir",
+        help="SketchUp Plugins directory. Defaults to the newest detected macOS SketchUp install.",
+    )
+    bridge_parser.add_argument(
+        "--source-dir",
+        help="Bridge source directory. Defaults to the repository su_bridge directory.",
+    )
+    bridge_parser.add_argument(
+        "--sketchup-version",
+        help="SketchUp version for the default macOS Plugins path, for example 2024.",
+    )
+    bridge_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Replace an existing su_bridge plugin directory.",
+    )
+    bridge_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show the target paths without copying files.",
+    )
+
     return parser
 
 
@@ -92,6 +120,16 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result["ok"] else 1
+        if args.command == "install-bridge":
+            result = install_bridge(
+                plugins_dir=args.plugins_dir,
+                source_dir=args.source_dir,
+                sketchup_version=args.sketchup_version,
+                force=args.force,
+                dry_run=args.dry_run,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
     except Exception as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1

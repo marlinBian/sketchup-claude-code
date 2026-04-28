@@ -70,6 +70,11 @@ jobs:
           cd mcp_server
           uv run --extra dev sketchup-agent smoke /tmp/sah-ci-smoke --force
 
+      - name: Check bridge installer dry run
+        run: |
+          cd mcp_server
+          uv run --extra dev sketchup-agent install-bridge --plugins-dir /tmp/sah-plugins --dry-run
+
   ruby-tests:
     name: Ruby Tests
     runs-on: ubuntu-latest

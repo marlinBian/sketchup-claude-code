@@ -63,6 +63,13 @@ cd mcp_server
 uv run --extra dev sketchup-agent init /tmp/sah-bathroom --template bathroom --force
 ```
 
+Bridge install dry run:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent install-bridge --sketchup-version 2024 --dry-run
+```
+
 ## Integration Tests
 
 Live integration tests require SketchUp with `SuBridge.start` running and

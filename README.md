@@ -60,6 +60,13 @@ Plugin startup smoke:
 ./mcp_server/start.sh --startup-check
 ```
 
+Bridge install dry run:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent install-bridge --sketchup-version 2024 --dry-run
+```
+
 Python baseline tests, excluding live SketchUp integration tests:
 
 ```bash
