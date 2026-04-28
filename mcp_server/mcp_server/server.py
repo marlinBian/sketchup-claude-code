@@ -1,5 +1,6 @@
 """FastMCP entry point for SketchUp Agent Harness MCP server."""
 
+import json
 from typing import Any
 from mcp.server import Server
 from mcp.types import Tool, Resource, TextContent
@@ -10,6 +11,7 @@ from mcp_server.bridge.socket_bridge import SocketBridge
 from mcp_server.protocol.jsonrpc import JsonRpcRequest
 from mcp_server.resources import design_model_mcp
 from mcp_server.tools.local_library_search import search_library, get_categories, format_search_results
+from mcp_server.tools.bathroom_planner import plan_bathroom_project, save_bathroom_plan
 
 # Create FastMCP server
 mcp = FastMCP("sketchup-mcp")
@@ -182,7 +184,9 @@ async def place_component(
                 "operation_id": f"place_{id(place_component)}",
                 "operation_type": "place_component",
                 "payload": {
-                    "skp_path": placement_tools.resolve_skp_path(component["skp_path"]),
+                    "skp_path": placement_tools.resolve_skp_path(
+                        placement_tools.component_skp_path(component)
+                    ),
                     "position": [position_x, position_y, position_z],
                     "rotation": rotation,
                     "scale": scale,
@@ -671,10 +675,35 @@ async def list_local_library_categories() -> TextContent:
         return TextContent(type="text", text=f"Failed to load categories: {str(e)}")
 
 
-if __name__ == "__main__":
-    # Run the MCP server
-    mcp.run()
+@mcp.tool()
+async def plan_bathroom(
+    project_name: str = "bathroom_mvp",
+    width: float = 2000,
+    depth: float = 1800,
+    ceiling_height: float = 2400,
+    project_path: str | None = None,
+) -> TextContent:
+    """Plan a small bathroom without requiring a live SketchUp bridge.
 
+    Generates a design_model, design_rules, validation report, and bridge
+    operation trace for the first vertical slice. If project_path is provided,
+    design_model.json and design_rules.json are written into that directory.
+    """
+    try:
+        plan = plan_bathroom_project(
+            project_name=project_name,
+            width=width,
+            depth=depth,
+            ceiling_height=ceiling_height,
+        )
+        if project_path:
+            plan["written_files"] = save_bathroom_plan(project_path, plan)
+        return TextContent(
+            type="text",
+            text=json.dumps(plan, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Bathroom planning failed: {str(e)}")
 
 @mcp.tool()
 async def generate_report(project_name: str, project_dir: str = "./designs") -> TextContent:
@@ -1011,6 +1040,11 @@ async def move_entity(
         return TextContent(type="text", text=str(response.get("result", {})))
     finally:
         bridge.disconnect()
+
+
+if __name__ == "__main__":
+    # Run the MCP server after all tools have been registered.
+    mcp.run()
 
 
 @mcp.tool()

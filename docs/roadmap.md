@@ -66,6 +66,14 @@ Required behavior:
 - produce a bridge operation list or mock bridge trace
 - return a structured validation report
 
+Acceptance:
+
+```bash
+cd mcp_server && uv run --extra dev pytest \
+  tests/test_bathroom_planner.py \
+  tests/test_bathroom_mcp_tool.py -q
+```
+
 ## P3: SketchUp Bridge Execution
 
 Goal: execute the bathroom slice in SketchUp.
