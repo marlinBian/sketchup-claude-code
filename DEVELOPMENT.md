@@ -1,4 +1,4 @@
-# SCC (SketchUp-Claude-Code) Project Constitution
+# SketchUp Agent Harness Project Constitution
 
 ## Overview
 
@@ -191,16 +191,16 @@ SCC is distributed as a Claude Code plugin marketplace.
 ### First-Time Installation
 
 ```bash
-git clone https://github.com/avenir/sketchup-claude-code.git
-cd sketchup-claude-code
+git clone https://github.com/avenir/sketchup-agent-harness.git
+cd sketchup-agent-harness
 ./setup.sh
 ```
 
 ### Adding the Plugin to Claude Code
 
 ```bash
-/plugin marketplace add https://github.com/avenir/sketchup-claude-code
-/plugin install sketchup-claude-code@sketchup-claude-code
+/plugin marketplace add https://github.com/avenir/sketchup-agent-harness
+/plugin install sketchup-agent-harness@sketchup-agent-harness
 ```
 
 ### SketchUp Ruby Plugin Installation
@@ -222,7 +222,7 @@ SuBridge.start
 ## Directory Structure
 
 ```
-sketchup-claude-code/
+sketchup-agent-harness/
 ├── CLAUDE.md                          # Project constitution (this file)
 ├── setup.sh                           # First-time setup script
 ├── designs/                           # Design projects
@@ -491,9 +491,9 @@ cd mcp_server && uv run pytest tests/test_integration.py -v
 ### Plugin Reinstall Flow
 
 ```bash
-/plugin marketplace remove sketchup-claude-code
-rm -rf ~/.claude-doubao/plugins/cache/sketchup-claude-code
-/plugin marketplace add /Users/avenir/Code/personal/sketchup-claude-code
+/plugin marketplace remove sketchup-agent-harness
+rm -rf ~/.claude-doubao/plugins/cache/sketchup-agent-harness
+/plugin marketplace add /Users/avenir/Code/personal/sketchup-agent-harness
 ```
 
 ---

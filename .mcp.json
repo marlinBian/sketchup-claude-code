@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "sketchup-mcp": {
+      "command": "./mcp_server/start.sh"
+    }
+  }
+}

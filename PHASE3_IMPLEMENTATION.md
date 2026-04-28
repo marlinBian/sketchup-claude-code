@@ -189,7 +189,7 @@ python3 -c "import ast; ast.parse(open('mcp_server/server.py').read())"
 
 ### Load in SketchUp
 ```ruby
-load '/path/to/sketchup-claude-code/su_bridge/lib/su_bridge.rb'
+load '/path/to/sketchup-agent-harness/su_bridge/lib/su_bridge.rb'
 SuBridge::ServerListener.new.start
 
 # Test wall creation manually

@@ -5,7 +5,7 @@
 # CRITICAL: Must stop server BEFORE removing constants
 
 SOCKET_PATH = "/tmp/su_bridge.sock"
-SU_BRIDGE_ROOT = "/Users/avenir/Code/personal/sketchup-claude-code/su_bridge/lib"
+SU_BRIDGE_ROOT = "/Users/avenir/Code/personal/sketchup-agent-harness/su_bridge/lib"
 
 puts "[su_bridge] Cleanup starting..."
 

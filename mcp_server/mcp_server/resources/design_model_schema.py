@@ -12,7 +12,7 @@ from jsonschema import Draft7Validator
 DESIGN_MODEL_SCHEMA: Dict[str, Any] = {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "Design Model",
-    "description": "Schema for SketchUp-Claude-Code Design Model",
+    "description": "Schema for SketchUp Agent Harness Design Model",
     "type": "object",
     "required": ["version", "project_name", "components"],
     "properties": {

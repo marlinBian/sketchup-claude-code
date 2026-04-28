@@ -1,0 +1,30 @@
+{
+  "name": "sketchup-agent-harness",
+  "version": "0.1.0",
+  "description": "Natural language SketchUp modeling harness for Codex CLI. Create, query, validate, and export SketchUp designs through MCP tools and runtime design skills.",
+  "author": {
+    "name": "marlinBian",
+    "email": "bianxu5555@gmail.com",
+    "url": "https://github.com/marlinBian"
+  },
+  "homepage": "https://github.com/marlinBian/sketchup-agent-harness",
+  "repository": "https://github.com/marlinBian/sketchup-agent-harness",
+  "license": "MIT",
+  "keywords": ["sketchup", "interior-design", "mcp", "codex", "agent-harness"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "SketchUp Agent Harness",
+    "shortDescription": "Control SketchUp with natural-language design workflows.",
+    "longDescription": "SketchUp Agent Harness bundles runtime design skills and an MCP server for creating, querying, validating, and exporting SketchUp models from Codex CLI.",
+    "developerName": "marlinBian",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://github.com/marlinBian/sketchup-agent-harness",
+    "defaultPrompt": [
+      "Use SketchUp Agent Harness to create a 4m x 5m living room.",
+      "Use SketchUp Agent Harness to check the current layout for clearance issues."
+    ],
+    "brandColor": "#2F6F6D"
+  }
+}

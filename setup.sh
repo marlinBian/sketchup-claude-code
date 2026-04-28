@@ -1,5 +1,5 @@
 #!/bin/bash
-# SCC (SketchUp-Claude-Code) Setup Script
+# SketchUp Agent Harness Setup Script
 # Run this once after cloning or pulling updates
 #
 # Usage:
@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
 
 echo "=========================================="
-echo "SCC Setup - SketchUp-Claude-Code Plugin"
+echo "SketchUp Agent Harness Setup"
 echo "=========================================="
 echo ""
 

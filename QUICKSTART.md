@@ -1,6 +1,6 @@
 # 快速入门指南
 
-欢迎使用 SCC (SketchUp-Claude-Code)！本指南帮助你快速开始室内设计。
+欢迎使用 SketchUp Agent Harness！本指南帮助你快速开始室内设计。
 
 ---
 
@@ -11,13 +11,13 @@
 在 Claude Code 中执行：
 
 ```
-/plugin marketplace add https://github.com/marlinBian/sketchup-claude-code
+/plugin marketplace add https://github.com/marlinBian/sketchup-agent-harness
 ```
 
 ### 1.2 安装插件
 
 ```
-/plugin install sketchup-claude-code
+/plugin install sketchup-agent-harness
 ```
 
 ### 1.3 重启 Claude Code
@@ -41,7 +41,7 @@
 mkdir -p ~/Library/Application\ Support/SketchUp/SketchUp\ 2024/SketchUp/Plugins/
 
 # 复制插件
-cp -r ~/.claude-model/.claude-doubao/plugins/marketplaces/sketchup-claude-code/su_bridge ~/Library/Application\ Support/SketchUp/SketchUp\ 2024/SketchUp/Plugins/
+cp -r ~/.claude-model/.claude-doubao/plugins/marketplaces/sketchup-agent-harness/su_bridge ~/Library/Application\ Support/SketchUp/SketchUp\ 2024/SketchUp/Plugins/
 ```
 
 ### 2.2 启动 SketchUp

@@ -1,6 +1,6 @@
 # 设计师快速上手指南
 
-> SCC - SketchUp Claude Code 设计助手
+> SketchUp Agent Harness 设计助手
 > 让室内设计师使用自然语言创建 3D 模型
 
 ---
@@ -12,7 +12,7 @@
 在终端（Terminal）中运行以下命令：
 
 ```bash
-cd /path/to/sketchup-claude-code
+cd /path/to/sketchup-agent-harness
 ./start_designer.sh
 ```
 

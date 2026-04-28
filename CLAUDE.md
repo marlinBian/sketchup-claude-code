@@ -1,4 +1,4 @@
-# SCC (SketchUp-Claude-Code) Project Constitution
+# SketchUp Agent Harness Project Constitution
 
 ---
 
@@ -13,8 +13,8 @@ This project serves TWO completely different use cases. You MUST understand both
 Designers install via Claude Code plugin marketplace:
 ```bash
 # 1. Install plugin via Claude Code
-/plugin marketplace add https://github.com/marlinBian/sketchup-claude-code
-/plugin install sketchup-claude-code
+/plugin marketplace add https://github.com/marlinBian/sketchup-agent-harness
+/plugin install sketchup-agent-harness
 
 # 2. Create a clean project directory
 mkdir ~/Design/my-room && cd ~/Design/my-room
@@ -37,7 +37,7 @@ Designers NEVER see: `skills/`, `rules/`, `mcp_server/`, `su_bridge/`, `specs/`
 
 You work in the **repository directory**:
 ```
-~/Code/sketchup-claude-code/   ← Full source code
+~/Code/sketchup-agent-harness/   ← Full source code
 ├── skills/                   ← Modify to improve designer experience
 ├── rules/                   ← Modify to add constraints
 ├── mcp_server/              ← Modify MCP tools
@@ -56,7 +56,7 @@ When developing:
 
 ## Overview
 
-**SCC** enables bidirectional communication between an LLM (Claude Code) and SketchUp for interior design automation. Designers issue natural language commands like "add a 2m x 3m window on the south wall" and receive confirmation with spatial feedback.
+**SketchUp Agent Harness** enables bidirectional communication between an agent CLI (Claude or Codex) and SketchUp for interior design automation. Designers issue natural language commands like "add a 2m x 3m window on the south wall" and receive confirmation with spatial feedback.
 
 **Target Users**: Professional interior designers who want to create 3D models using natural language, not programmers.
 
@@ -66,12 +66,12 @@ When developing:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Claude Code (LLM)                       │
+│                 Agent CLI (Claude or Codex)                │
 │         设计师自然语言: "在餐桌上方1.2米挂餐桌灯"            │
 └─────────────────────┬───────────────────────────────────────┘
                       │
 ┌─────────────────────▼───────────────────────────────────────┐
-│                 SCC Plugin Layer (ECC)                      │
+│             SketchUp Agent Harness Plugin Layer             │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
 │  │   Skills    │  │   Rules     │  │       Hooks        │ │
 │  │ - designer  │  │ - spatial   │  │ - on_scene_change │ │
@@ -246,11 +246,11 @@ SCC is distributed as a Claude Code plugin marketplace. **Designers do NOT clone
 
 ```bash
 # 1. Install SCC plugin via Claude Code
-/plugin marketplace add https://github.com/marlinBian/sketchup-claude-code
-/plugin install sketchup-claude-code
+/plugin marketplace add https://github.com/marlinBian/sketchup-agent-harness
+/plugin install sketchup-agent-harness
 
 # 2. Copy SketchUp plugin (one-time)
-/plugin install sketchup-claude-code@sketchup-claude-code --setup
+/plugin install sketchup-agent-harness@sketchup-agent-harness --setup
 
 # 3. In SketchUp Ruby Console, run once:
 load '~/Library/Application Support/SketchUp/SketchUp 2024/SketchUp/Plugins/su_bridge/lib/su_bridge.rb'
@@ -267,13 +267,13 @@ claude
 
 ```bash
 # Clone to local plugin directory for testing
-git clone https://github.com/marlinBian/sketchup-claude-code ~/.claude/plugins/sketchup-claude-code
+git clone https://github.com/marlinBian/sketchup-agent-harness ~/.claude/plugins/sketchup-agent-harness
 
 # Copy su_bridge to SketchUp plugins folder
-cp -r ~/.claude/plugins/sketchup-claude-code/su_bridge ~/Library/Application\ Support/SketchUp/SketchUp\ 2024/SketchUp/Plugins/
+cp -r ~/.claude/plugins/sketchup-agent-harness/su_bridge ~/Library/Application\ Support/SketchUp/SketchUp\ 2024/SketchUp/Plugins/
 
 # Run setup
-cd ~/.claude/plugins/sketchup-claude-code && ./setup.sh
+cd ~/.claude/plugins/sketchup-agent-harness && ./setup.sh
 
 # Test in a clean project directory
 mkdir ~/Design/test && cd ~/Design/test
@@ -285,7 +285,7 @@ claude
 ## Directory Structure
 
 ```
-sketchup-claude-code/
+sketchup-agent-harness/
 ├── CLAUDE.md                          # Project constitution (this file)
 ├── setup.sh                           # First-time setup script
 ├── designs/                           # Design projects
@@ -554,9 +554,9 @@ cd mcp_server && uv run pytest tests/test_integration.py -v
 ### Plugin Reinstall Flow
 
 ```bash
-/plugin marketplace remove sketchup-claude-code
-rm -rf ~/.claude-doubao/plugins/cache/sketchup-claude-code
-/plugin marketplace add /Users/avenir/Code/personal/sketchup-claude-code
+/plugin marketplace remove sketchup-agent-harness
+rm -rf ~/.claude-doubao/plugins/cache/sketchup-agent-harness
+/plugin marketplace add /Users/avenir/Code/personal/sketchup-agent-harness
 ```
 
 ---
@@ -580,12 +580,12 @@ The Claude Code marketplace uses GitHub's **default branch** (HEAD), NOT the `ma
 
 **Check default branch:**
 ```bash
-git ls-remote https://github.com/marlinBian/sketchup-claude-code.git HEAD
+git ls-remote https://github.com/marlinBian/sketchup-agent-harness.git HEAD
 ```
 
 **If HEAD points to old commit:**
 - The marketplace will serve outdated code
-- Debug: Check `~/.claude-model/.claude-doubao/plugins/marketplaces/sketchup-claude-code/mcp_server/start.sh`
+- Debug: Check `~/.claude-model/.claude-doubao/plugins/marketplaces/sketchup-agent-harness/mcp_server/start.sh`
 - If it shows `uv run python` instead of `python3`, the cached code is stale
 
 **Fix: Ensure fixes are in the default branch (master on this repo):**
@@ -601,32 +601,32 @@ git push origin master
 Claude Code stores marketplace plugins at:
 ```
 ~/.claude-model/.claude-doubao/plugins/
-├── marketplaces/sketchup-claude-code/  ← Git clone of repo
-└── cache/sketchup-claude-code/         ← Package cache
+├── marketplaces/sketchup-agent-harness/  ← Git clone of repo
+└── cache/sketchup-agent-harness/         ← Package cache
 ```
 
 ### Debugging Steps for Plugin Installation Issues
 
 1. **Remove marketplace and clear cache:**
    ```bash
-   /plugin marketplace remove sketchup-claude-code
-   rm -rf ~/.claude-model/.claude-doubao/plugins/marketplaces/sketchup-claude-code
-   rm -rf ~/.claude-model/.claude-doubao/plugins/cache/sketchup-claude-code
+   /plugin marketplace remove sketchup-agent-harness
+   rm -rf ~/.claude-model/.claude-doubao/plugins/marketplaces/sketchup-agent-harness
+   rm -rf ~/.claude-model/.claude-doubao/plugins/cache/sketchup-agent-harness
    ```
 
 2. **Re-add marketplace:**
    ```bash
-   /plugin marketplace add https://github.com/marlinBian/sketchup-claude-code
+   /plugin marketplace add https://github.com/marlinBian/sketchup-agent-harness
    ```
 
 3. **Install plugin:**
    ```bash
-   /plugin install sketchup-claude-code
+   /plugin install sketchup-agent-harness
    ```
 
 4. **Verify installation:**
    ```bash
-   cat ~/.claude-model/.claude-doubao/plugins/marketplaces/sketchup-claude-code/mcp_server/start.sh
+   cat ~/.claude-model/.claude-doubao/plugins/marketplaces/sketchup-agent-harness/mcp_server/start.sh
    ```
    Should show `python3 -m mcp_server.server`, NOT `uv run python`
 
@@ -634,7 +634,7 @@ Claude Code stores marketplace plugins at:
    ```
    /mcp
    ```
-   Look for `sketchup-claude-code:sketchup-mcp · ✔ connected`
+   Look for `sketchup-agent-harness:sketchup-mcp · ✔ connected`
 
 ### Why `uv run python` Might Appear
 
@@ -647,7 +647,7 @@ Claude Code stores marketplace plugins at:
 
 **Before pushing fixes:**
 1. Verify the fix commit is on the default branch (master)
-2. Check: `git ls-remote https://github.com/marlinBian/sketchup-claude-code.git HEAD`
+2. Check: `git ls-remote https://github.com/marlinBian/sketchup-agent-harness.git HEAD`
 3. Confirm the commit hash matches your fix
 
 ---

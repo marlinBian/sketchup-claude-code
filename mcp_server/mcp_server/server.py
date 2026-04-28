@@ -1,4 +1,4 @@
-"""FastMCP entry point for SketchUp-Claude-Code MCP server."""
+"""FastMCP entry point for SketchUp Agent Harness MCP server."""
 
 from typing import Any
 from mcp.server import Server

@@ -1,7 +1,7 @@
 [project]
-name = "mcp-server-sketchup"
+name = "sketchup-agent-harness-mcp"
 version = "0.1.0"
-description = "MCP server for SketchUp-Claude-Code integration"
+description = "MCP server for SketchUp Agent Harness"
 requires-python = ">=3.11"
 dependencies = [
     "mcp[cli]>=1.0.0",

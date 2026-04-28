@@ -1,22 +1,22 @@
 {
-  "name": "sketchup-claude-code",
+  "name": "sketchup-agent-harness",
   "owner": {
     "name": "marlinBian",
     "email": "bianxu5555@gmail.com"
   },
   "metadata": {
-    "description": "Natural language SketchUp modeling with Claude Code - design interior spaces using conversational AI"
+    "description": "Natural language SketchUp modeling harness for agent CLIs"
   },
   "plugins": [
     {
-      "name": "sketchup-claude-code",
+      "name": "sketchup-agent-harness",
       "source": "./",
-      "description": "Natural language SketchUp modeling. Create walls, boxes, furniture placement, materials, lighting, camera views, and design captures using conversational commands.",
+      "description": "Natural language SketchUp modeling. Create walls, boxes, furniture placement, materials, lighting, camera views, validation checks, and design captures using conversational commands.",
       "version": "0.1.0",
       "author": {
         "name": "marlinBian"
       },
-      "keywords": ["sketchup", "3d-modeling", "interior-design", "architecture", "design"]
+      "keywords": ["sketchup", "3d-modeling", "interior-design", "architecture", "design", "mcp"]
     }
   ]
 }

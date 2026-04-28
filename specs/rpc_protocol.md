@@ -1,6 +1,6 @@
 # RPC Protocol Specification
 
-## JSON-RPC 2.0 Interface for SketchUp-Claude-Code Bridge
+## JSON-RPC 2.0 Interface for SketchUp Agent Harness Bridge
 
 This document defines the JSON-RPC 2.0 interface between the Python MCP server and the Ruby SketchUp plugin.
 

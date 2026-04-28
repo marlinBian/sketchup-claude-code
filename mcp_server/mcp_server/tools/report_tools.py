@@ -156,7 +156,7 @@ def build_report_content(
 
     # Footer
     lines.append("---\n")
-    lines.append("*本报告由 SketchUp-Claude-Code 系统自动生成*\n")
+    lines.append("*本报告由 SketchUp Agent Harness 系统自动生成*\n")
 
     return "\n".join(lines)
 

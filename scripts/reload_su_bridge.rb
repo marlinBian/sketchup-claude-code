@@ -5,7 +5,7 @@
 # Use this when you want to pick up code changes without restarting SketchUp
 
 SOCKET_PATH = "/tmp/su_bridge.sock"
-SU_BRIDGE_PATH = "/Users/avenir/Code/personal/sketchup-claude-code/su_bridge/lib/su_bridge.rb"
+SU_BRIDGE_PATH = "/Users/avenir/Code/personal/sketchup-agent-harness/su_bridge/lib/su_bridge.rb"
 
 puts "[su_bridge] Hot-reload starting..."
 

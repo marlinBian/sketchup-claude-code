@@ -1,3 +1,3 @@
-"""MCP Server for SketchUp-Claude-Code integration."""
+"""MCP Server for SketchUp Agent Harness integration."""
 
 __version__ = "0.1.0"

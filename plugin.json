@@ -1,15 +1,15 @@
 {
-  "name": "sketchup-claude-code",
+  "name": "sketchup-agent-harness",
   "version": "0.1.0",
-  "description": "Natural language SketchUp modeling with Claude Code. Create walls, boxes, furniture, apply materials, set camera views, capture designs, and search Sketchfab for 3D models using conversational commands.",
+  "description": "Natural language SketchUp modeling harness for Claude Code and Codex CLI. Create, query, validate, and export SketchUp designs through MCP tools and runtime design skills.",
   "author": {
     "name": "marlinBian",
-    "url": "https://github.com/marlinBian/sketchup-claude-code"
+    "url": "https://github.com/marlinBian/sketchup-agent-harness"
   },
-  "homepage": "https://github.com/marlinBian/sketchup-claude-code",
-  "repository": "https://github.com/marlinBian/sketchup-claude-code",
+  "homepage": "https://github.com/marlinBian/sketchup-agent-harness",
+  "repository": "https://github.com/marlinBian/sketchup-agent-harness",
   "license": "MIT",
-  "keywords": ["sketchup", "3d-modeling", "interior-design", "architecture", "design", "sketchfab"],
+  "keywords": ["sketchup", "3d-modeling", "interior-design", "architecture", "design", "mcp", "agent-harness"],
 
   "skills": "./skills/",
 

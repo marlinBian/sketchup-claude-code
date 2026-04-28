@@ -16,8 +16,8 @@
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/marlinBian/sketchup-claude-code.git
-cd sketchup-claude-code
+git clone https://github.com/marlinBian/sketchup-agent-harness.git
+cd sketchup-agent-harness
 ```
 
 ### 2. 运行安装脚本
@@ -73,7 +73,7 @@ uv run python -m mcp_server.server
 ## 目录结构
 
 ```
-sketchup-claude-code/
+sketchup-agent-harness/
 ├── mcp_server/            # Python MCP 服务器
 │   ├── mcp_server/
 │   │   ├── server.py     # FastMCP 入口

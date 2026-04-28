@@ -17,7 +17,7 @@
 
 ### Verification
 ```bash
-cd /path/to/sketchup-claude-code/mcp_server
+cd /path/to/sketchup-agent-harness/mcp_server
 python3 -c "
 from mcp_server.bridge.socket_bridge import SocketBridge, BridgeConfig, PingResult, ConnectionState, create_bridge
 
@@ -54,7 +54,7 @@ print('Python socket bridge OK')
 
 ### Syntax Check
 ```bash
-cd /path/to/sketchup-claude-code/su_bridge
+cd /path/to/sketchup-agent-harness/su_bridge
 ruby -c lib/su_bridge/server_listener.rb
 ruby -c lib/su_bridge/command_dispatcher.rb
 ruby -c lib/su_bridge/undo_manager.rb
@@ -71,7 +71,7 @@ ruby -c lib/su_bridge/undo_manager.rb
 
 2. **Load the su_bridge plugin**
    ```ruby
-   load '/path/to/sketchup-claude-code/su_bridge/lib/su_bridge.rb'
+   load '/path/to/sketchup-agent-harness/su_bridge/lib/su_bridge.rb'
    ```
 
 3. **Start the server listener**

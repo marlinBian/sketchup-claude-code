@@ -1,0 +1,20 @@
+{
+  "name": "sketchup-agent-harness-local",
+  "interface": {
+    "displayName": "SketchUp Agent Harness Local"
+  },
+  "plugins": [
+    {
+      "name": "sketchup-agent-harness",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
