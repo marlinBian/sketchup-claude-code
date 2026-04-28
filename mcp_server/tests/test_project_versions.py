@@ -7,6 +7,7 @@ import pytest
 from mcp_server.cli import main
 from mcp_server.project_init import init_project
 from mcp_server.project_versions import (
+    compare_project_versions,
     list_project_versions,
     restore_project_version,
     save_project_version,
@@ -52,6 +53,51 @@ def test_list_project_versions_reads_metadata(tmp_path):
 
     assert result["count"] == 1
     assert result["versions"][0]["version"] == "draft_1"
+
+
+def test_compare_project_versions_reports_structured_changes(tmp_path):
+    init_project(tmp_path, template="bathroom")
+    save_project_version(tmp_path, version_tag="draft_1")
+    design_model_path = tmp_path / "design_model.json"
+    design_model = json.loads(design_model_path.read_text(encoding="utf-8"))
+    design_model["components"]["toilet_001"]["rotation"] = 90
+    design_model["components"].pop("mirror_001")
+    design_model_path.write_text(
+        json.dumps(design_model, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    save_project_version(tmp_path, version_tag="draft_2")
+
+    result = compare_project_versions(
+        tmp_path,
+        base_version="draft_1",
+        head_version="draft_2",
+    )
+
+    model_diff = result["files"]["design_model.json"]["details"]
+    assert result["changed"] is True
+    assert result["changed_files"] == ["design_model.json"]
+    assert model_diff["components"]["changed"] == ["toilet_001"]
+    assert model_diff["components"]["removed"] == ["mirror_001"]
+
+
+def test_compare_project_version_to_current_truth(tmp_path):
+    init_project(tmp_path, project_name="Original", template="bathroom")
+    save_project_version(tmp_path, version_tag="draft_1")
+    design_model_path = tmp_path / "design_model.json"
+    design_model = json.loads(design_model_path.read_text(encoding="utf-8"))
+    design_model["project_name"] = "Current"
+    design_model_path.write_text(
+        json.dumps(design_model, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = compare_project_versions(tmp_path, base_version="draft_1")
+
+    assert result["head_version"] == "current"
+    assert result["files"]["design_model.json"]["details"][
+        "project_name_changed"
+    ] is True
 
 
 def test_restore_project_version_requires_explicit_overwrite(tmp_path):
@@ -100,12 +146,19 @@ async def test_project_version_mcp_tools(tmp_path):
         version_tag="draft_1",
     )
     list_response = await server.list_project_versions(project_path=str(tmp_path))
+    compare_response = await server.compare_project_versions(
+        project_path=str(tmp_path),
+        base_version="draft_1",
+        head_version="current",
+    )
     save_data = json.loads(save_response.text)
     list_data = json.loads(list_response.text)
+    compare_data = json.loads(compare_response.text)
 
     assert save_data["version"] == "draft_1"
     assert "overwrite_current=True" in restore_guard.text
     assert list_data["count"] == 1
+    assert compare_data["changed"] is False
 
 
 @pytest.mark.asyncio
@@ -152,6 +205,9 @@ def test_cli_project_version_commands(tmp_path, capsys):
     restore_exit = main(["restore-version", str(tmp_path), "draft_1", "--force"])
     restore_output = capsys.readouterr()
     restore_data = json.loads(restore_output.out)
+    compare_exit = main(["compare-versions", str(tmp_path), "draft_1"])
+    compare_output = capsys.readouterr()
+    compare_data = json.loads(compare_output.out)
 
     assert save_exit == 0
     assert save_data["version"] == "draft_1"
@@ -159,3 +215,5 @@ def test_cli_project_version_commands(tmp_path, capsys):
     assert list_data["versions"][0]["version"] == "draft_1"
     assert restore_exit == 0
     assert "design_model.json" in restore_data["restored_files"]
+    assert compare_exit == 0
+    assert compare_data["base_version"] == "draft_1"

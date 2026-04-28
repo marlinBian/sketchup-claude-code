@@ -37,6 +37,14 @@ def validate_version_tag(version_tag: str) -> None:
         )
 
 
+def _version_root(project_path: Path, version_tag: str) -> Path:
+    """Return the root directory for a saved version or current project truth."""
+    if version_tag == "current":
+        return project_path
+    validate_version_tag(version_tag)
+    return project_versions_path(project_path) / version_tag
+
+
 def version_source_files(project_path: Path) -> list[tuple[str, Path]]:
     """Return project truth files that should be copied into a version snapshot."""
     candidates = [
@@ -47,6 +55,17 @@ def version_source_files(project_path: Path) -> list[tuple[str, Path]]:
         ("snapshots/manifest.json", snapshot_manifest_path(project_path)),
     ]
     return [(relative_path, path) for relative_path, path in candidates if path.exists()]
+
+
+def comparable_version_files() -> list[str]:
+    """Return project truth files included in version comparison."""
+    return [
+        "design_model.json",
+        "design_rules.json",
+        "assets.lock.json",
+        "component_library.json",
+        "snapshots/manifest.json",
+    ]
 
 
 def save_project_version(
@@ -118,6 +137,217 @@ def list_project_versions(project_path: str | Path) -> dict[str, Any]:
         "versions_path": str(versions_root),
         "count": len(versions),
         "versions": versions,
+    }
+
+
+def _load_json_file(path: Path) -> tuple[dict[str, Any] | None, list[str]]:
+    """Load one JSON file for version comparison."""
+    if not path.exists():
+        return None, [f"File not found: {path}"]
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        return None, [
+            f"Invalid JSON in {path}: {error.msg} at line {error.lineno}, "
+            f"column {error.colno}"
+        ]
+    if not isinstance(data, dict):
+        return None, [f"JSON file must contain an object: {path}"]
+    return data, []
+
+
+def _collection_diff(
+    base: dict[str, Any],
+    head: dict[str, Any],
+) -> dict[str, Any]:
+    """Return added, removed, and changed keys for two object maps."""
+    base_keys = set(base.keys())
+    head_keys = set(head.keys())
+    shared = base_keys & head_keys
+    changed = sorted(key for key in shared if base[key] != head[key])
+    return {
+        "added": sorted(head_keys - base_keys),
+        "removed": sorted(base_keys - head_keys),
+        "changed": changed,
+        "unchanged_count": len(shared) - len(changed),
+    }
+
+
+def _design_model_diff(
+    base: dict[str, Any],
+    head: dict[str, Any],
+) -> dict[str, Any]:
+    """Return design-model-specific version changes."""
+    result: dict[str, Any] = {
+        "project_name_changed": base.get("project_name") != head.get("project_name"),
+        "spaces": _collection_diff(base.get("spaces", {}), head.get("spaces", {})),
+        "components": _collection_diff(
+            base.get("components", {}),
+            head.get("components", {}),
+        ),
+        "lighting": _collection_diff(
+            base.get("lighting", {}),
+            head.get("lighting", {}),
+        ),
+    }
+    base_style = base.get("metadata", {}).get("style")
+    head_style = head.get("metadata", {}).get("style")
+    if base_style != head_style:
+        result["style"] = {"base": base_style, "head": head_style}
+    return result
+
+
+def _design_rules_diff(
+    base: dict[str, Any],
+    head: dict[str, Any],
+) -> dict[str, Any]:
+    """Return design-rules-specific version changes."""
+    return {
+        "source_changed": base.get("source") != head.get("source"),
+        "rule_sets": _collection_diff(
+            base.get("rule_sets", {}),
+            head.get("rule_sets", {}),
+        ),
+        "preferences": _collection_diff(
+            base.get("preferences", {}),
+            head.get("preferences", {}),
+        ),
+    }
+
+
+def _assets_lock_diff(
+    base: dict[str, Any],
+    head: dict[str, Any],
+) -> dict[str, Any]:
+    """Return asset-lock-specific version changes."""
+    base_assets = {
+        str(asset.get("component_id")): asset
+        for asset in base.get("assets", [])
+        if isinstance(asset, dict) and asset.get("component_id")
+    }
+    head_assets = {
+        str(asset.get("component_id")): asset
+        for asset in head.get("assets", [])
+        if isinstance(asset, dict) and asset.get("component_id")
+    }
+    return {"assets": _collection_diff(base_assets, head_assets)}
+
+
+def _component_library_diff(
+    base: dict[str, Any],
+    head: dict[str, Any],
+) -> dict[str, Any]:
+    """Return project component-library changes."""
+    return {
+        "components": _collection_diff(
+            base.get("components", {}),
+            head.get("components", {}),
+        )
+    }
+
+
+def _snapshot_manifest_diff(
+    base: dict[str, Any],
+    head: dict[str, Any],
+) -> dict[str, Any]:
+    """Return visual manifest count changes."""
+    return {
+        "snapshots": {
+            "base_count": len(base.get("snapshots", [])),
+            "head_count": len(head.get("snapshots", [])),
+        },
+        "renders": {
+            "base_count": len(base.get("renders", [])),
+            "head_count": len(head.get("renders", [])),
+        },
+        "reviews": {
+            "base_count": len(base.get("reviews", [])),
+            "head_count": len(head.get("reviews", [])),
+        },
+    }
+
+
+def _file_specific_diff(
+    relative_path: str,
+    base: dict[str, Any],
+    head: dict[str, Any],
+) -> dict[str, Any]:
+    """Return domain-specific diff details for a project truth file."""
+    if relative_path == "design_model.json":
+        return _design_model_diff(base, head)
+    if relative_path == "design_rules.json":
+        return _design_rules_diff(base, head)
+    if relative_path == "assets.lock.json":
+        return _assets_lock_diff(base, head)
+    if relative_path == "component_library.json":
+        return _component_library_diff(base, head)
+    if relative_path == "snapshots/manifest.json":
+        return _snapshot_manifest_diff(base, head)
+    return {"top_level": _collection_diff(base, head)}
+
+
+def compare_project_versions(
+    project_path: str | Path,
+    base_version: str,
+    head_version: str = "current",
+) -> dict[str, Any]:
+    """Compare saved project truth versions or a saved version to current truth."""
+    root = Path(project_path).expanduser().resolve()
+    base_root = _version_root(root, base_version)
+    head_root = _version_root(root, head_version)
+    if base_version != "current" and not base_root.is_dir():
+        raise FileNotFoundError(f"Project version not found: {base_version}")
+    if head_version != "current" and not head_root.is_dir():
+        raise FileNotFoundError(f"Project version not found: {head_version}")
+
+    files: dict[str, Any] = {}
+    changed_files: list[str] = []
+    errors: list[str] = []
+    for relative_path in comparable_version_files():
+        base_path = base_root / relative_path
+        head_path = head_root / relative_path
+        base_exists = base_path.exists()
+        head_exists = head_path.exists()
+        if not base_exists and not head_exists:
+            continue
+        if base_exists and not head_exists:
+            files[relative_path] = {"status": "removed"}
+            changed_files.append(relative_path)
+            continue
+        if head_exists and not base_exists:
+            files[relative_path] = {"status": "added"}
+            changed_files.append(relative_path)
+            continue
+
+        base_data, base_errors = _load_json_file(base_path)
+        head_data, head_errors = _load_json_file(head_path)
+        if base_errors or head_errors or base_data is None or head_data is None:
+            file_errors = base_errors + head_errors
+            files[relative_path] = {"status": "error", "errors": file_errors}
+            errors.extend(file_errors)
+            changed_files.append(relative_path)
+            continue
+
+        if base_data == head_data:
+            files[relative_path] = {"status": "unchanged"}
+            continue
+
+        files[relative_path] = {
+            "status": "changed",
+            "details": _file_specific_diff(relative_path, base_data, head_data),
+        }
+        changed_files.append(relative_path)
+
+    return {
+        "project_path": str(root),
+        "base_version": base_version,
+        "head_version": head_version,
+        "base_path": str(base_root),
+        "head_path": str(head_root),
+        "changed": bool(changed_files),
+        "changed_files": changed_files,
+        "files": files,
+        "errors": errors,
     }
 
 

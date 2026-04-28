@@ -117,9 +117,11 @@ canonical state.
 
 Use `save_project_version` when the designer asks to save a milestone, compare
 alternatives later, or preserve a rollback point. Use `list_project_versions`
-when the designer asks what versions exist. Use `restore_project_version` only
-after the designer explicitly asks to restore a version, because it overwrites
-current project truth files.
+when the designer asks what versions exist. Use `compare_project_versions` when
+the designer asks how two drafts differ or whether the current project changed
+from a saved milestone. Use `restore_project_version` only after the designer
+explicitly asks to restore a version, because it overwrites current project
+truth files.
 
 ### 6. Capture Visual Review Artifacts
 

@@ -108,6 +108,15 @@ sent to SketchUp and linked to the returned SketchUp entity ID.
 Project `assets.lock.json` records the components actually referenced by the
 design project.
 
+## Versions
+
+Use `save_project_version` to preserve structured project truth milestones and
+`list_project_versions` to inspect saved drafts. Use `compare_project_versions`
+before restoring or when you want a structured A/B comparison of spaces,
+components, rules, assets, or visual artifacts. Use `restore_project_version`
+only when you explicitly want to overwrite current project files from a saved
+version.
+
 ## Visual Output
 
 Screenshots and generated renderings are review artifacts. They can guide design

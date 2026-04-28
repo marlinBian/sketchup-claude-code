@@ -81,9 +81,24 @@ Views, reporting, and versions:
 - `generate_report`
 - `save_project_version`
 - `list_project_versions`
+- `compare_project_versions`
 - `restore_project_version`
 - `save_version` (compatibility alias for `save_project_version`)
 - `list_versions` (compatibility alias for `list_project_versions`)
+
+### Compare Versions
+
+```python
+compare_project_versions(
+    project_path="<project-path>",
+    base_version="draft_1",
+    head_version="current"
+)
+```
+
+Use this before restoring or when the designer asks how alternatives differ.
+Report changed files and the domain-specific details for spaces, components,
+lighting, rules, assets, or visual manifest counts.
 
 ## Common Flows
 

@@ -52,6 +52,9 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
 - Save version: "save this version", "保存一下".
   Use `save_project_version` when a project path is available. `save_version`
   is only a compatibility alias.
+- Compare versions: "compare these two drafts", "对比两个方案".
+  Use `compare_project_versions` for saved versions or a saved version against
+  current project truth.
 
 Chinese examples are deliberate bilingual user prompt support. Keep internal
 instructions and tool names English-first.

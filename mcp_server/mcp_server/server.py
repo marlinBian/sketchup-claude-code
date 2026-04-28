@@ -49,6 +49,7 @@ from mcp_server.project_assets import (
 )
 from mcp_server.project_state import read_project_state
 from mcp_server.project_versions import (
+    compare_project_versions as compare_project_versions_file,
     list_project_versions as list_project_versions_file,
     restore_project_version as restore_project_version_file,
     save_project_version as save_project_version_file,
@@ -3359,6 +3360,27 @@ async def list_project_versions(project_path: str) -> TextContent:
         )
     except Exception as e:
         return TextContent(type="text", text=f"Project versions failed: {str(e)}")
+
+
+@mcp.tool()
+async def compare_project_versions(
+    project_path: str,
+    base_version: str,
+    head_version: str = "current",
+) -> TextContent:
+    """Compare two structured project truth versions or a version to current."""
+    try:
+        result = compare_project_versions_file(
+            project_path,
+            base_version=base_version,
+            head_version=head_version,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Project version compare failed: {str(e)}")
 
 
 @mcp.tool()

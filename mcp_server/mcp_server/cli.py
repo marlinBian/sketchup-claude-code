@@ -13,6 +13,7 @@ from mcp_server.resources.design_rules_schema import (
 from mcp_server.project_assets import refresh_project_asset_lock
 from mcp_server.project_state import read_project_state
 from mcp_server.project_versions import (
+    compare_project_versions,
     list_project_versions,
     restore_project_version,
     save_project_version,
@@ -190,6 +191,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--force",
         action="store_true",
         help="Overwrite current project truth files",
+    )
+
+    compare_versions_parser = subparsers.add_parser(
+        "compare-versions",
+        help="Compare structured project truth versions",
+    )
+    compare_versions_parser.add_argument("project_path", help="Project directory")
+    compare_versions_parser.add_argument("base_version", help="Base version tag")
+    compare_versions_parser.add_argument(
+        "head_version",
+        nargs="?",
+        default="current",
+        help="Head version tag. Defaults to current project truth.",
     )
 
     state_parser = subparsers.add_parser(
@@ -497,6 +511,14 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
+        if args.command == "compare-versions":
+            result = compare_project_versions(
+                args.project_path,
+                base_version=args.base_version,
+                head_version=args.head_version,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if not result["errors"] else 1
         if args.command == "state":
             result = read_project_state(
                 args.project_path,

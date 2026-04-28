@@ -62,6 +62,7 @@ runpy.run_module("mcp_server.server", run_name="__main__")
     tools = json.loads(result.stdout.strip().splitlines()[-1])
     assert {
         "apply_visual_feedback_action",
+        "compare_project_versions",
         "get_bridge_info",
         "get_designer_profile_status",
         "launch_sketchup_bridge",

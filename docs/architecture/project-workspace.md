@@ -76,7 +76,9 @@ marks visual outputs and visual feedback action plans as advisory.
 
 `versions/` stores structured project truth snapshots. Version snapshots copy
 the core project files for review and rollback planning; they do not replace Git
-or make SketchUp pixels the source of truth.
+or make SketchUp pixels the source of truth. `compare_project_versions` reports
+structured file and domain-level changes between saved versions or between a
+saved version and current project truth.
 
 ## Rule Precedence
 
