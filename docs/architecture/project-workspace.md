@@ -46,7 +46,8 @@ External downloads are still explicit actions, not automatic background work.
 
 Agents can inspect project state through MCP tools:
 
-- `get_project_state` reads the current `design_model.json`
+- `get_project_state` reads the current `design_model.json` plus compact
+  `assets.lock.json` and visual feedback summaries when those files exist
 - `list_project_components` returns component and lighting instances
 - `validate_design_project` runs the same core checks as
   `sketchup-agent validate`

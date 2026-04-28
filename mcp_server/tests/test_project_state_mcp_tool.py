@@ -18,8 +18,124 @@ async def test_get_project_state_reads_design_model(tmp_path):
 
     assert data["project_path"] == str(tmp_path.resolve())
     assert data["design_model_path"].endswith("design_model.json")
+    assert data["project_files"]["assets_lock_path"].endswith("assets.lock.json")
+    assert data["project_files"]["snapshot_manifest_path"].endswith(
+        "snapshots/manifest.json"
+    )
     assert data["design_model"]["project_name"] == "State Test"
     assert "toilet_001" in data["design_model"]["components"]
+    assert data["assets_lock"]["valid"] is True
+    assert data["assets_lock"]["asset_count"] == 5
+    assert data["visual_feedback"]["valid"] is True
+    assert data["visual_feedback"]["snapshot_count"] == 0
+    assert data["visual_feedback"]["pending_action_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_get_project_state_can_skip_optional_summaries(tmp_path):
+    from mcp_server.server import get_project_state
+
+    init_project(tmp_path, template="bathroom")
+
+    response = await get_project_state(
+        str(tmp_path),
+        include_assets=False,
+        include_visual_feedback=False,
+    )
+    data = json.loads(response.text)
+
+    assert "design_model" in data
+    assert "assets_lock" not in data
+    assert "visual_feedback" not in data
+
+
+@pytest.mark.asyncio
+async def test_get_project_state_summarizes_visual_feedback(tmp_path):
+    from mcp_server import server
+    from mcp_server.server import get_project_state
+
+    init_project(tmp_path, template="bathroom")
+    response = await server.record_visual_feedback(
+        project_path=str(tmp_path),
+        summary="The vanity area needs a warmer material.",
+        actions=[
+            {
+                "type": "material",
+                "target": "vanity_001",
+                "intent": "Use a warmer vanity material.",
+                "status": "proposed",
+                "payload": {"material": "warm oak"},
+            },
+            {
+                "type": "style",
+                "target": "project",
+                "intent": "Use a softer style direction.",
+                "status": "accepted",
+                "payload": {"style": "soft minimal"},
+            },
+            {
+                "type": "note",
+                "target": "project",
+                "intent": "Already discussed with the designer.",
+                "status": "applied",
+                "payload": {},
+            },
+        ],
+    )
+    review_id = json.loads(response.text)["visual_feedback"]["id"]
+
+    state_response = await get_project_state(str(tmp_path))
+    data = json.loads(state_response.text)
+
+    visual_feedback = data["visual_feedback"]
+    assert visual_feedback["valid"] is True
+    assert visual_feedback["review_count"] == 1
+    assert visual_feedback["action_count"] == 3
+    assert visual_feedback["pending_action_count"] == 2
+    assert visual_feedback["accepted_action_count"] == 1
+    assert visual_feedback["applied_action_count"] == 1
+    assert visual_feedback["pending_actions"] == [
+        {
+            "review_id": review_id,
+            "action_index": 0,
+            "type": "material",
+            "target": "vanity_001",
+            "intent": "Use a warmer vanity material.",
+            "status": "proposed",
+            "payload": {"material": "warm oak"},
+            "rationale": None,
+        },
+        {
+            "review_id": review_id,
+            "action_index": 1,
+            "type": "style",
+            "target": "project",
+            "intent": "Use a softer style direction.",
+            "status": "accepted",
+            "payload": {"style": "soft minimal"},
+            "rationale": None,
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_project_state_reports_optional_file_errors(tmp_path):
+    from mcp_server.server import get_project_state
+
+    init_project(tmp_path, template="empty")
+    (tmp_path / "assets.lock.json").unlink()
+    (tmp_path / "snapshots" / "manifest.json").unlink()
+
+    response = await get_project_state(str(tmp_path))
+    data = json.loads(response.text)
+
+    assert "components" in data["design_model"]
+    assert data["assets_lock"]["exists"] is False
+    assert data["assets_lock"]["valid"] is False
+    assert "File not found" in data["assets_lock"]["errors"][0]
+    assert data["visual_feedback"]["exists"] is False
+    assert data["visual_feedback"]["valid"] is False
+    assert "File not found" in data["visual_feedback"]["errors"][0]
 
 
 @pytest.mark.asyncio
