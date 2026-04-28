@@ -29,6 +29,7 @@ module SuBridge
       "query_entities" => :handle_query_entities,
       "query_model_info" => :handle_query_model_info,
       "get_scene_info" => :handle_get_scene_info,
+      "get_selection_info" => :handle_get_selection_info,
       "move_entity" => :handle_move_entity,
       "rotate_entity" => :handle_rotate_entity,
       "scale_entity" => :handle_scale_entity,
@@ -737,9 +738,73 @@ module SuBridge
       }
     end
 
+    def handle_get_selection_info(payload)
+      limit = payload.fetch("limit", 100)
+      model = sketchup.active_model
+      selection = model.selection.to_a.first(limit)
+      entities = selection.map { |entity| entity_summary(entity) }
+
+      {
+        entity_ids: entities.map { |entity| entity[:entityID] },
+        spatial_delta: { bounding_box: overall_bounding_box(entities) },
+        model_revision: 1,
+        elapsed_ms: 0,
+        selection_info: {
+          selected_count: entities.length,
+          entities: entities,
+        },
+      }
+    end
+
     def handle_query_model_info(payload)
       # Delegate to get_scene_info
       handle_get_scene_info(payload)
+    end
+
+    def entity_summary(entity)
+      bbox = entity.bounds
+      layer_name = entity.layer&.name || "Unassigned"
+      type_str = case entity
+                 when sketchup.const_get("Face") then "face"
+                 when sketchup.const_get("Edge") then "edge"
+                 when sketchup.const_get("Group") then "group"
+                 when sketchup.const_get("ComponentInstance") then "component"
+                 else "unknown"
+                 end
+
+      summary = {
+        entityID: entity.entityID.to_s,
+        type: type_str,
+        layer: layer_name,
+        name: entity.respond_to?(:name) ? entity.name.to_s : "",
+        bounding_box: {
+          min: [bbox.min.x.to_mm, bbox.min.y.to_mm, bbox.min.z.to_mm],
+          max: [bbox.max.x.to_mm, bbox.max.y.to_mm, bbox.max.z.to_mm],
+        },
+      }
+      if entity.respond_to?(:definition) && entity.definition
+        summary[:definition_name] = entity.definition.name.to_s
+      end
+      summary
+    end
+
+    def overall_bounding_box(entities)
+      return { min: [0, 0, 0], max: [0, 0, 0] } if entities.empty?
+
+      all_mins = entities.map { |entity| entity[:bounding_box][:min] }
+      all_maxs = entities.map { |entity| entity[:bounding_box][:max] }
+      {
+        min: [
+          all_mins.map { |point| point[0] }.min,
+          all_mins.map { |point| point[1] }.min,
+          all_mins.map { |point| point[2] }.min,
+        ],
+        max: [
+          all_maxs.map { |point| point[0] }.max,
+          all_maxs.map { |point| point[1] }.max,
+          all_maxs.map { |point| point[2] }.max,
+        ],
+      }
     end
 
     # Conversion factor: mm to inches (SketchUp internal units)

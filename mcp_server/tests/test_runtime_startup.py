@@ -61,6 +61,7 @@ runpy.run_module("mcp_server.server", run_name="__main__")
     assert result.returncode == 0, result.stderr
     tools = json.loads(result.stdout.strip().splitlines()[-1])
     assert {
+        "get_selection_info",
         "register_project_component",
         "rotate_entity",
         "scale_entity",

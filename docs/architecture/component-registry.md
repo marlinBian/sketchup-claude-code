@@ -134,6 +134,10 @@ dimensions, bounds, insertion point, anchors, clearances, asset path,
 procedural fallback, aliases, tags, and license/provenance fields. It does not
 yet extract a selected SketchUp entity into a `.skp` asset automatically.
 
+`get_selection_info` is the bridge-side inspection primitive for the next step:
+it returns selected SketchUp entity IDs, names, layers, types, and bounds so an
+agent can propose accurate project-local component metadata before registration.
+
 ## Search Ranking
 
 Search should prefer exact component IDs, names, and aliases before fuzzy or

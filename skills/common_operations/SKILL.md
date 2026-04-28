@@ -25,6 +25,7 @@ After mutation:
 Scene and geometry:
 
 - `get_scene_info`
+- `get_selection_info`
 - `create_wall`
 - `create_face`
 - `create_box`

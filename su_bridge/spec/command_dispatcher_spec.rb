@@ -28,6 +28,7 @@ RSpec.describe SuBridge::CommandDispatcher do
         query_entities
         query_model_info
         get_scene_info
+        get_selection_info
         place_component
         place_lighting
         set_camera_view

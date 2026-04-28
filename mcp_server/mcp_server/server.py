@@ -211,6 +211,37 @@ async def get_scene_info() -> TextContent:
 
 
 @mcp.tool()
+async def get_selection_info(limit: int = 100) -> TextContent:
+    """Get current SketchUp selection information for component registration."""
+    bridge = SocketBridge()
+    try:
+        bridge.connect()
+        request = JsonRpcRequest(
+            method="execute_operation",
+            params={
+                "operation_id": f"selection_{id(get_selection_info)}",
+                "operation_type": "get_selection_info",
+                "payload": {"limit": limit},
+                "rollback_on_failure": False,
+            }
+        )
+        response = bridge.send(request.to_dict())
+        if "error" in response:
+            return TextContent(type="text", text=f"Error: {response['error']['message']}")
+        result = response.get("result", {})
+        return TextContent(
+            type="text",
+            text=json.dumps(
+                result.get("selection_info", {}),
+                ensure_ascii=False,
+                indent=2,
+            ),
+        )
+    finally:
+        bridge.disconnect()
+
+
+@mcp.tool()
 async def get_design_rules(project_path: str) -> TextContent:
     """Read project-local design rules."""
     try:

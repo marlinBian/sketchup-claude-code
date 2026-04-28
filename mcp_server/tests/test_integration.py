@@ -74,6 +74,36 @@ class TestIntegrationSceneInfo:
         finally:
             bridge.disconnect()
 
+    def test_get_selection_info_returns_valid_response(self):
+        """Test that get_selection_info returns selection metadata."""
+        from mcp_server.bridge.socket_bridge import SocketBridge
+        from mcp_server.protocol.jsonrpc import JsonRpcRequest
+
+        bridge = SocketBridge()
+        try:
+            bridge.connect()
+            request = JsonRpcRequest(
+                method="execute_operation",
+                params={
+                    "operation_id": "test_selection_info",
+                    "operation_type": "get_selection_info",
+                    "payload": {"limit": 10},
+                    "rollback_on_failure": False,
+                }
+            )
+            response = bridge.send(request.to_dict())
+
+            assert "result" in response, f"Expected result in response: {response}"
+            result = response["result"]
+
+            assert "selection_info" in result, f"Expected selection_info in result: {result}"
+            selection_info = result["selection_info"]
+            assert "selected_count" in selection_info
+            assert "entities" in selection_info
+            assert isinstance(selection_info["entities"], list)
+        finally:
+            bridge.disconnect()
+
 
 class TestIntegrationCreateOperations:
     """Test create operations with live SketchUp."""

@@ -41,7 +41,9 @@ get_component_manifest(component_id="toilet_floor_mounted_basic")
 ```
 
 When the designer has a project-specific reusable object, register it before
-searching or placing it:
+searching or placing it. If the object is already selected in SketchUp, use
+`get_selection_info` first to inspect its entity IDs and bounds, then register
+metadata that matches those dimensions:
 
 ```python
 register_project_component(
