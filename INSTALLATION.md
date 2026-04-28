@@ -62,8 +62,14 @@ sketchup-agent install-skills ~/Design/my-bathroom --target all --force
 runtime skills with the current harness package and reports missing, stale, or
 locally modified skill files.
 
-Optional designer profile rules can be installed as a reusable JSON file and
-activated with:
+Optional designer profile rules can be created as a reusable JSON file:
+
+```bash
+sketchup-agent profile-init
+sketchup-agent profile-status
+```
+
+Activate the profile for future shells:
 
 ```bash
 export SKETCHUP_AGENT_DESIGN_RULES=~/.sketchup-agent-harness/design_rules.json
@@ -71,7 +77,7 @@ export SKETCHUP_AGENT_DESIGN_RULES=~/.sketchup-agent-harness/design_rules.json
 
 When this environment variable is set, new projects and planning tools merge
 those profile rules between built-in defaults and project-local
-`design_rules.json`.
+`design_rules.json`. Project rules still win.
 
 The source plugin `.mcp.json` starts the same MCP server through:
 

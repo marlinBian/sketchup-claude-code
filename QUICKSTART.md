@@ -5,6 +5,17 @@ for validating the local development build.
 
 ## 1. Create a Design Project
 
+Optional: create a reusable personal design-rules profile before starting
+projects:
+
+```bash
+sketchup-agent profile-init
+sketchup-agent profile-status
+export SKETCHUP_AGENT_DESIGN_RULES=~/.sketchup-agent-harness/design_rules.json
+```
+
+Project-local `design_rules.json` values still override this profile.
+
 From an installed package:
 
 ```bash

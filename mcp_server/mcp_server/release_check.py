@@ -168,6 +168,7 @@ def wheel_install_check(
     venv_dir: str | Path = "/tmp/sah-release-wheel-venv",
     project_path: str | Path = "/tmp/sah-release-wheel-project",
     plugins_dir: str | Path = "/tmp/sah-release-wheel-plugins",
+    profile_path: str | Path = "/tmp/sah-release-designer-profile.json",
 ) -> dict[str, Any]:
     """Build the wheel and verify installed-package project and bridge paths."""
     root = _repo_root(repo_root)
@@ -176,6 +177,7 @@ def wheel_install_check(
     venv = Path(venv_dir).expanduser().resolve()
     project = Path(project_path).expanduser().resolve()
     plugins = Path(plugins_dir).expanduser().resolve()
+    profile = Path(profile_path).expanduser().resolve()
     commands: list[dict[str, Any]] = []
     errors: list[str] = []
 
@@ -236,6 +238,19 @@ def wheel_install_check(
     installed_commands = [
         [
             str(agent),
+            "profile-init",
+            "--path",
+            str(profile),
+            "--force",
+        ],
+        [
+            str(agent),
+            "profile-status",
+            "--path",
+            str(profile),
+        ],
+        [
+            str(agent),
             "install-bridge",
             "--plugins-dir",
             str(plugins),
@@ -275,6 +290,7 @@ def wheel_install_check(
                 break
 
     expected_files = [
+        profile,
         plugins / "su_bridge" / "lib" / "su_bridge.rb",
         plugins / "su_bridge.rb",
         project / ".agents" / "skills" / "bathroom_planning" / "SKILL.md",
@@ -293,6 +309,7 @@ def wheel_install_check(
             "venv_dir": str(venv),
             "project_path": str(project),
             "plugins_dir": str(plugins),
+            "profile_path": str(profile),
             "wheel": str(wheel_path) if wheel_path else None,
             "commands": commands,
         },

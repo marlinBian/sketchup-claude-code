@@ -29,9 +29,12 @@ from mcp_server.resources.snapshot_manifest_schema import (
     visual_feedback_entry,
 )
 from mcp_server.resources.design_rules_schema import (
+    create_designer_profile,
     create_default_design_rules,
+    designer_profile_status,
     effective_design_rules,
     load_design_rules,
+    resolve_designer_profile_path,
     save_design_rules,
 )
 from mcp_server.resources.project_files import (
@@ -115,6 +118,25 @@ def load_or_create_project_design_rules(
         return path, rules, []
 
     return path, create_default_design_rules(), []
+
+
+def load_or_create_designer_profile_rules(
+    profile_path: str | None = None,
+) -> tuple[Path, dict[str, Any], list[str]]:
+    """Load a reusable designer profile or create the default profile."""
+    path = resolve_designer_profile_path(profile_path)
+    if path.exists():
+        rules, errors = load_design_rules(path)
+        if errors or rules is None:
+            return path, {}, errors
+        return path, rules, []
+
+    try:
+        result = create_designer_profile(profile_path=path)
+    except (OSError, ValueError, FileExistsError) as error:
+        return path, {}, [str(error)]
+
+    return path, result["rules"], []
 
 
 def default_layer_for_component(component: dict[str, Any]) -> str:
@@ -780,6 +802,41 @@ async def get_design_rules(project_path: str) -> TextContent:
 
 
 @mcp.tool()
+async def get_designer_profile_status(profile_path: str | None = None) -> TextContent:
+    """Read reusable designer profile status without mutating it."""
+    try:
+        status = designer_profile_status(profile_path=profile_path)
+        return TextContent(
+            type="text",
+            text=json.dumps(status, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(
+            type="text",
+            text=f"Designer profile failed: {str(e)}",
+        )
+
+
+@mcp.tool()
+async def init_designer_profile(
+    profile_path: str | None = None,
+    force: bool = False,
+) -> TextContent:
+    """Create a reusable designer profile for future project defaults."""
+    try:
+        result = create_designer_profile(profile_path=profile_path, force=force)
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(
+            type="text",
+            text=f"Designer profile failed: {str(e)}",
+        )
+
+
+@mcp.tool()
 async def set_design_clearance(
     project_path: str,
     rule_set: str,
@@ -830,6 +887,62 @@ async def set_design_clearance(
         )
     except Exception as e:
         return TextContent(type="text", text=f"Design rules failed: {str(e)}")
+
+
+@mcp.tool()
+async def set_designer_profile_clearance(
+    rule_set: str,
+    clearance_name: str,
+    value: float,
+    profile_path: str | None = None,
+    source: str = "designer_profile",
+) -> TextContent:
+    """Set one reusable designer profile clearance value in millimeters."""
+    try:
+        path, rules, errors = load_or_create_designer_profile_rules(profile_path)
+        if errors:
+            return TextContent(
+                type="text",
+                text=f"Designer profile failed: {'; '.join(errors)}",
+            )
+
+        rules["source"] = source
+        rules.setdefault("rule_sets", {})
+        rules["rule_sets"].setdefault(
+            rule_set,
+            {
+                "description": f"Reusable designer {rule_set} rules.",
+                "clearances": {},
+            },
+        )
+        rules["rule_sets"][rule_set].setdefault("clearances", {})
+        rules["rule_sets"][rule_set]["clearances"][clearance_name] = value
+
+        saved, save_errors = save_design_rules(path, rules)
+        if not saved:
+            return TextContent(
+                type="text",
+                text=f"Designer profile failed: {'; '.join(save_errors)}",
+            )
+
+        response = {
+            "profile_path": str(path),
+            "rule_set": rule_set,
+            "clearance_name": clearance_name,
+            "value": value,
+            "units": "mm",
+            "source": source,
+            "scope": "designer_profile",
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(response, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(
+            type="text",
+            text=f"Designer profile failed: {str(e)}",
+        )
 
 
 @mcp.tool()
@@ -896,6 +1009,72 @@ async def set_fixture_dimension(
 
 
 @mcp.tool()
+async def set_designer_profile_fixture_dimension(
+    rule_set: str,
+    fixture_name: str,
+    width: float,
+    depth: float,
+    height: float,
+    profile_path: str | None = None,
+    source: str = "designer_profile",
+) -> TextContent:
+    """Set one reusable designer profile fixture dimension in millimeters."""
+    try:
+        path, rules, errors = load_or_create_designer_profile_rules(profile_path)
+        if errors:
+            return TextContent(
+                type="text",
+                text=f"Designer profile failed: {'; '.join(errors)}",
+            )
+
+        rules["source"] = source
+        rules.setdefault("rule_sets", {})
+        rules["rule_sets"].setdefault(
+            rule_set,
+            {
+                "description": f"Reusable designer {rule_set} rules.",
+                "clearances": {},
+            },
+        )
+        rules["rule_sets"][rule_set].setdefault("fixture_dimensions", {})
+        rules["rule_sets"][rule_set]["fixture_dimensions"][fixture_name] = {
+            "width": width,
+            "depth": depth,
+            "height": height,
+        }
+
+        saved, save_errors = save_design_rules(path, rules)
+        if not saved:
+            return TextContent(
+                type="text",
+                text=f"Designer profile failed: {'; '.join(save_errors)}",
+            )
+
+        response = {
+            "profile_path": str(path),
+            "rule_set": rule_set,
+            "fixture_name": fixture_name,
+            "dimensions": {
+                "width": width,
+                "depth": depth,
+                "height": height,
+            },
+            "units": "mm",
+            "source": source,
+            "scope": "designer_profile",
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(response, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(
+            type="text",
+            text=f"Designer profile failed: {str(e)}",
+        )
+
+
+@mcp.tool()
 async def set_design_preference(
     project_path: str,
     preference_name: str,
@@ -935,6 +1114,51 @@ async def set_design_preference(
         )
     except Exception as e:
         return TextContent(type="text", text=f"Design rules failed: {str(e)}")
+
+
+@mcp.tool()
+async def set_designer_profile_preference(
+    preference_name: str,
+    value: str,
+    profile_path: str | None = None,
+    source: str = "designer_profile",
+) -> TextContent:
+    """Set one reusable designer profile free-form design preference."""
+    try:
+        path, rules, errors = load_or_create_designer_profile_rules(profile_path)
+        if errors:
+            return TextContent(
+                type="text",
+                text=f"Designer profile failed: {'; '.join(errors)}",
+            )
+
+        rules["source"] = source
+        rules.setdefault("preferences", {})
+        rules["preferences"][preference_name] = value
+
+        saved, save_errors = save_design_rules(path, rules)
+        if not saved:
+            return TextContent(
+                type="text",
+                text=f"Designer profile failed: {'; '.join(save_errors)}",
+            )
+
+        response = {
+            "profile_path": str(path),
+            "preference_name": preference_name,
+            "value": value,
+            "source": source,
+            "scope": "designer_profile",
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(response, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(
+            type="text",
+            text=f"Designer profile failed: {str(e)}",
+        )
 
 
 @mcp.tool()

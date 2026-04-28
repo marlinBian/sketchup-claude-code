@@ -141,3 +141,80 @@ async def test_set_design_preference_updates_project_preferences(tmp_path):
     assert update["value"] == "3000K"
     assert rules["source"] == "project_user_override"
     assert rules["preferences"]["lighting_temperature"] == "3000K"
+
+
+@pytest.mark.asyncio
+async def test_designer_profile_tools_create_and_report_status(tmp_path):
+    from mcp_server.server import get_designer_profile_status, init_designer_profile
+
+    profile_path = tmp_path / "profile" / "design_rules.json"
+
+    init_response = await init_designer_profile(profile_path=str(profile_path))
+    init_data = json.loads(init_response.text)
+    status_response = await get_designer_profile_status(profile_path=str(profile_path))
+    status_data = json.loads(status_response.text)
+
+    assert init_data["path"] == str(profile_path)
+    assert profile_path.exists()
+    assert status_data["exists"] is True
+    assert status_data["valid"] is True
+    assert status_data["source"] == "designer_profile"
+
+
+@pytest.mark.asyncio
+async def test_set_designer_profile_clearance_creates_profile(tmp_path):
+    from mcp_server.server import set_designer_profile_clearance
+
+    profile_path = tmp_path / "designer_profile.json"
+
+    response = await set_designer_profile_clearance(
+        rule_set="bathroom",
+        clearance_name="toilet_front_clearance",
+        value=720,
+        profile_path=str(profile_path),
+    )
+    update = json.loads(response.text)
+    rules = json.loads(profile_path.read_text(encoding="utf-8"))
+
+    assert update["scope"] == "designer_profile"
+    assert update["value"] == 720
+    assert rules["source"] == "designer_profile"
+    assert rules["rule_sets"]["bathroom"]["clearances"][
+        "toilet_front_clearance"
+    ] == 720
+
+
+@pytest.mark.asyncio
+async def test_set_designer_profile_fixture_and_preference(tmp_path):
+    from mcp_server.server import (
+        set_designer_profile_fixture_dimension,
+        set_designer_profile_preference,
+    )
+
+    profile_path = tmp_path / "designer_profile.json"
+
+    fixture_response = await set_designer_profile_fixture_dimension(
+        rule_set="bathroom",
+        fixture_name="compact_vanity",
+        width=500,
+        depth=420,
+        height=850,
+        profile_path=str(profile_path),
+    )
+    preference_response = await set_designer_profile_preference(
+        preference_name="lighting_temperature",
+        value="3000K",
+        profile_path=str(profile_path),
+    )
+    fixture_update = json.loads(fixture_response.text)
+    preference_update = json.loads(preference_response.text)
+    rules = json.loads(profile_path.read_text(encoding="utf-8"))
+
+    assert fixture_update["scope"] == "designer_profile"
+    assert preference_update["scope"] == "designer_profile"
+    assert rules["rule_sets"]["bathroom"]["fixture_dimensions"]["compact_vanity"] == {
+        "width": 500,
+        "depth": 420,
+        "height": 850,
+    }
+    assert rules["preferences"]["lighting_temperature"] == "3000K"

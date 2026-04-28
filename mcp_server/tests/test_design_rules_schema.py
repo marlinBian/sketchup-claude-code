@@ -5,7 +5,10 @@ from pathlib import Path
 
 from mcp_server.resources.design_rules_schema import (
     DESIGNER_PROFILE_ENV,
+    create_designer_profile,
     create_default_design_rules,
+    default_designer_profile_path,
+    designer_profile_status,
     effective_design_rules,
     load_design_rules,
     merge_design_rules,
@@ -76,6 +79,68 @@ def test_save_design_rules_creates_parent_directories(tmp_path):
     assert errors == []
     assert path.exists()
     assert json.loads(path.read_text(encoding="utf-8"))["units"] == "mm"
+
+
+def test_default_designer_profile_path_uses_home(tmp_path):
+    assert default_designer_profile_path(home=tmp_path) == (
+        tmp_path / ".sketchup-agent-harness" / "design_rules.json"
+    )
+
+
+def test_create_designer_profile_writes_valid_profile(tmp_path):
+    profile_path = tmp_path / "profile" / "design_rules.json"
+
+    result = create_designer_profile(profile_path)
+    data, errors = load_design_rules(profile_path)
+
+    assert errors == []
+    assert data is not None
+    assert result["created"] is True
+    assert result["path"] == str(profile_path)
+    assert result["shell_export"] == f"export {DESIGNER_PROFILE_ENV}={profile_path}"
+    assert data["source"] == "designer_profile"
+
+
+def test_create_designer_profile_requires_force_for_existing_profile(tmp_path):
+    profile_path = tmp_path / "design_rules.json"
+    create_designer_profile(profile_path)
+
+    try:
+        create_designer_profile(profile_path)
+    except FileExistsError as error:
+        assert "Designer profile already exists" in str(error)
+    else:
+        raise AssertionError("Expected FileExistsError")
+
+
+def test_designer_profile_status_uses_env(monkeypatch, tmp_path):
+    profile_path = tmp_path / "design_rules.json"
+    create_designer_profile(profile_path)
+    monkeypatch.setenv(DESIGNER_PROFILE_ENV, str(profile_path))
+
+    status = designer_profile_status()
+
+    assert status["configured"] is True
+    assert status["exists"] is True
+    assert status["valid"] is True
+    assert status["source"] == "designer_profile"
+
+
+def test_cli_designer_profile_commands(tmp_path, capsys):
+    from mcp_server.cli import main
+
+    profile_path = tmp_path / "profile_rules.json"
+
+    init_code = main(["profile-init", "--path", str(profile_path)])
+    init_output = json.loads(capsys.readouterr().out)
+    status_code = main(["profile-status", "--path", str(profile_path)])
+    status_output = json.loads(capsys.readouterr().out)
+
+    assert init_code == 0
+    assert init_output["path"] == str(profile_path)
+    assert status_code == 0
+    assert status_output["exists"] is True
+    assert status_output["valid"] is True
 
 
 def test_merge_design_rules_applies_profile_then_project_overrides():

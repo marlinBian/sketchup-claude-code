@@ -65,6 +65,15 @@ Agents can read rules with `get_design_rules` and update project preferences
 with `set_design_clearance`, `set_fixture_dimension`, and
 `set_design_preference`.
 
+Reusable personal defaults can live in a designer profile at
+`~/.sketchup-agent-harness/design_rules.json`, activated through
+`SKETCHUP_AGENT_DESIGN_RULES`. Agents can inspect and create that profile with
+`get_designer_profile_status` and `init_designer_profile`. They should update it
+with `set_designer_profile_clearance`,
+`set_designer_profile_fixture_dimension`, or
+`set_designer_profile_preference` only when you explicitly ask for a preference
+to apply to future projects.
+
 Rule precedence is:
 
 1. built-in harness defaults

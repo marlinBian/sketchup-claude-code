@@ -3,6 +3,7 @@
 import copy
 import json
 import os
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,8 @@ from jsonschema import Draft7Validator
 from mcp_server.resources.project_files import design_rules_path
 
 DESIGNER_PROFILE_ENV = "SKETCHUP_AGENT_DESIGN_RULES"
+DESIGNER_PROFILE_DIR = ".sketchup-agent-harness"
+DESIGNER_PROFILE_FILENAME = "design_rules.json"
 
 DESIGN_RULES_SCHEMA: dict[str, Any] = {
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -129,6 +132,93 @@ def designer_profile_path_from_env() -> Path | None:
     if not value:
         return None
     return Path(value).expanduser()
+
+
+def default_designer_profile_path(home: str | Path | None = None) -> Path:
+    """Return the default reusable designer profile path."""
+    root = Path(home).expanduser() if home is not None else Path.home()
+    return root / DESIGNER_PROFILE_DIR / DESIGNER_PROFILE_FILENAME
+
+
+def resolve_designer_profile_path(
+    profile_path: str | Path | None = None,
+    *,
+    home: str | Path | None = None,
+) -> Path:
+    """Resolve an explicit, environment-configured, or default profile path."""
+    if profile_path is not None:
+        return Path(profile_path).expanduser()
+    env_path = designer_profile_path_from_env()
+    if env_path is not None:
+        return env_path
+    return default_designer_profile_path(home)
+
+
+def designer_profile_shell_export(path: str | Path) -> str:
+    """Return the shell export command for a designer profile path."""
+    profile_path = shlex.quote(str(Path(path).expanduser()))
+    return f"export {DESIGNER_PROFILE_ENV}={profile_path}"
+
+
+def create_designer_profile(
+    profile_path: str | Path | None = None,
+    *,
+    home: str | Path | None = None,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Create a reusable designer design-rules profile file."""
+    path = (
+        Path(profile_path).expanduser()
+        if profile_path is not None
+        else default_designer_profile_path(home)
+    )
+    if path.exists() and not force:
+        raise FileExistsError(f"Designer profile already exists: {path}")
+
+    rules = create_default_design_rules()
+    rules["source"] = "designer_profile"
+    rules["rule_sets"]["bathroom"].setdefault("notes", [])
+    note = "Reusable designer profile; project rules may override these values."
+    if note not in rules["rule_sets"]["bathroom"]["notes"]:
+        rules["rule_sets"]["bathroom"]["notes"].append(note)
+
+    saved, errors = save_design_rules(path, rules)
+    if not saved:
+        raise ValueError("; ".join(errors))
+
+    return {
+        "path": str(path),
+        "created": True,
+        "env": DESIGNER_PROFILE_ENV,
+        "shell_export": designer_profile_shell_export(path),
+        "rules": rules,
+    }
+
+
+def designer_profile_status(
+    profile_path: str | Path | None = None,
+    *,
+    home: str | Path | None = None,
+) -> dict[str, Any]:
+    """Return status for an explicit, env-configured, or default profile path."""
+    env_path = designer_profile_path_from_env()
+    path = resolve_designer_profile_path(profile_path, home=home)
+    exists = path.exists()
+    profile = None
+    errors: list[str] = []
+    if exists:
+        profile, errors = load_design_rules(path)
+
+    return {
+        "path": str(path),
+        "exists": exists,
+        "valid": exists and profile is not None and not errors,
+        "configured": env_path is not None and env_path.expanduser() == path.expanduser(),
+        "env": DESIGNER_PROFILE_ENV,
+        "shell_export": designer_profile_shell_export(path),
+        "errors": errors,
+        "source": profile.get("source") if profile else None,
+    }
 
 
 def merge_design_rules(*rule_layers: dict[str, Any] | None) -> dict[str, Any]:

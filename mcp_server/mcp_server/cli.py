@@ -6,6 +6,10 @@ import sys
 
 from mcp_server.bridge_install import install_bridge, launch_bridge
 from mcp_server.doctor import run_doctor
+from mcp_server.resources.design_rules_schema import (
+    create_designer_profile,
+    designer_profile_status,
+)
 from mcp_server.project_assets import refresh_project_asset_lock
 from mcp_server.project_state import read_project_state
 from mcp_server.project_versions import (
@@ -49,6 +53,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate a design project workspace",
     )
     validate_parser.add_argument("project_path", help="Project directory to validate")
+
+    profile_init_parser = subparsers.add_parser(
+        "profile-init",
+        help="Create a reusable designer design-rules profile",
+    )
+    profile_init_parser.add_argument(
+        "--path",
+        help="Profile output path. Defaults to ~/.sketchup-agent-harness/design_rules.json.",
+    )
+    profile_init_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing profile file.",
+    )
+
+    profile_status_parser = subparsers.add_parser(
+        "profile-status",
+        help="Check a reusable designer design-rules profile",
+    )
+    profile_status_parser.add_argument(
+        "--path",
+        help=(
+            "Profile path to check. Defaults to SKETCHUP_AGENT_DESIGN_RULES "
+            "or ~/.sketchup-agent-harness/design_rules.json."
+        ),
+    )
 
     refresh_assets_parser = subparsers.add_parser(
         "refresh-assets",
@@ -409,6 +439,17 @@ def main(argv: list[str] | None = None) -> int:
             result = validate_project(args.project_path)
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result["ok"] else 1
+        if args.command == "profile-init":
+            result = create_designer_profile(
+                profile_path=args.path,
+                force=args.force,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "profile-status":
+            result = designer_profile_status(profile_path=args.path)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result["valid"] or not result["exists"] else 1
         if args.command == "refresh-assets":
             result = refresh_project_asset_lock(args.project_path)
             print(json.dumps(result, ensure_ascii=False, indent=2))
