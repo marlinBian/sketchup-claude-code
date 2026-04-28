@@ -19,7 +19,9 @@ def make_runtime_skill_source(tmp_path):
     skill_dir = source / "bathroom_planning"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("# Bathroom Planning\n", encoding="utf-8")
-    (source / "styles.md").write_text("# Styles\n", encoding="utf-8")
+    style_dir = source / "styles"
+    style_dir.mkdir()
+    (style_dir / "SKILL.md").write_text("# Styles\n", encoding="utf-8")
     return source
 
 
@@ -39,7 +41,7 @@ def test_install_runtime_skills_copies_codex_and_claude_targets(tmp_path):
     assert result["installed"] is True
     assert (project_path / ".agents" / "skills" / "bathroom_planning" / "SKILL.md").exists()
     assert (project_path / ".claude" / "skills" / "bathroom_planning" / "SKILL.md").exists()
-    assert (project_path / ".agents" / "skills" / "styles.md").exists()
+    assert (project_path / ".agents" / "skills" / "styles" / "SKILL.md").exists()
     assert result["installs"]["codex"]["file_count"] == 2
     assert result["installs"]["claude"]["file_count"] == 2
 
@@ -111,6 +113,16 @@ def test_packaged_runtime_skills_source_points_to_installed_runtime():
     assert source.parent.name == "packaged"
 
 
+def test_product_runtime_skills_are_skill_directories():
+    skills_dir = Path(__file__).resolve().parents[2] / "skills"
+    top_level_markdown = sorted(path.name for path in skills_dir.glob("*.md"))
+    skill_dirs = sorted(path for path in skills_dir.iterdir() if path.is_dir())
+
+    assert top_level_markdown == []
+    assert skill_dirs
+    assert all((path / "SKILL.md").exists() for path in skill_dirs)
+
+
 def test_wheel_contains_packaged_runtime_skills(tmp_path):
     if shutil.which("uv") is None:
         return
@@ -137,3 +149,4 @@ def test_wheel_contains_packaged_runtime_skills(tmp_path):
 
     assert "mcp_server/packaged/runtime_skills/bathroom_planning/SKILL.md" in names
     assert "mcp_server/packaged/runtime_skills/designer_workflow/SKILL.md" in names
+    assert "mcp_server/packaged/runtime_skills/styles/SKILL.md" in names

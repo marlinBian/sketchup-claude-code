@@ -166,7 +166,7 @@ module SuBridge
         end
       end
 
-      # Style presets (simplified - full definitions in skills/styles.md)
+      # Style presets (simplified - full definitions in skills/styles/SKILL.md)
       STYLE_PRESETS = {
         "japandi_cream" => {
           "name" => "Japandi Cream",
