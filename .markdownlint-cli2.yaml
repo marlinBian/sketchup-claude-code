@@ -7,6 +7,8 @@ globs:
   - AGENTS.md
   - CHANGELOG.md
   - CONTRIBUTING.md
+  - skills/**/*.md
+  - skills/*.md
   - docs/roadmap.md
   - docs/architecture/bathroom-headless-slice.md
   - docs/architecture/bridge-trace-execution.md

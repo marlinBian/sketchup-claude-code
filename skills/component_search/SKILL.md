@@ -2,200 +2,147 @@
 
 ## Purpose
 
-Guide LLM through searching and placing 3D components from various sources.
+Search and place semantic components from the packaged component registry.
 
-## Component Sources
+Use this skill when the designer asks for furniture, fixtures, lighting, or
+other reusable objects by name, style, room type, or Chinese/English alias.
 
-| Source | Access Method | Use Case |
-|--------|--------------|----------|
-| Local Library | `place_component` | User's custom .skp files |
-| Sketchfab | `search_sketchfab_models` | CC licensed models |
-| SketchUp 3D Warehouse | `search_warehouse` (future) | Official SU models |
+## Current Registry
 
-## Local Library Workflow
+The packaged registry lives at:
 
-### 1. Search Local Library
-```python
-# Components are defined in mcp_server/assets/library.json
-# LLM can read this file directly to find components
+```text
+mcp_server/mcp_server/assets/library.json
 ```
 
-### 2. Place from Library
+Treat this registry as the first source for supported components. It contains
+component IDs, display names, categories, dimensions, anchors, clearances,
+assets, licenses, aliases, and tags.
+
+Chinese aliases are deliberate search data. For example, the user can ask for
+`马桶`, and the registry can resolve it to `toilet_floor_mounted_basic`.
+
+## Tool Flow
+
+### 1. Search Before Placing
+
+Use `search_local_library` first:
+
 ```python
-# "Place a modern double sofa from the library"
+search_local_library(query="toilet", category="fixtures", limit=5)
+```
+
+For Chinese user prompts, pass the user's natural words directly first:
+
+```python
+search_local_library(query="马桶", category="fixtures", limit=5)
+```
+
+If the result is weak, retry with an English design term such as `toilet`,
+`vanity`, `mirror`, `sofa`, or `ceiling light`.
+
+### 2. Place a Supported Component
+
+Use `place_component` only after finding a suitable registry item:
+
+```python
 place_component(
-    component_name="现代双人沙发",
-    position_x=3000, position_y=2000, position_z=0
+    component_name="Modern 2-Seat Sofa",
+    position_x=3000,
+    position_y=2000,
+    position_z=0,
+    rotation=0,
+    scale=1
 )
 ```
 
-### Local Library Structure
-```
-SKETCHUP_ASSETS/
-├── furniture/
-│   ├── sofa_modern_double.skp
-│   ├── dining_table_rect.skp
-│   └── bed_double.skp
-├── fixtures/
-│   └── lamp_floor.skp
-├── lighting/
-│   ├── spotlight.skp
-│   ├── chandelier.skp
-│   └── floor_lamp.skp
-└── structural/
-    └── column.skp
-```
+The current tool places by component display name, not by arbitrary external
+asset path.
 
-## Sketchfab Workflow
+### 3. Prefer Slice Tools for Bathroom Layouts
 
-### 1. Search
+When the user asks for a complete small bathroom, prefer the bathroom planning
+slice instead of manually placing every object:
+
 ```python
-# "Find a modern grey sofa on Sketchfab"
-results = search_sketchfab_models(
-    query="modern grey sofa",
-    count=10,
-    sort="likes"  # Options: relevance, newest, likes, views
-)
+plan_bathroom(project_path="<project-path>")
 ```
 
-### 2. Review Results
-```python
-# Results include:
-# - name: Model name
-# - view_count: Popularity indicator
-# - like_count: User preference
-# - description: Model details
-# - download_format: Available formats (obj, gltf, etc)
-```
+Use `execute_bathroom_plan` only when the user wants SketchUp updated and the
+Ruby bridge is running.
 
-### 3. Download
-```python
-# "Download the top result as OBJ"
-download_sketchfab_model(
-    model_uid="abc123...",  # From search results
-    format_hint="obj"  # Best for SketchUp
-)
-```
+## Result Handling
 
-### 4. Import to SketchUp
-```
-# After download, user must manually:
-# 1. Open SketchUp
-# 2. File > Import
-# 3. Select downloaded .obj file
-# 4. Position the imported model
-```
+When reporting search results:
 
-### 5. Position (Manual)
-```python
-# Once imported, LLM can help position:
-move_entity(entity_ids=["entity_imported_001"], delta_x=1000, delta_y=0, delta_z=0)
-```
+- Use the canonical component name and ID from the returned result.
+- Mention key dimensions when placement depends on fit.
+- Mention clearance requirements when they affect usability.
+- Do not claim legal code compliance from component metadata.
 
-## Search Decision Tree
+When reporting placement:
 
-```
-User Request: "Add a [type] to [location]"
-    │
-    ├─► Check local library
-    │       └─► Found → place_component
-    │
-    ├─► Not found → Check Sketchfab
-    │       └─► Found → download → inform user to import
-    │
-    └─► Not found → Compose using geometry_composition
-            └─► Create from primitives
-```
+- Say whether SketchUp execution succeeded or failed.
+- If SketchUp is unavailable, keep the selected component and intended position
+  clear so the user can retry after starting the bridge.
+- Do not describe placeholder geometry as a final production model.
 
-## Example Workflows
+## External Sources
 
-### Adding a Known Furniture Piece
-```
-User: "Add a北欧风格餐桌 to the dining room"
+External search tools may exist for discovery:
 
-1. Search local library for "北欧风格餐桌" or "dining table"
-2. Found "dining_table_rect" → place_component
-3. Update design_model.json
-4. Confirm placement
-```
+- `search_sketchfab_models`
+- `get_sketchfab_model`
+- `download_sketchfab_model`
+- `search_and_download_sketchfab`
+- `search_warehouse`
 
-### Adding an Unknown Piece
-```
-User: "Add a vintage brass floor lamp next to the sofa"
-
-1. Search local library → Not found
-2. Search Sketchfab: search_sketchfab_models("vintage brass floor lamp")
-3. Found several options, download top result
-4. Inform user: "Please import the downloaded model into SketchUp"
-5. After import, help position with move_entity
-```
-
-### Creating Custom Piece
-```
-User: "Create an L-shaped sofa that's not in the library"
-
-1. Check library → Not found
-2. Check Sketchfab → May have L-shaped sofa
-   - If found → download and import
-   - If not found → use geometry_composition skill
-3. Compose L-shape from boxes and faces
-```
+Use them only when the packaged registry cannot satisfy the request. Current
+external downloads are discovery/import assistance, not a guaranteed automatic
+SketchUp placement path. If an external asset is needed, explain the import gap
+plainly and keep the design model source of truth separate from downloaded
+files.
 
 ## Component Metadata
 
-When adding new components to local library:
+When adding or reviewing registry entries, preserve these fields where possible:
 
 ```json
 {
-  "id": "dining_table_oak_1400x800",
-  "name": "Oak Dining Table 1400x800",
-  "name_en": "Oak Dining Table",
-  "category": "furniture",
-  "skp_path": "${SKETCHUP_ASSETS}/furniture/dining_table_oak.skp",
-  "default_dimensions": {
-    "width": 1400,
-    "depth": 800,
-    "height": 750
+  "id": "toilet_floor_mounted_basic",
+  "name": "Basic Floor-Mounted Toilet",
+  "category": "fixtures",
+  "subcategory": "toilet",
+  "dimensions": {
+    "width": 380,
+    "depth": 700,
+    "height": 760
   },
-  "insertion_point": {
-    "description": "Center of table",
-    "offset": [0, 0, 0],
-    "face_direction": "+y"
+  "anchors": {
+    "bottom": "floor",
+    "back": "wall"
   },
-  "bounds": {
-    "min": [0, 0, 0],
-    "max": [1400, 800, 750]
+  "clearance": {
+    "front": 600,
+    "left": 250,
+    "right": 250
   },
-  "style_tags": ["nordic", "oak", "dining"]
+  "assets": {
+    "skp_path": "${SKETCHUP_ASSETS}/fixtures/toilet_floor_mounted_basic.skp",
+    "procedural_fallback": "box_component"
+  },
+  "aliases": {
+    "en": ["toilet", "wc"],
+    "zh-CN": ["马桶", "坐便器"]
+  }
 }
 ```
 
-## Sketchfab Search Tips
+## Guardrails
 
-### Good Queries
-- `"modern grey sofa"` - Specific color + type
-- `"scandinavian dining chair"` - Style + item
-- `"floor lamp brass"` - Material + item
-- `"minimalist coffee table"` - Style + item
-
-### Poor Queries
-- `"stuff for living room"` - Too vague
-- `"nice"` - No useful criteria
-- `"3d model"` - No specific item
-
-### Filtering by Format
-```python
-# Only OBJ models (best for SketchUp)
-search_sketchfab_models(query="sofa", format="obj")
-```
-
-## Post-Import Checklist
-
-After user imports Sketchfab model:
-
-1. ✅ Verify entity created in SketchUp
-2. ✅ Get entity ID
-3. ✅ Position using semantic rules
-4. ✅ Apply appropriate material
-5. ✅ Add to design_model.json
-6. ✅ Set layer (Furniture, Lighting, etc)
+- Search the packaged registry before using external model sources.
+- Do not promise automatic import of arbitrary downloaded assets.
+- Do not add unlicensed third-party model files to the registry.
+- Do not ignore dimensions, anchors, or clearance metadata during placement.
+- Keep user-facing examples bilingual where useful, but keep implementation
+  instructions English-first.
