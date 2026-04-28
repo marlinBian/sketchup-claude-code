@@ -12,6 +12,11 @@ from mcp_server.bridge_install import (
     default_plugins_dir,
     installed_sketchup_plugin_dirs,
 )
+from mcp_server.resources.design_rules_schema import (
+    DESIGNER_PROFILE_ENV,
+    designer_profile_path_from_env,
+    load_designer_profile_rules,
+)
 from mcp_server.smoke import DEFAULT_BRIDGE_SOCKET, validate_project
 
 
@@ -113,6 +118,31 @@ def project_check(project_path: str | Path | None) -> dict[str, Any] | None:
     )
 
 
+def designer_profile_check() -> dict[str, Any]:
+    """Check configured reusable designer profile rules."""
+    path = designer_profile_path_from_env()
+    if path is None:
+        return check(
+            "designer_profile",
+            True,
+            {"env": DESIGNER_PROFILE_ENV, "configured": False},
+            severity="info",
+        )
+
+    profile, errors = load_designer_profile_rules(path)
+    return check(
+        "designer_profile",
+        profile is not None and not errors,
+        {
+            "env": DESIGNER_PROFILE_ENV,
+            "configured": True,
+            "path": str(path),
+        },
+        severity="error",
+        message="; ".join(errors) if errors else None,
+    )
+
+
 def run_doctor(
     project_path: str | Path | None = None,
     sketchup_version: str | None = None,
@@ -124,6 +154,7 @@ def run_doctor(
         console_script_check("sketchup-agent"),
         console_script_check("sketchup-agent-mcp"),
         bridge_source_check(),
+        designer_profile_check(),
         sketchup_install_check(sketchup_version=sketchup_version, plugins_dir=plugins_dir),
         bridge_socket_check(socket_path),
     ]

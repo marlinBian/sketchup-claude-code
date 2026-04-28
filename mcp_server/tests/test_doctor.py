@@ -5,6 +5,11 @@ import json
 from mcp_server.cli import main
 from mcp_server.doctor import run_doctor
 from mcp_server.project_init import init_project
+from mcp_server.resources.design_rules_schema import (
+    DESIGNER_PROFILE_ENV,
+    create_default_design_rules,
+    save_design_rules,
+)
 
 
 def test_doctor_reports_project_validation(tmp_path):
@@ -29,6 +34,38 @@ def test_doctor_reports_project_validation(tmp_path):
     assert bridge_install_check["severity"] == "warning"
     assert socket_check["ok"] is False
     assert socket_check["severity"] == "warning"
+
+
+def test_doctor_reports_configured_designer_profile(monkeypatch, tmp_path):
+    profile_path = tmp_path / "profile_rules.json"
+    save_design_rules(profile_path, create_default_design_rules())
+    monkeypatch.setenv(DESIGNER_PROFILE_ENV, str(profile_path))
+
+    result = run_doctor(
+        plugins_dir=tmp_path / "missing-plugins",
+        socket_path=str(tmp_path / "missing.sock"),
+    )
+    profile_check = next(check for check in result["checks"] if check["name"] == "designer_profile")
+
+    assert result["ok"] is True
+    assert profile_check["ok"] is True
+    assert profile_check["details"]["configured"] is True
+    assert profile_check["details"]["path"] == str(profile_path)
+
+
+def test_doctor_fails_on_missing_configured_designer_profile(monkeypatch, tmp_path):
+    monkeypatch.setenv(DESIGNER_PROFILE_ENV, str(tmp_path / "missing.json"))
+
+    result = run_doctor(
+        plugins_dir=tmp_path / "missing-plugins",
+        socket_path=str(tmp_path / "missing.sock"),
+    )
+    profile_check = next(check for check in result["checks"] if check["name"] == "designer_profile")
+
+    assert result["ok"] is False
+    assert profile_check["ok"] is False
+    assert profile_check["severity"] == "error"
+    assert "Designer profile not found" in profile_check["message"]
 
 
 def test_doctor_fails_on_invalid_project(tmp_path):
