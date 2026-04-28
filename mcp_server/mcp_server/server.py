@@ -56,6 +56,20 @@ def project_rules_or_default(project_path: str | None) -> dict[str, Any] | None:
     return rules
 
 
+def load_or_create_project_design_rules(
+    project_path: str,
+) -> tuple[Path, dict[str, Any], list[str]]:
+    """Load project design rules or create default rules in memory."""
+    path = design_rules_path(project_path)
+    if Path(path).exists():
+        rules, errors = load_design_rules(path)
+        if errors or rules is None:
+            return path, {}, errors
+        return path, rules, []
+
+    return path, create_default_design_rules(), []
+
+
 @mcp.tool()
 async def get_scene_info() -> TextContent:
     """Get current SketchUp scene information.
@@ -109,17 +123,12 @@ async def set_design_clearance(
 ) -> TextContent:
     """Set one project-local clearance value in millimeters."""
     try:
-        path = design_rules_path(project_path)
-        if Path(path).exists():
-            rules, errors = load_design_rules(path)
-            if errors:
-                return TextContent(
-                    type="text",
-                    text=f"Design rules failed: {'; '.join(errors)}",
-                )
-            assert rules is not None
-        else:
-            rules = create_default_design_rules()
+        path, rules, errors = load_or_create_project_design_rules(project_path)
+        if errors:
+            return TextContent(
+                type="text",
+                text=f"Design rules failed: {'; '.join(errors)}",
+            )
 
         rules["source"] = source
         rules.setdefault("rule_sets", {})
@@ -147,6 +156,111 @@ async def set_design_clearance(
             "clearance_name": clearance_name,
             "value": value,
             "units": "mm",
+            "source": source,
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(response, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Design rules failed: {str(e)}")
+
+
+@mcp.tool()
+async def set_fixture_dimension(
+    project_path: str,
+    rule_set: str,
+    fixture_name: str,
+    width: float,
+    depth: float,
+    height: float,
+    source: str = "project_user_override",
+) -> TextContent:
+    """Set one project-local fixture dimension in millimeters."""
+    try:
+        path, rules, errors = load_or_create_project_design_rules(project_path)
+        if errors:
+            return TextContent(
+                type="text",
+                text=f"Design rules failed: {'; '.join(errors)}",
+            )
+
+        rules["source"] = source
+        rules.setdefault("rule_sets", {})
+        rules["rule_sets"].setdefault(
+            rule_set,
+            {
+                "description": f"Project-local {rule_set} rules.",
+                "clearances": {},
+            },
+        )
+        rules["rule_sets"][rule_set].setdefault("fixture_dimensions", {})
+        rules["rule_sets"][rule_set]["fixture_dimensions"][fixture_name] = {
+            "width": width,
+            "depth": depth,
+            "height": height,
+        }
+
+        saved, save_errors = save_design_rules(path, rules)
+        if not saved:
+            return TextContent(
+                type="text",
+                text=f"Design rules failed: {'; '.join(save_errors)}",
+            )
+
+        response = {
+            "project_path": str(Path(project_path).expanduser().resolve()),
+            "design_rules_path": str(path),
+            "rule_set": rule_set,
+            "fixture_name": fixture_name,
+            "dimensions": {
+                "width": width,
+                "depth": depth,
+                "height": height,
+            },
+            "units": "mm",
+            "source": source,
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(response, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Design rules failed: {str(e)}")
+
+
+@mcp.tool()
+async def set_design_preference(
+    project_path: str,
+    preference_name: str,
+    value: str,
+    source: str = "project_user_override",
+) -> TextContent:
+    """Set one project-local free-form design preference."""
+    try:
+        path, rules, errors = load_or_create_project_design_rules(project_path)
+        if errors:
+            return TextContent(
+                type="text",
+                text=f"Design rules failed: {'; '.join(errors)}",
+            )
+
+        rules["source"] = source
+        rules.setdefault("preferences", {})
+        rules["preferences"][preference_name] = value
+
+        saved, save_errors = save_design_rules(path, rules)
+        if not saved:
+            return TextContent(
+                type="text",
+                text=f"Design rules failed: {'; '.join(save_errors)}",
+            )
+
+        response = {
+            "project_path": str(Path(project_path).expanduser().resolve()),
+            "design_rules_path": str(path),
+            "preference_name": preference_name,
+            "value": value,
             "source": source,
         }
         return TextContent(

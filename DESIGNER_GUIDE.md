@@ -47,8 +47,9 @@ Project-specific design rules should live in `design_rules.json`. These rules
 can capture preferred clearances, fixture sizes, material preferences, or local
 workflow conventions.
 
-Agents can read rules with `get_design_rules` and update clearance preferences
-with `set_design_clearance`.
+Agents can read rules with `get_design_rules` and update project preferences
+with `set_design_clearance`, `set_fixture_dimension`, and
+`set_design_preference`.
 
 Rule precedence is:
 
