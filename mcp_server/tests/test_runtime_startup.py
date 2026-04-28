@@ -69,6 +69,7 @@ runpy.run_module("mcp_server.server", run_name="__main__")
         "get_selection_info",
         "import_project_component_asset",
         "init_designer_profile",
+        "add_component_instance_semantic",
         "execute_project_model",
         "generate_project_report",
         "list_visual_feedback",

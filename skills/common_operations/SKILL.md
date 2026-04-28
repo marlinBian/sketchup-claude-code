@@ -50,6 +50,7 @@ Components and layout:
 - `register_project_component`
 - `register_selected_component`
 - `add_component_instance`
+- `add_component_instance_semantic`
 - `execute_component_instance`
 - `plan_project_execution`
 - `execute_project_model`
@@ -120,6 +121,23 @@ execute_component_instance(
     instance_id="sofa_001"
 )
 ```
+
+Project-backed semantic placement when a rectangular space already exists:
+
+```python
+add_component_instance_semantic(
+    project_path="<project-path>",
+    component_id="sofa_modern_2seat",
+    space_id="living_room_001",
+    relation="against_wall",
+    wall_side="north"
+)
+```
+
+Use this path for user wording such as "against the north wall", "center it in
+the room", "靠北墙", or "放在房间中间". It checks component bounds against the
+space bounds and records the semantic placement provenance in
+`design_model.json`. It does not prove full collision-free layout.
 
 Ad hoc live SketchUp placement without project truth:
 

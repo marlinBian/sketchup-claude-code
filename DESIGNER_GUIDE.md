@@ -102,6 +102,13 @@ Use `add_component_instance` when a selected component should become part of the
 project source of truth. It updates `design_model.json` and refreshes
 `assets.lock.json`.
 
+Use `add_component_instance_semantic` when the request is relative to a known
+rectangular space, such as placing a vanity against the north wall or centering
+a sofa in a room. It resolves the relationship to millimeter coordinates,
+updates `design_model.json`, and records the placement assumption. It checks the
+component's bounds against the space bounds, but it is not a complete collision
+or code-compliance solver.
+
 Use `execute_component_instance` when that project-backed instance should be
 sent to SketchUp and linked to the returned SketchUp entity ID.
 

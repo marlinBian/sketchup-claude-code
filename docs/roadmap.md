@@ -144,6 +144,8 @@ Goal: turn seed components into a maintainable semantic component system.
 - expose `get_component_manifest` for canonical component ID lookup
 - expose `register_project_component` for project-local semantic components
 - expose `add_component_instance` for source-of-truth component insertion
+- expose `add_component_instance_semantic` for project-backed rectangular-space
+  relations such as centering in a space or placing against a wall
 - expose `execute_component_instance` for project-backed SketchUp execution
 - validate component manifests and project asset locks
 - add project-local cache shape at `assets/components/`

@@ -35,6 +35,11 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
   `execute_project_model` if the designer wants SketchUp updated. Use
   `place_component` only for ad hoc live SketchUp placement without a
   project-backed instance.
+- Place component by relationship: "put the vanity against the north wall",
+  "把洗手台靠北墙放", "center the sofa in the room", "把沙发放在房间中间".
+  When a project path and rectangular space exist, use
+  `add_component_instance_semantic` with `relation="against_wall"` or
+  `relation="centered_in_space"`. Use `wall_side` only for `against_wall`.
 - Create primitive: "make a box", "建一个柜体占位".
   Use `create_box`.
 - Change material: "make it white", "改成白色".

@@ -215,6 +215,301 @@ def component_instance_anchors(
     }
 
 
+def add_component_instance_to_project(
+    *,
+    project_path: str,
+    component_id: str,
+    position: list[float],
+    instance_id: str | None = None,
+    rotation: float = 0,
+    layer: str | None = None,
+    name: str | None = None,
+    source_kind: str = "component_registry",
+    source_details: dict[str, Any] | None = None,
+    semantic_anchor: str | None = None,
+    relative_to: str | None = None,
+    sync_source: str = "add_component_instance",
+) -> dict[str, Any]:
+    """Write a semantic component instance into project truth."""
+    design_model_path = find_design_model_path(project_path)
+    design_model, model_errors = load_design_model(str(design_model_path))
+    if model_errors or design_model is None:
+        raise ValueError("; ".join(model_errors))
+
+    component = get_component_by_id(component_id, project_path=project_path)
+    if component is None:
+        raise ValueError(f"component not found: {component_id}")
+
+    rules = project_rules_or_default(project_path)
+    dimensions = (
+        component_dimensions_for_rules(component, rules)
+        if rules
+        else component_dimensions(component)
+    )
+    normalized_position = [
+        float(position[0]),
+        float(position[1]),
+        float(position[2]),
+    ]
+    insertion_offset = component_manifest_insertion_offset(component, dimensions)
+    bounds = component_instance_bounds(
+        normalized_position,
+        dimensions,
+        insertion_offset,
+    )
+    chosen_id = instance_id or next_component_instance_id(design_model, component)
+    if chosen_id in design_model.get("components", {}):
+        raise ValueError(f"instance already exists: {chosen_id}")
+
+    source = {
+        "kind": source_kind,
+        "component_id": component["id"],
+        "bounds": "axis_aligned_from_insertion_offset",
+    }
+    if source_details:
+        source.update(source_details)
+
+    instance = {
+        "type": str(component.get("subcategory") or component.get("category")),
+        "name": name or str(component["name"]),
+        "component_ref": component["id"],
+        "position": normalized_position,
+        "dimensions": dimensions,
+        "bounds": bounds,
+        "anchors": component_instance_anchors(
+            normalized_position,
+            bounds,
+            dimensions,
+        ),
+        "clearance": component.get("clearance", {}),
+        "rotation": float(rotation),
+        "layer": layer or default_layer_for_component(component),
+        "skp_path": placement_tools.resolve_skp_path(
+            placement_tools.component_skp_path(component)
+        ),
+        "source": source,
+    }
+    if semantic_anchor:
+        instance["semantic_anchor"] = semantic_anchor
+    if relative_to is not None:
+        instance["relative_to"] = relative_to
+
+    design_model.setdefault("components", {})
+    design_model["components"][chosen_id] = instance
+    design_model["updated_at"] = utc_now()
+    mark_execution_sync_dirty(
+        design_model,
+        reason="component_instance_added",
+        source=sync_source,
+        details={
+            "instance_id": chosen_id,
+            "component_id": component["id"],
+        },
+    )
+    saved, save_errors = save_design_model(str(design_model_path), design_model)
+    if not saved:
+        raise ValueError("; ".join(save_errors))
+
+    lock_path = refresh_project_assets_lock(project_path, design_model)
+    return {
+        "project_path": str(Path(project_path).expanduser().resolve()),
+        "design_model_path": str(design_model_path),
+        "assets_lock_path": str(lock_path),
+        "instance_id": chosen_id,
+        "component_id": component["id"],
+        "instance": instance,
+    }
+
+
+def normalize_semantic_relation(relation: str) -> str:
+    """Normalize designer-facing placement relation aliases."""
+    value = relation.strip().lower().replace("-", "_").replace(" ", "_")
+    if value in {"center", "centered", "centered_in_room", "centered_in_space"}:
+        return "centered_in_space"
+    if value in {"wall", "against_wall", "against_a_wall", "against_the_wall"}:
+        return "against_wall"
+    raise ValueError(
+        "relation must be one of: centered_in_space, against_wall"
+    )
+
+
+def normalize_wall_side(wall_side: str | None) -> str:
+    """Normalize wall side aliases for rectangular project spaces."""
+    if wall_side is None:
+        raise ValueError("wall_side is required when relation is against_wall")
+    value = wall_side.strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "n": "north",
+        "north_wall": "north",
+        "s": "south",
+        "south_wall": "south",
+        "e": "east",
+        "east_wall": "east",
+        "w": "west",
+        "west_wall": "west",
+    }
+    value = aliases.get(value, value)
+    if value not in {"north", "south", "east", "west"}:
+        raise ValueError("wall_side must be one of: north, south, east, west")
+    return value
+
+
+def rectangular_space_bounds(
+    design_model: dict[str, Any],
+    space_id: str,
+) -> dict[str, list[float]]:
+    """Return normalized rectangular bounds for a project space."""
+    spaces = design_model.get("spaces", {})
+    if space_id not in spaces:
+        raise ValueError(f"space not found: {space_id}")
+    space = spaces[space_id]
+    if not isinstance(space, dict):
+        raise ValueError(f"space must be an object: {space_id}")
+    bounds = space.get("bounds")
+    if not isinstance(bounds, dict):
+        raise ValueError(f"space bounds missing: {space_id}")
+    minimum = bounds.get("min")
+    maximum = bounds.get("max")
+    if not isinstance(minimum, list) or not isinstance(maximum, list):
+        raise ValueError(f"space bounds must include min and max lists: {space_id}")
+    if len(minimum) != 3 or len(maximum) != 3:
+        raise ValueError(f"space bounds min and max must be 3D points: {space_id}")
+
+    normalized = {
+        "min": [float(minimum[0]), float(minimum[1]), float(minimum[2])],
+        "max": [float(maximum[0]), float(maximum[1]), float(maximum[2])],
+    }
+    if any(normalized["max"][idx] <= normalized["min"][idx] for idx in range(3)):
+        raise ValueError(f"space bounds must have positive extents: {space_id}")
+    return normalized
+
+
+def component_fit_errors(
+    bounds: dict[str, list[float]],
+    space_bounds: dict[str, list[float]],
+    *,
+    tolerance: float = 0.001,
+) -> list[str]:
+    """Return readable errors when component bounds exceed a project space."""
+    errors: list[str] = []
+    axes = ("x", "y", "z")
+    for idx, axis in enumerate(axes):
+        if bounds["min"][idx] < space_bounds["min"][idx] - tolerance:
+            errors.append(
+                f"min_{axis} {bounds['min'][idx]} is outside space minimum "
+                f"{space_bounds['min'][idx]}"
+            )
+        if bounds["max"][idx] > space_bounds["max"][idx] + tolerance:
+            errors.append(
+                f"max_{axis} {bounds['max'][idx]} is outside space maximum "
+                f"{space_bounds['max'][idx]}"
+            )
+    return errors
+
+
+def semantic_component_placement(
+    *,
+    design_model: dict[str, Any],
+    component: dict[str, Any],
+    dimensions: dict[str, float],
+    space_id: str,
+    relation: str,
+    wall_side: str | None,
+    offset_along_wall: float | None,
+    offset_x: float,
+    offset_y: float,
+    offset_z: float,
+    requested_rotation: float | None,
+) -> dict[str, Any]:
+    """Resolve a semantic component placement to millimeter coordinates."""
+    canonical_relation = normalize_semantic_relation(relation)
+    space_bounds = rectangular_space_bounds(design_model, space_id)
+    min_x, min_y, min_z = space_bounds["min"]
+    max_x, max_y, _max_z = space_bounds["max"]
+    space_width = max_x - min_x
+    space_depth = max_y - min_y
+    insertion_offset = component_manifest_insertion_offset(component, dimensions)
+
+    target_min_x = min_x + (space_width - dimensions["width"]) / 2
+    target_min_y = min_y + (space_depth - dimensions["depth"]) / 2
+    target_min_z = min_z
+    semantic_anchor = "center"
+    normalized_wall_side = None
+    default_rotation = 0.0
+
+    if canonical_relation == "against_wall":
+        normalized_wall_side = normalize_wall_side(wall_side)
+        semantic_anchor = "back"
+        default_rotation = {
+            "north": 180.0,
+            "south": 0.0,
+            "east": 90.0,
+            "west": 270.0,
+        }[normalized_wall_side]
+        if normalized_wall_side in {"north", "south"}:
+            target_min_x = (
+                min_x + float(offset_along_wall)
+                if offset_along_wall is not None
+                else min_x + (space_width - dimensions["width"]) / 2
+            )
+            target_min_y = (
+                max_y - dimensions["depth"]
+                if normalized_wall_side == "north"
+                else min_y
+            )
+        else:
+            target_min_x = (
+                max_x - dimensions["width"]
+                if normalized_wall_side == "east"
+                else min_x
+            )
+            target_min_y = (
+                min_y + float(offset_along_wall)
+                if offset_along_wall is not None
+                else min_y + (space_depth - dimensions["depth"]) / 2
+            )
+
+    position = [
+        target_min_x + insertion_offset[0] + float(offset_x),
+        target_min_y + insertion_offset[1] + float(offset_y),
+        target_min_z + insertion_offset[2] + float(offset_z),
+    ]
+    bounds = component_instance_bounds(position, dimensions, insertion_offset)
+    fit_errors = component_fit_errors(bounds, space_bounds)
+    if fit_errors:
+        raise ValueError(
+            "component bounds exceed space bounds: " + "; ".join(fit_errors)
+        )
+
+    rotation = (
+        float(requested_rotation)
+        if requested_rotation is not None
+        else default_rotation
+    )
+    semantic = {
+        "relation": canonical_relation,
+        "space_id": space_id,
+        "wall_side": normalized_wall_side,
+        "semantic_anchor": semantic_anchor,
+        "offset_along_wall": (
+            float(offset_along_wall) if offset_along_wall is not None else None
+        ),
+        "offset": [float(offset_x), float(offset_y), float(offset_z)],
+        "assumptions": [
+            "axis_aligned_bounds_do_not_rotate_with_component",
+            "collision_free_layout_not_verified",
+        ],
+    }
+    return {
+        "position": position,
+        "rotation": rotation,
+        "bounds": bounds,
+        "space_bounds": space_bounds,
+        "semantic_anchor": semantic_anchor,
+        "semantic_placement": semantic,
+    }
+
+
 def refresh_project_assets_lock(
     project_path: str,
     design_model: dict[str, Any],
@@ -2955,19 +3250,57 @@ async def add_component_instance(
 ) -> TextContent:
     """Add a semantic component instance to design_model.json and assets.lock.json."""
     try:
+        response = add_component_instance_to_project(
+            project_path=project_path,
+            component_id=component_id,
+            position=[position_x, position_y, position_z],
+            instance_id=instance_id,
+            rotation=rotation,
+            layer=layer,
+            name=name,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(response, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Component instance failed: {str(e)}")
+
+
+@mcp.tool()
+async def add_component_instance_semantic(
+    project_path: str,
+    component_id: str,
+    space_id: str,
+    relation: str = "centered_in_space",
+    wall_side: str | None = None,
+    offset_along_wall: float | None = None,
+    offset_x: float = 0,
+    offset_y: float = 0,
+    offset_z: float = 0,
+    instance_id: str | None = None,
+    rotation: float | None = None,
+    layer: str | None = None,
+    name: str | None = None,
+) -> TextContent:
+    """Add a registry component by resolving a semantic placement relation."""
+    try:
         design_model_path = find_design_model_path(project_path)
         design_model, model_errors = load_design_model(str(design_model_path))
         if model_errors or design_model is None:
             return TextContent(
                 type="text",
-                text=f"Component instance failed: {'; '.join(model_errors)}",
+                text=f"Semantic component placement failed: {'; '.join(model_errors)}",
             )
 
         component = get_component_by_id(component_id, project_path=project_path)
         if component is None:
             return TextContent(
                 type="text",
-                text=f"Component instance failed: component not found: {component_id}",
+                text=(
+                    "Semantic component placement failed: "
+                    f"component not found: {component_id}"
+                ),
             )
 
         rules = project_rules_or_default(project_path)
@@ -2976,87 +3309,46 @@ async def add_component_instance(
             if rules
             else component_dimensions(component)
         )
-        position = [position_x, position_y, position_z]
-        insertion_offset = component["insertion_point"]["offset"]
-        bounds = component_instance_bounds(position, dimensions, insertion_offset)
-        chosen_id = instance_id or next_component_instance_id(design_model, component)
-        if chosen_id in design_model.get("components", {}):
-            return TextContent(
-                type="text",
-                text=f"Component instance failed: instance already exists: {chosen_id}",
-            )
-
-        instance = {
-            "type": str(component.get("subcategory") or component.get("category")),
-            "name": name or str(component["name"]),
-            "component_ref": component["id"],
-            "position": position,
-            "dimensions": dimensions,
-            "bounds": bounds,
-            "anchors": component_instance_anchors(position, bounds, dimensions),
-            "clearance": component.get("clearance", {}),
-            "rotation": rotation,
-            "layer": layer or default_layer_for_component(component),
-            "skp_path": placement_tools.resolve_skp_path(
-                placement_tools.component_skp_path(component)
-            ),
-            "source": {
-                "kind": "component_registry",
-                "component_id": component["id"],
-                "bounds": "axis_aligned_from_insertion_offset",
-            },
-        }
-
-        design_model.setdefault("components", {})
-        design_model["components"][chosen_id] = instance
-        design_model["updated_at"] = utc_now()
-        mark_execution_sync_dirty(
-            design_model,
-            reason="component_instance_added",
-            source="add_component_instance",
-            details={
-                "instance_id": chosen_id,
-                "component_id": component["id"],
-            },
+        placement = semantic_component_placement(
+            design_model=design_model,
+            component=component,
+            dimensions=dimensions,
+            space_id=space_id,
+            relation=relation,
+            wall_side=wall_side,
+            offset_along_wall=offset_along_wall,
+            offset_x=offset_x,
+            offset_y=offset_y,
+            offset_z=offset_z,
+            requested_rotation=rotation,
         )
-        saved, save_errors = save_design_model(str(design_model_path), design_model)
-        if not saved:
-            return TextContent(
-                type="text",
-                text=f"Component instance failed: {'; '.join(save_errors)}",
-            )
-
-        library, library_errors = load_effective_library(project_path)
-        if library_errors:
-            return TextContent(
-                type="text",
-                text=f"Component instance failed: {'; '.join(library_errors)}",
-            )
-        lock_path = assets_lock_path(project_path)
-        lock_path.write_text(
-            json.dumps(
-                build_assets_lock(design_model, library, project_path=project_path),
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
+        response = add_component_instance_to_project(
+            project_path=project_path,
+            component_id=component_id,
+            position=placement["position"],
+            instance_id=instance_id,
+            rotation=placement["rotation"],
+            layer=layer,
+            name=name,
+            source_kind="semantic_component_registry",
+            source_details={
+                "semantic_placement": placement["semantic_placement"],
+            },
+            semantic_anchor=placement["semantic_anchor"],
+            relative_to=space_id,
+            sync_source="add_component_instance_semantic",
         )
-
-        response = {
-            "project_path": str(Path(project_path).expanduser().resolve()),
-            "design_model_path": str(design_model_path),
-            "assets_lock_path": str(lock_path),
-            "instance_id": chosen_id,
-            "component_id": component["id"],
-            "instance": instance,
-        }
+        response["semantic_placement"] = placement["semantic_placement"]
+        response["space_bounds"] = placement["space_bounds"]
         return TextContent(
             type="text",
             text=json.dumps(response, ensure_ascii=False, indent=2),
         )
     except Exception as e:
-        return TextContent(type="text", text=f"Component instance failed: {str(e)}")
+        return TextContent(
+            type="text",
+            text=f"Semantic component placement failed: {str(e)}",
+        )
 
 
 @mcp.tool()

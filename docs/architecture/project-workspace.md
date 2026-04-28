@@ -63,6 +63,10 @@ Agents can inspect project state through MCP tools:
   the project is executed again
 - `add_component_instance` records a selected registry component in
   `design_model.json` and refreshes `assets.lock.json`
+- `add_component_instance_semantic` resolves supported placement relationships
+  such as `centered_in_space` or `against_wall` against rectangular space
+  bounds, then records the component instance and semantic provenance in
+  `design_model.json`
 - `execute_component_instance` executes a project-backed component instance in
   SketchUp and records the returned entity ID when available
 - `plan_project_execution` derives a deterministic bridge trace from the whole

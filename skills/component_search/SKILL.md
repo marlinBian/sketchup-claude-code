@@ -102,8 +102,9 @@ assumptions, and license/provenance details before the component is used for
 placement.
 
 After registration, pass `project_path` to `search_components`,
-`get_component_manifest`, `add_component_instance`, and
-`execute_component_instance` so project-local metadata is included.
+`get_component_manifest`, `add_component_instance`,
+`add_component_instance_semantic`, and `execute_component_instance` so
+project-local metadata is included.
 
 `search_local_library` remains available only for simple human-readable result
 summaries:
@@ -137,6 +138,24 @@ add_component_instance(
 ```
 
 This updates `design_model.json` and `assets.lock.json`.
+
+When the user gives a relationship to an existing rectangular space, use the
+semantic project-backed path instead of guessing absolute coordinates:
+
+```python
+add_component_instance_semantic(
+    project_path="<project-path>",
+    component_id="vanity_wall_600",
+    space_id="bathroom_001",
+    relation="against_wall",
+    wall_side="north"
+)
+```
+
+Supported relations are currently `centered_in_space` and `against_wall`.
+Supported wall sides are `north`, `south`, `east`, and `west`. The tool checks
+component bounds against the target space bounds, writes semantic provenance,
+and still leaves full collision or clearance review to validation tools.
 
 If a project-local `.skp` asset is added, exported, or removed after placement,
 use `refresh_project_asset_lock` to regenerate `assets.lock.json` before

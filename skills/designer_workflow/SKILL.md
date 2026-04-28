@@ -72,7 +72,23 @@ Use `get_design_rules`, `set_design_clearance`, `set_fixture_dimension`, or
 `set_design_preference` when the designer changes a project preference before
 planning.
 
-### 3. Execute Only When the User Wants SketchUp Updated
+### 3. Place Components Into Project Truth
+
+Use `search_components` or `get_component_manifest` before placing reusable
+objects. If the designer gives exact coordinates, call `add_component_instance`.
+If the designer gives a supported relationship to a rectangular space, call
+`add_component_instance_semantic`.
+
+Supported semantic placement relations are:
+
+- `centered_in_space`
+- `against_wall` with `wall_side` as `north`, `south`, `east`, or `west`
+
+After component placement, use `plan_project_execution` to confirm the updated
+`design_model.json` can be converted into a bridge trace. Use
+`execute_project_model` only when the designer wants SketchUp updated.
+
+### 4. Execute Only When the User Wants SketchUp Updated
 
 Use `execute_bathroom_plan` when the user wants the model updated in SketchUp and
 the Ruby bridge is running.
@@ -98,7 +114,7 @@ If execution fails because SketchUp is not running, retry the startup path once
 with `launch_sketchup_bridge`; then report any environment blockers and keep the
 structured plan available.
 
-### 4. Report Structured Results
+### 5. Report Structured Results
 
 After planning or execution, summarize:
 
@@ -113,7 +129,7 @@ After planning or execution, summarize:
 Do not replace structured output with only prose. The design model remains the
 canonical state.
 
-### 5. Save Reviewable Versions
+### 6. Save Reviewable Versions
 
 Use `save_project_version` when the designer asks to save a milestone, compare
 alternatives later, or preserve a rollback point. Use `list_project_versions`
@@ -123,7 +139,7 @@ from a saved milestone. Use `restore_project_version` only after the designer
 explicitly asks to restore a version, because it overwrites current project
 truth files.
 
-### 6. Capture Visual Review Artifacts
+### 7. Capture Visual Review Artifacts
 
 Use `capture_project_snapshot` when the user asks for a screenshot or visual
 review and a project path is available. Snapshot provenance is recorded in
@@ -171,6 +187,10 @@ Execute the bathroom plan in SketchUp.
 Sync the current design_model.json to SketchUp.
 ```
 
+```text
+Put the vanity against the north wall of bathroom_001.
+```
+
 Chinese examples:
 
 ```text
@@ -183,6 +203,10 @@ Chinese examples:
 
 ```text
 把当前 design_model.json 同步到 SketchUp。
+```
+
+```text
+把洗手台靠 bathroom_001 的北墙放。
 ```
 
 ## Guardrails
