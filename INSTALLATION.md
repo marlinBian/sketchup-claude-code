@@ -15,6 +15,35 @@ The target setup has three parts:
 2. MCP server: runs the Python tool layer.
 3. SketchUp Ruby bridge: runs inside SketchUp and listens on a local socket.
 
+## Project Initialization
+
+After the MCP package is installed in the active Python environment, create a
+designer project directory with:
+
+```bash
+sketchup-agent init ~/Design/my-bathroom --template bathroom
+```
+
+For a blank project:
+
+```bash
+sketchup-agent init ~/Design/my-room --template empty
+```
+
+This creates:
+
+- `design_model.json`
+- `design_rules.json`
+- `assets.lock.json`
+- `.mcp.json`
+- `snapshots/`
+
+The generated `.mcp.json` starts the MCP server with:
+
+```bash
+python3 -m mcp_server.server
+```
+
 ## Claude CLI
 
 Target plugin flow:
@@ -67,6 +96,13 @@ Maintainers working from the source repository can install local dependencies:
 
 ```bash
 ./setup.sh
+```
+
+Run the initializer from the source checkout:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent init /tmp/sah-bathroom --template bathroom --force
 ```
 
 Python tests:

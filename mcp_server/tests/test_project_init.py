@@ -1,0 +1,66 @@
+"""Tests for designer project initialization."""
+
+import json
+
+from mcp_server.cli import main
+from mcp_server.project_init import init_project
+
+
+def test_init_project_empty_template_creates_workspace_files(tmp_path):
+    result = init_project(tmp_path / "my-design", project_name="My Design")
+    project_path = tmp_path / "my-design"
+
+    assert result["template"] == "empty"
+    assert (project_path / "design_model.json").exists()
+    assert (project_path / "design_rules.json").exists()
+    assert (project_path / "assets.lock.json").exists()
+    assert (project_path / ".mcp.json").exists()
+    assert (project_path / "snapshots").is_dir()
+
+    design_model = json.loads((project_path / "design_model.json").read_text())
+    assert design_model["project_name"] == "My Design"
+
+
+def test_init_project_bathroom_template_creates_seed_bathroom(tmp_path):
+    result = init_project(tmp_path / "bathroom", template="bathroom")
+    project_path = tmp_path / "bathroom"
+
+    design_model = json.loads((project_path / "design_model.json").read_text())
+
+    assert result["template"] == "bathroom"
+    assert design_model["spaces"]["bathroom_001"]["type"] == "bathroom"
+    assert "toilet_001" in design_model["components"]
+
+
+def test_init_project_refuses_to_overwrite_existing_files(tmp_path):
+    project_path = tmp_path / "existing"
+    init_project(project_path)
+
+    try:
+        init_project(project_path)
+    except FileExistsError as error:
+        assert "design_model.json" in str(error)
+    else:
+        raise AssertionError("Expected FileExistsError")
+
+
+def test_init_project_force_overwrites_existing_files(tmp_path):
+    project_path = tmp_path / "existing"
+    init_project(project_path, project_name="Original")
+
+    result = init_project(project_path, project_name="Updated", overwrite=True)
+    design_model = json.loads((project_path / "design_model.json").read_text())
+
+    assert result["project_name"] == "Updated"
+    assert design_model["project_name"] == "Updated"
+
+
+def test_cli_init_outputs_json(tmp_path, capsys):
+    exit_code = main(["init", str(tmp_path / "cli-project"), "--template", "bathroom"])
+
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert data["template"] == "bathroom"
+    assert (tmp_path / "cli-project" / "design_model.json").exists()

@@ -16,6 +16,9 @@ dev = [
     "pytest-asyncio>=0.23.0",
 ]
 
+[project.scripts]
+sketchup-agent = "mcp_server.cli:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

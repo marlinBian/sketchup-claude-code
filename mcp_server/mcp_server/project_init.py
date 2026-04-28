@@ -1,0 +1,95 @@
+"""Designer project initialization helpers."""
+
+import json
+from pathlib import Path
+from typing import Any
+
+from mcp_server.resources.design_model_schema import create_empty_template
+from mcp_server.resources.design_rules_schema import create_default_design_rules
+from mcp_server.resources.project_files import (
+    ASSETS_LOCK_FILENAME,
+    DESIGN_MODEL_FILENAME,
+    DESIGN_RULES_FILENAME,
+)
+from mcp_server.tools.bathroom_planner import plan_bathroom_project, save_bathroom_plan
+
+PROJECT_MCP_FILENAME = ".mcp.json"
+
+
+def write_json(path: Path, data: dict[str, Any], overwrite: bool) -> None:
+    """Write a JSON file unless it exists and overwrite is disabled."""
+    if path.exists() and not overwrite:
+        raise FileExistsError(f"Refusing to overwrite existing file: {path}")
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def default_assets_lock() -> dict[str, Any]:
+    """Return an empty assets lock file."""
+    return {
+        "version": "1.0",
+        "assets": [],
+    }
+
+
+def default_project_mcp_config() -> dict[str, Any]:
+    """Return a project-local MCP config for installed package usage."""
+    return {
+        "mcpServers": {
+            "sketchup-mcp": {
+                "command": "python3",
+                "args": ["-m", "mcp_server.server"],
+            }
+        }
+    }
+
+
+def init_project(
+    project_path: str | Path,
+    project_name: str | None = None,
+    template: str = "empty",
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    """Initialize a designer project directory."""
+    root = Path(project_path).expanduser().resolve()
+    root.mkdir(parents=True, exist_ok=True)
+
+    name = project_name or root.name
+    if template not in {"empty", "bathroom"}:
+        raise ValueError("template must be 'empty' or 'bathroom'")
+
+    if template == "bathroom":
+        if not overwrite:
+            for filename in (DESIGN_MODEL_FILENAME, DESIGN_RULES_FILENAME):
+                path = root / filename
+                if path.exists():
+                    raise FileExistsError(f"Refusing to overwrite existing file: {path}")
+        plan = plan_bathroom_project(project_name=name)
+        written = save_bathroom_plan(root, plan)
+        design_model_path = Path(written["design_model_path"])
+        design_rules_path = Path(written["design_rules_path"])
+    else:
+        design_model_path = root / DESIGN_MODEL_FILENAME
+        design_rules_path = root / DESIGN_RULES_FILENAME
+        write_json(design_model_path, create_empty_template(name), overwrite)
+        write_json(design_rules_path, create_default_design_rules(), overwrite)
+
+    assets_lock_path = root / ASSETS_LOCK_FILENAME
+    mcp_config_path = root / PROJECT_MCP_FILENAME
+    snapshots_path = root / "snapshots"
+    snapshots_path.mkdir(exist_ok=True)
+
+    write_json(assets_lock_path, default_assets_lock(), overwrite)
+    write_json(mcp_config_path, default_project_mcp_config(), overwrite)
+
+    return {
+        "project_path": str(root),
+        "project_name": name,
+        "template": template,
+        "files": {
+            "design_model": str(design_model_path),
+            "design_rules": str(design_rules_path),
+            "assets_lock": str(assets_lock_path),
+            "mcp_config": str(mcp_config_path),
+            "snapshots": str(snapshots_path),
+        },
+    }

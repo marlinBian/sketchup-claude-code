@@ -56,6 +56,13 @@ Ruby syntax fallback:
 find su_bridge/lib su_bridge/spec -name '*.rb' -print0 | xargs -0 -n1 ruby -c
 ```
 
+Project initialization smoke:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent init /tmp/sah-bathroom --template bathroom --force
+```
+
 ## Integration Tests
 
 Live integration tests require SketchUp with `SuBridge.start` running and

@@ -104,6 +104,14 @@ Goal: make normal designer use independent of the source checkout.
 - install or update the SketchUp Ruby bridge
 - document cleanup and rollback
 
+Acceptance:
+
+```bash
+cd mcp_server && uv run --extra dev pytest tests/test_project_init.py -q
+cd mcp_server && uv run --extra dev sketchup-agent init /tmp/sah-bathroom \
+  --template bathroom --force
+```
+
 ## P5: Runtime Skill UX
 
 Goal: make designer-facing natural-language workflows match implemented
