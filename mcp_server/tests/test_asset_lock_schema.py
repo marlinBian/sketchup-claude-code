@@ -67,6 +67,24 @@ def test_build_assets_lock_from_bathroom_design_model():
     assert toilet["procedural_fallback"] == "box_fixture"
 
 
+def test_build_assets_lock_marks_project_cache_hit(tmp_path):
+    design_model = load_fixture("design_model.json")
+    library = load_fixture("component_library.json")
+    cached_asset = tmp_path / "assets" / "components" / "toilet_floor_mounted_basic.skp"
+    cached_asset.parent.mkdir(parents=True)
+    cached_asset.write_text("skp placeholder", encoding="utf-8")
+
+    lock = build_assets_lock(design_model, library, project_path=tmp_path)
+
+    toilet = next(
+        asset
+        for asset in lock["assets"]
+        if asset["component_id"] == "toilet_floor_mounted_basic"
+    )
+    assert toilet["cache"]["status"] == "cached"
+    assert toilet["cache"]["path"] == "assets/components/toilet_floor_mounted_basic.skp"
+
+
 def test_missing_component_ref_is_recorded_as_missing():
     design_model = copy.deepcopy(load_fixture("design_model.json"))
     library = load_fixture("component_library.json")

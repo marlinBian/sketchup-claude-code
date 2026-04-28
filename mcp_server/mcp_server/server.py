@@ -170,7 +170,7 @@ def refresh_project_assets_lock(
     lock_path = assets_lock_path(project_path)
     lock_path.write_text(
         json.dumps(
-            build_assets_lock(design_model, library),
+            build_assets_lock(design_model, library, project_path=project_path),
             ensure_ascii=False,
             indent=2,
         )
@@ -2279,7 +2279,7 @@ async def add_component_instance(
         lock_path = assets_lock_path(project_path)
         lock_path.write_text(
             json.dumps(
-                build_assets_lock(design_model, library),
+                build_assets_lock(design_model, library, project_path=project_path),
                 ensure_ascii=False,
                 indent=2,
             )

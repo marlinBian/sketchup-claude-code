@@ -120,7 +120,9 @@ The lock shape is:
 
 `assets/components/` is the project-local cache root. The current implementation
 defines the cache contract and writes the directory during project
-initialization; it does not yet download external assets automatically.
+initialization; it does not yet download external assets automatically. When a
+referenced `.skp` already exists in the project cache, regenerated asset locks
+mark that component as `cached`.
 
 ## Project-Local Components
 

@@ -153,10 +153,15 @@ def asset_lock_entry(
     component: dict[str, Any],
     used_by: list[str],
     cache_root: str = "assets/components",
+    project_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Create one asset lock entry from component manifest metadata."""
     license_info = component.get("license", {})
     assets = component.get("assets", {})
+    cache_path = f"{cache_root}/{component['id']}.skp"
+    cache_status = "referenced"
+    if project_path is not None and (Path(project_path) / cache_path).exists():
+        cache_status = "cached"
 
     paths: dict[str, str] = {}
     if assets.get("skp_path"):
@@ -175,8 +180,8 @@ def asset_lock_entry(
         },
         "paths": paths,
         "cache": {
-            "status": "referenced",
-            "path": f"{cache_root}/{component['id']}.skp",
+            "status": cache_status,
+            "path": cache_path,
         },
     }
 
@@ -198,6 +203,7 @@ def build_assets_lock(
     design_model: dict[str, Any],
     component_library: dict[str, Any],
     cache_root: str = "assets/components",
+    project_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Build a project lock from design model component references."""
     lock = create_empty_assets_lock(cache_root=cache_root)
@@ -209,7 +215,12 @@ def build_assets_lock(
         if component is None:
             entry = _entry_for_missing_component(component_id, used_by, cache_root)
         else:
-            entry = asset_lock_entry(component, used_by, cache_root=cache_root)
+            entry = asset_lock_entry(
+                component,
+                used_by,
+                cache_root=cache_root,
+                project_path=project_path,
+            )
         lock["assets"].append(entry)
 
     return lock

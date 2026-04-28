@@ -123,6 +123,9 @@ async def test_add_component_instance_uses_project_component_library(tmp_path):
         height=750,
         procedural_fallback="box_component",
     )
+    asset_file = tmp_path / "assets" / "components" / "project_display_plinth.skp"
+    asset_file.parent.mkdir(parents=True, exist_ok=True)
+    asset_file.write_text("skp placeholder", encoding="utf-8")
 
     response = await add_component_instance(
         project_path=str(tmp_path),
@@ -140,6 +143,7 @@ async def test_add_component_instance_uses_project_component_library(tmp_path):
         "project_display_plinth"
     )
     assert asset_lock["assets"][0]["component_id"] == "project_display_plinth"
+    assert asset_lock["assets"][0]["cache"]["status"] == "cached"
 
 
 @pytest.mark.asyncio

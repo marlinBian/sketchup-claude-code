@@ -537,7 +537,11 @@ def save_bathroom_plan(project_path: str | Path, plan: dict[str, Any]) -> dict[s
     )
     lock_path.write_text(
         json.dumps(
-            build_assets_lock(plan["design_model"], load_library()),
+            build_assets_lock(
+                plan["design_model"],
+                load_library(),
+                project_path=root,
+            ),
             ensure_ascii=False,
             indent=2,
         )
