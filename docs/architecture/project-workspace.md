@@ -15,6 +15,10 @@ my-design-project/
   model.skp
   snapshots/
     manifest.json
+  versions/
+    draft_1/
+      metadata.json
+      design_model.json
 ```
 
 ## Files
@@ -60,6 +64,10 @@ Agents can inspect project state through MCP tools:
 `snapshots/` stores captures used for review, regression checks, and visual
 handoff. `snapshots/manifest.json` records provenance for each artifact and
 marks visual outputs and visual feedback action plans as advisory.
+
+`versions/` stores structured project truth snapshots. Version snapshots copy
+the core project files for review and rollback planning; they do not replace Git
+or make SketchUp pixels the source of truth.
 
 ## Rule Precedence
 

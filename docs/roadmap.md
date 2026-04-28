@@ -212,3 +212,4 @@ Goal: make CLI agents inspect project truth without parsing files manually.
 - use inspection tools in runtime skills before planning, placement, or visual
   review
 - generate English-first project reports from the same project-state reader
+- save and list project-local structured truth versions under `versions/`

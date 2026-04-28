@@ -40,6 +40,10 @@ from mcp_server.project_assets import (
     refresh_project_asset_lock as refresh_project_asset_lock_file,
 )
 from mcp_server.project_state import read_project_state
+from mcp_server.project_versions import (
+    list_project_versions as list_project_versions_file,
+    save_project_version as save_project_version_file,
+)
 from mcp_server.smoke import validate_project as run_project_validation
 from mcp_server.tools.local_library_search import (
     format_search_results,
@@ -2528,6 +2532,42 @@ async def generate_project_report(
         )
     except Exception as e:
         return TextContent(type="text", text=f"Error generating project report: {str(e)}")
+
+
+@mcp.tool()
+async def save_project_version(
+    project_path: str,
+    version_tag: str,
+    description: str = "",
+    overwrite: bool = False,
+) -> TextContent:
+    """Save current structured project truth into a project-local version."""
+    try:
+        result = save_project_version_file(
+            project_path,
+            version_tag=version_tag,
+            description=description,
+            overwrite=overwrite,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Project version failed: {str(e)}")
+
+
+@mcp.tool()
+async def list_project_versions(project_path: str) -> TextContent:
+    """List project-local structured truth versions."""
+    try:
+        result = list_project_versions_file(project_path)
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Project versions failed: {str(e)}")
 
 
 @mcp.tool()

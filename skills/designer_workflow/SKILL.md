@@ -92,7 +92,13 @@ After planning or execution, summarize:
 Do not replace structured output with only prose. The design model remains the
 canonical state.
 
-### 5. Capture Visual Review Artifacts
+### 5. Save Reviewable Versions
+
+Use `save_project_version` when the designer asks to save a milestone, compare
+alternatives later, or preserve a rollback point. Use `list_project_versions`
+when the designer asks what versions exist.
+
+### 6. Capture Visual Review Artifacts
 
 Use `capture_project_snapshot` when the user asks for a screenshot or visual
 review and a project path is available. Snapshot provenance is recorded in

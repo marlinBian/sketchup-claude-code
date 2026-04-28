@@ -8,6 +8,7 @@ from mcp_server.bridge_install import install_bridge
 from mcp_server.doctor import run_doctor
 from mcp_server.project_assets import refresh_project_asset_lock
 from mcp_server.project_state import read_project_state
+from mcp_server.project_versions import list_project_versions, save_project_version
 from mcp_server.project_init import init_project
 from mcp_server.runtime_skills import install_runtime_skills
 from mcp_server.smoke import DEFAULT_SMOKE_PROJECT, run_smoke, validate_project
@@ -47,6 +48,29 @@ def build_parser() -> argparse.ArgumentParser:
         "project_path",
         help="Project directory whose asset lock should be refreshed",
     )
+
+    save_version_parser = subparsers.add_parser(
+        "save-version",
+        help="Save structured project truth into versions/<tag>",
+    )
+    save_version_parser.add_argument("project_path", help="Project directory")
+    save_version_parser.add_argument("version_tag", help="Version tag to create")
+    save_version_parser.add_argument(
+        "--description",
+        default="",
+        help="Optional version description",
+    )
+    save_version_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing version tag",
+    )
+
+    list_versions_parser = subparsers.add_parser(
+        "list-versions",
+        help="List structured project truth versions",
+    )
+    list_versions_parser.add_argument("project_path", help="Project directory")
 
     state_parser = subparsers.add_parser(
         "state",
@@ -196,6 +220,19 @@ def main(argv: list[str] | None = None) -> int:
             return 0 if result["ok"] else 1
         if args.command == "refresh-assets":
             result = refresh_project_asset_lock(args.project_path)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "save-version":
+            result = save_project_version(
+                args.project_path,
+                version_tag=args.version_tag,
+                description=args.description,
+                overwrite=args.force,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "list-versions":
+            result = list_project_versions(args.project_path)
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
         if args.command == "state":

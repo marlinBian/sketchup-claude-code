@@ -66,6 +66,8 @@ Views, reporting, and versions:
 - `apply_visual_feedback_action`
 - `generate_project_report`
 - `generate_report`
+- `save_project_version`
+- `list_project_versions`
 - `save_version`
 - `list_versions`
 
