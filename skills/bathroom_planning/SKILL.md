@@ -21,6 +21,11 @@ Use `execute_bathroom_plan` when:
 - The SketchUp Ruby bridge is running.
 - The local socket `/tmp/su_bridge.sock` is expected to be available.
 
+If the user asks to execute and the bridge is not available, call
+`launch_sketchup_bridge` first. Execute only when it returns `socket_ready:
+true`. If launch fails, report the structured blockers and keep the generated
+plan/project files available.
+
 ## Default Slice
 
 The default supported slice is:

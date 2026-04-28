@@ -20,10 +20,17 @@ After mutation:
 - Mention files written when a project path was provided.
 - Keep any failed operation actionable and retryable.
 
+When SketchUp execution is requested but `/tmp/su_bridge.sock` is unavailable,
+use `launch_sketchup_bridge` before asking the designer to intervene. Start with
+`sketchup_version="2024"` when no version is known. If the result reports update,
+welcome-screen, sign-in, or license blockers, pass those structured blockers
+back to the designer.
+
 ## Supported Tool Groups
 
 Scene and geometry:
 
+- `launch_sketchup_bridge`
 - `get_bridge_info`
 - `get_scene_info`
 - `get_selection_info`

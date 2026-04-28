@@ -34,6 +34,12 @@ my-design-project/
 Agents can inspect this state with `get_project_state`, list placed objects with
 `list_project_components`, and run file checks with `validate_design_project`.
 
+When SketchUp execution is requested, agents can start the live bridge with
+`launch_sketchup_bridge`. This opens SketchUp through a model window and waits
+for `/tmp/su_bridge.sock`. If SketchUp is blocked by a welcome screen, update
+prompt, sign-in prompt, license prompt, or missing bridge install, the tool
+returns structured blockers instead of silently failing.
+
 ## Example Requests
 
 English:

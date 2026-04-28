@@ -9,6 +9,7 @@ from mcp.types import Tool, Resource, TextContent
 from mcp.server.fastmcp import FastMCP
 
 from mcp_server.tools import model_tools, query_tools, placement_tools
+from mcp_server.bridge_install import launch_bridge
 from mcp_server.bridge.socket_bridge import SocketBridge
 from mcp_server.protocol.jsonrpc import JsonRpcRequest
 from mcp_server.resources import design_model_mcp
@@ -653,6 +654,35 @@ def apply_rule_visual_action(
     applied["design_rules_path"] = str(path)
     applied["source"] = rules["source"]
     return applied
+
+
+@mcp.tool()
+async def launch_sketchup_bridge(
+    sketchup_version: str | None = None,
+    app_path: str | None = None,
+    model_path: str | None = None,
+    socket_path: str = "/tmp/su_bridge.sock",
+    timeout: float = 90.0,
+    clear_quarantine: bool = False,
+    suppress_update_check: bool = False,
+) -> TextContent:
+    """Open SketchUp with a model window and wait for the Ruby bridge socket."""
+    try:
+        result = launch_bridge(
+            sketchup_version=sketchup_version,
+            app_path=app_path,
+            model_path=model_path,
+            socket_path=socket_path,
+            timeout=timeout,
+            clear_app_quarantine=clear_quarantine,
+            suppress_app_update_check=suppress_update_check,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"SketchUp bridge launch failed: {str(e)}")
 
 
 @mcp.tool()

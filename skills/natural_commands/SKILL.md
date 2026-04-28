@@ -20,6 +20,9 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
 - Execute current project truth: "sync the current design model", "同步当前模型".
   Use `plan_project_execution` first, then `execute_project_model` when the
   trace has no skipped instances and the bridge is running.
+- Start SketchUp bridge: "open SketchUp", "启动 SketchUp", "连接 SketchUp".
+  Use `launch_sketchup_bridge` and report `possible_blockers` if
+  `socket_ready` is false.
 - Search components: "find a sofa", "找一个马桶".
   Use `search_components` for machine-readable registry data. Use
   `search_local_library` only for a short display summary.
@@ -51,7 +54,9 @@ Ask one short question only when execution would otherwise be unsafe:
 - Missing target: "Which object should I change?"
 - Missing location: "Where should this component be placed?"
 - Missing project path: "Which project directory should I initialize?"
-- Bridge dependency: "Is SketchUp running with the bridge loaded?"
+- Bridge dependency: use `launch_sketchup_bridge` once before asking the
+  designer to manually resolve SketchUp windows, sign-in, license, or update
+  prompts.
 
 When a reasonable default exists, use it. For the first supported planning
 slice, default to the bathroom template and report the exact assumptions.

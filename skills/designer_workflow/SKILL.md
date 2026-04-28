@@ -77,6 +77,11 @@ planning.
 Use `execute_bathroom_plan` when the user wants the model updated in SketchUp and
 the Ruby bridge is running.
 
+If the bridge is not running, use `launch_sketchup_bridge` before execution
+rather than only telling the designer to open SketchUp. A successful launch
+returns `socket_ready: true`. If it returns `socket_ready: false`, report the
+`possible_blockers` field and keep the structured plan/project truth unchanged.
+
 For an existing project that already has `design_model.json`, prefer
 `plan_project_execution` before whole-project synchronization. It derives the
 bridge trace from current project truth. If it returns skipped instances, report
@@ -88,9 +93,10 @@ sent to SketchUp. On success, use `execution_sync` to report which generated
 space walls, component instances, and lighting instances received SketchUp
 `entity_id` values.
 
-Before calling it, confirm the bridge is expected to be available at
-`/tmp/su_bridge.sock`. If execution fails because SketchUp is not running, report
-that as an environment issue and keep the structured plan available.
+Before calling it, confirm the bridge is available at `/tmp/su_bridge.sock`.
+If execution fails because SketchUp is not running, retry the startup path once
+with `launch_sketchup_bridge`; then report any environment blockers and keep the
+structured plan available.
 
 ### 4. Report Structured Results
 
