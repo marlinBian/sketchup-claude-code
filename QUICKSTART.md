@@ -33,7 +33,8 @@ Validate the generated project:
 sketchup-agent validate ~/Design/my-bathroom
 ```
 
-Inspect the current project truth, asset lock, and visual feedback summary:
+Inspect the current project truth, effective rules, asset lock, and visual
+feedback summary:
 
 ```bash
 sketchup-agent state ~/Design/my-bathroom

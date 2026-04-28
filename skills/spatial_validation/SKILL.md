@@ -17,8 +17,8 @@ The returned `validation_report` is the most reliable current validation output.
 
 For generic placement, combine:
 
-- `get_project_state` for the current `design_model.json`, asset-lock summary,
-  and visual feedback summary
+- `get_project_state` for the current `design_model.json`, effective design
+  rules, asset-lock summary, and visual feedback summary
 - `get_design_rules` for project-specific rules
 - `search_components` or `get_component_manifest` for registry dimensions and
   clearances

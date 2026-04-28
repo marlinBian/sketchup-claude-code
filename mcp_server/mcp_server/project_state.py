@@ -5,6 +5,11 @@ from typing import Any
 
 from mcp_server.resources.asset_lock_schema import load_assets_lock
 from mcp_server.resources.design_model_schema import load_design_model
+from mcp_server.resources.design_rules_schema import (
+    designer_profile_path_from_env,
+    effective_design_rules,
+    load_design_rules,
+)
 from mcp_server.resources.project_files import (
     assets_lock_path,
     design_rules_path,
@@ -12,6 +17,56 @@ from mcp_server.resources.project_files import (
     snapshot_manifest_path,
 )
 from mcp_server.resources.snapshot_manifest_schema import load_snapshot_manifest
+
+
+def summarize_design_rules(project_path: str | Path) -> dict[str, Any]:
+    """Return project and effective design-rule state for agent inspection."""
+    path = design_rules_path(project_path)
+    profile_path = designer_profile_path_from_env()
+    summary: dict[str, Any] = {
+        "path": str(path),
+        "exists": path.exists(),
+        "valid": False,
+        "profile_path": str(profile_path) if profile_path else None,
+        "effective_valid": False,
+        "effective_rules": None,
+    }
+
+    project_errors: list[str] = []
+    if path.exists():
+        project_rules, project_errors = load_design_rules(path)
+        if project_errors or project_rules is None:
+            summary["errors"] = project_errors
+        else:
+            summary.update(
+                {
+                    "valid": True,
+                    "source": project_rules.get("source"),
+                    "units": project_rules.get("units"),
+                    "rule_sets": sorted(project_rules.get("rule_sets", {}).keys()),
+                    "preferences": project_rules.get("preferences", {}),
+                    "project_rules": project_rules,
+                }
+            )
+    else:
+        project_errors = [f"File not found: {path}"]
+        summary["errors"] = project_errors
+
+    effective_rules, effective_errors = effective_design_rules(project_path)
+    if effective_errors or effective_rules is None:
+        summary["effective_errors"] = effective_errors
+        return summary
+
+    summary.update(
+        {
+            "effective_valid": True,
+            "effective_source": effective_rules.get("source"),
+            "effective_rule_sets": sorted(effective_rules.get("rule_sets", {}).keys()),
+            "effective_preferences": effective_rules.get("preferences", {}),
+            "effective_rules": effective_rules,
+        }
+    )
+    return summary
 
 
 def summarize_assets_lock(project_path: str | Path) -> dict[str, Any]:
@@ -140,6 +195,7 @@ def summarize_snapshot_manifest(project_path: str | Path) -> dict[str, Any]:
 
 def read_project_state(
     project_path: str | Path,
+    include_rules: bool = True,
     include_assets: bool = True,
     include_visual_feedback: bool = True,
 ) -> dict[str, Any]:
@@ -163,6 +219,8 @@ def read_project_state(
         },
         "design_model": design_model,
     }
+    if include_rules:
+        state["design_rules"] = summarize_design_rules(resolved_project_path)
     if include_assets:
         state["assets_lock"] = summarize_assets_lock(resolved_project_path)
     if include_visual_feedback:

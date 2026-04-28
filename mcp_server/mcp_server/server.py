@@ -748,6 +748,7 @@ async def set_design_preference(
 @mcp.tool()
 async def get_project_state(
     project_path: str,
+    include_rules: bool = True,
     include_assets: bool = True,
     include_visual_feedback: bool = True,
 ) -> TextContent:
@@ -755,6 +756,7 @@ async def get_project_state(
     try:
         response = read_project_state(
             project_path,
+            include_rules=include_rules,
             include_assets=include_assets,
             include_visual_feedback=include_visual_feedback,
         )

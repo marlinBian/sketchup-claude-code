@@ -24,6 +24,9 @@ async def test_get_project_state_reads_design_model(tmp_path):
     )
     assert data["design_model"]["project_name"] == "State Test"
     assert "toilet_001" in data["design_model"]["components"]
+    assert data["design_rules"]["valid"] is True
+    assert data["design_rules"]["effective_valid"] is True
+    assert data["design_rules"]["effective_rules"]["units"] == "mm"
     assert data["assets_lock"]["valid"] is True
     assert data["assets_lock"]["asset_count"] == 5
     assert data["visual_feedback"]["valid"] is True
@@ -39,14 +42,42 @@ async def test_get_project_state_can_skip_optional_summaries(tmp_path):
 
     response = await get_project_state(
         str(tmp_path),
+        include_rules=False,
         include_assets=False,
         include_visual_feedback=False,
     )
     data = json.loads(response.text)
 
     assert "design_model" in data
+    assert "design_rules" not in data
     assert "assets_lock" not in data
     assert "visual_feedback" not in data
+
+
+@pytest.mark.asyncio
+async def test_get_project_state_summarizes_effective_design_rules(tmp_path):
+    from mcp_server import server
+    from mcp_server.server import get_project_state
+
+    init_project(tmp_path, template="bathroom")
+    await server.set_design_preference(
+        project_path=str(tmp_path),
+        preference_name="lighting_temperature",
+        value="3000K",
+    )
+
+    response = await get_project_state(str(tmp_path))
+    data = json.loads(response.text)
+
+    assert data["design_rules"]["source"] == "project_user_override"
+    assert data["design_rules"]["effective_valid"] is True
+    assert "project_user_override" in data["design_rules"]["effective_source"]
+    assert data["design_rules"]["effective_preferences"] == {
+        "lighting_temperature": "3000K"
+    }
+    assert data["design_rules"]["effective_rules"]["preferences"] == {
+        "lighting_temperature": "3000K"
+    }
 
 
 @pytest.mark.asyncio

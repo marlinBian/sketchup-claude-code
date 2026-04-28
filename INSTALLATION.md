@@ -176,7 +176,8 @@ cd mcp_server
 uv run --extra dev sketchup-agent validate /tmp/sah-bathroom
 ```
 
-Inspect current project truth and compact supporting summaries:
+Inspect current project truth, effective rules, and compact supporting
+summaries:
 
 ```bash
 cd mcp_server

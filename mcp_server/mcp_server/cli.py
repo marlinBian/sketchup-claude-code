@@ -44,6 +44,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     state_parser.add_argument("project_path", help="Project directory to inspect")
     state_parser.add_argument(
+        "--no-rules",
+        action="store_true",
+        help="Omit design_rules.json and effective rules summary",
+    )
+    state_parser.add_argument(
         "--no-assets",
         action="store_true",
         help="Omit assets.lock.json summary",
@@ -182,6 +187,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "state":
             result = read_project_state(
                 args.project_path,
+                include_rules=not args.no_rules,
                 include_assets=not args.no_assets,
                 include_visual_feedback=not args.no_visual_feedback,
             )

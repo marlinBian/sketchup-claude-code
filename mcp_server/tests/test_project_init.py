@@ -143,6 +143,7 @@ def test_cli_state_outputs_project_summaries(tmp_path, capsys):
 
     assert exit_code == 0
     assert data["design_model"]["spaces"]["bathroom_001"]["type"] == "bathroom"
+    assert data["design_rules"]["effective_valid"] is True
     assert data["assets_lock"]["asset_count"] == 5
     assert data["visual_feedback"]["pending_action_count"] == 0
 
@@ -155,6 +156,7 @@ def test_cli_state_can_skip_optional_summaries(tmp_path, capsys):
         [
             "state",
             str(project_path),
+            "--no-rules",
             "--no-assets",
             "--no-visual-feedback",
         ]
@@ -164,6 +166,7 @@ def test_cli_state_can_skip_optional_summaries(tmp_path, capsys):
 
     assert exit_code == 0
     assert "design_model" in data
+    assert "design_rules" not in data
     assert "assets_lock" not in data
     assert "visual_feedback" not in data
 
