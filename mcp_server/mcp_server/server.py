@@ -2510,6 +2510,24 @@ async def generate_report(project_name: str, project_dir: str = "./designs") -> 
 
 
 @mcp.tool()
+async def generate_project_report(
+    project_path: str,
+    output_path: str | None = None,
+) -> TextContent:
+    """Generate an English-first Markdown report from a project workspace."""
+    try:
+        from mcp_server.tools.report_tools import generate_project_report as generate
+
+        result = generate(project_path, output_path=output_path)
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Error generating project report: {str(e)}")
+
+
+@mcp.tool()
 async def save_version(
     project_name: str,
     version_tag: str,

@@ -64,6 +64,7 @@ runpy.run_module("mcp_server.server", run_name="__main__")
         "apply_visual_feedback_action",
         "get_bridge_info",
         "get_selection_info",
+        "generate_project_report",
         "list_visual_feedback",
         "record_visual_feedback",
         "register_project_component",

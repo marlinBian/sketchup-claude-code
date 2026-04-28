@@ -211,3 +211,4 @@ Goal: make CLI agents inspect project truth without parsing files manually.
 - keep validation behavior shared with `sketchup-agent validate`
 - use inspection tools in runtime skills before planning, placement, or visual
   review
+- generate English-first project reports from the same project-state reader
