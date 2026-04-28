@@ -39,6 +39,7 @@ from mcp_server.tools.local_library_search import (
     get_component_by_id,
     load_effective_library,
     load_project_library,
+    normalize_category,
     save_project_library,
     search_library,
 )
@@ -183,6 +184,79 @@ def bridge_operation_for_component_instance(
     }
 
 
+def selection_info_from_bridge(limit: int = 100) -> dict[str, Any]:
+    """Read current SketchUp selection metadata from the Ruby bridge."""
+    bridge = SocketBridge()
+    try:
+        bridge.connect()
+        request = JsonRpcRequest(
+            method="execute_operation",
+            params={
+                "operation_id": f"selection_{id(selection_info_from_bridge)}",
+                "operation_type": "get_selection_info",
+                "payload": {"limit": limit},
+                "rollback_on_failure": False,
+            }
+        )
+        response = bridge.send(request.to_dict())
+        if "error" in response:
+            raise RuntimeError(response["error"]["message"])
+        result = response.get("result", {})
+        selection_info = result.get("selection_info")
+        if not isinstance(selection_info, dict):
+            raise RuntimeError("Bridge response did not include selection_info.")
+        return selection_info
+    finally:
+        bridge.disconnect()
+
+
+def bounds_dimensions(bounds: dict[str, Any]) -> dict[str, float]:
+    """Return positive dimensions from a SketchUp bounding box in millimeters."""
+    minimum = bounds.get("min")
+    maximum = bounds.get("max")
+    if not isinstance(minimum, list) or not isinstance(maximum, list):
+        raise ValueError("selection bounding_box must include min and max lists.")
+    if len(minimum) != 3 or len(maximum) != 3:
+        raise ValueError("selection bounding_box min and max must be 3D points.")
+
+    width = float(maximum[0]) - float(minimum[0])
+    depth = float(maximum[1]) - float(minimum[1])
+    height = float(maximum[2]) - float(minimum[2])
+    if width <= 0 or depth <= 0 or height <= 0:
+        raise ValueError(
+            "selected entity bounds are degenerate; select a 3D group or "
+            "component, or register dimensions explicitly."
+        )
+    return {"width": width, "depth": depth, "height": height}
+
+
+def select_entity_summary(
+    selection_info: dict[str, Any],
+    selection_index: int = 0,
+    selection_entity_id: str | None = None,
+) -> dict[str, Any]:
+    """Pick one entity summary from bridge selection metadata."""
+    entities = selection_info.get("entities", [])
+    if not isinstance(entities, list) or not entities:
+        raise ValueError("no SketchUp entities selected.")
+
+    if selection_entity_id:
+        for entity in entities:
+            if str(entity.get("entityID")) == str(selection_entity_id):
+                return entity
+        raise ValueError(f"selected entity not found: {selection_entity_id}")
+
+    if selection_index < 0 or selection_index >= len(entities):
+        raise ValueError(
+            f"selection_index out of range: {selection_index}; "
+            f"selected_count={len(entities)}"
+        )
+    entity = entities[selection_index]
+    if not isinstance(entity, dict):
+        raise ValueError("selection entity summary must be an object.")
+    return entity
+
+
 @mcp.tool()
 async def get_scene_info() -> TextContent:
     """Get current SketchUp scene information.
@@ -213,32 +287,18 @@ async def get_scene_info() -> TextContent:
 @mcp.tool()
 async def get_selection_info(limit: int = 100) -> TextContent:
     """Get current SketchUp selection information for component registration."""
-    bridge = SocketBridge()
     try:
-        bridge.connect()
-        request = JsonRpcRequest(
-            method="execute_operation",
-            params={
-                "operation_id": f"selection_{id(get_selection_info)}",
-                "operation_type": "get_selection_info",
-                "payload": {"limit": limit},
-                "rollback_on_failure": False,
-            }
-        )
-        response = bridge.send(request.to_dict())
-        if "error" in response:
-            return TextContent(type="text", text=f"Error: {response['error']['message']}")
-        result = response.get("result", {})
+        selection_info = selection_info_from_bridge(limit=limit)
         return TextContent(
             type="text",
             text=json.dumps(
-                result.get("selection_info", {}),
+                selection_info,
                 ensure_ascii=False,
                 indent=2,
             ),
         )
-    finally:
-        bridge.disconnect()
+    except Exception as e:
+        return TextContent(type="text", text=f"Selection info failed: {str(e)}")
 
 
 @mcp.tool()
@@ -1305,6 +1365,7 @@ async def register_project_component(
                 text="Project component failed: dimensions must be positive.",
             )
 
+        category_value = normalize_category(category) or category
         project_library, errors = load_project_library(project_path)
         if errors:
             return TextContent(
@@ -1362,7 +1423,7 @@ async def register_project_component(
         component = {
             "id": component_id,
             "name": name,
-            "category": category,
+            "category": category_value,
             "dimensions": {
                 "width": width,
                 "depth": depth,
@@ -1429,6 +1490,113 @@ async def register_project_component(
         )
     except Exception as e:
         return TextContent(type="text", text=f"Project component failed: {str(e)}")
+
+
+@mcp.tool()
+async def register_selected_component(
+    project_path: str,
+    component_id: str,
+    category: str = "other",
+    name: str | None = None,
+    subcategory: str | None = None,
+    selection_index: int = 0,
+    selection_entity_id: str | None = None,
+    skp_path: str | None = None,
+    procedural_fallback: str | None = "box_component",
+    anchor_back: str | None = None,
+    anchor_bottom: str | None = "floor",
+    clearance_front: float | None = None,
+    clearance_left: float | None = None,
+    clearance_right: float | None = None,
+    aliases_en: list[str] | None = None,
+    aliases_zh_cn: list[str] | None = None,
+    tags: list[str] | None = None,
+    license_type: str = "project_local",
+    license_author: str | None = None,
+    license_url: str | None = None,
+    redistribution: str = "Project-local metadata inferred from SketchUp selection.",
+    overwrite: bool = False,
+) -> TextContent:
+    """Register a project-local component from the current SketchUp selection."""
+    try:
+        selection_info = selection_info_from_bridge(limit=max(selection_index + 1, 100))
+        entity = select_entity_summary(
+            selection_info,
+            selection_index=selection_index,
+            selection_entity_id=selection_entity_id,
+        )
+        dimensions = bounds_dimensions(entity.get("bounding_box", {}))
+        inferred_name = (
+            name
+            or entity.get("definition_name")
+            or entity.get("name")
+            or component_id.replace("_", " ").title()
+        )
+        merged_tags = list(tags or [])
+        for tag in ("project-local", "sketchup-selection"):
+            if tag not in merged_tags:
+                merged_tags.append(tag)
+
+        response = await register_project_component(
+            project_path=project_path,
+            component_id=component_id,
+            name=str(inferred_name),
+            category=category,
+            width=dimensions["width"],
+            depth=dimensions["depth"],
+            height=dimensions["height"],
+            subcategory=subcategory,
+            skp_path=skp_path,
+            procedural_fallback=procedural_fallback,
+            insertion_offset_x=dimensions["width"] / 2,
+            insertion_offset_y=0,
+            insertion_offset_z=0,
+            anchor_back=anchor_back,
+            anchor_bottom=anchor_bottom,
+            clearance_front=clearance_front,
+            clearance_left=clearance_left,
+            clearance_right=clearance_right,
+            aliases_en=aliases_en or [str(inferred_name)],
+            aliases_zh_cn=aliases_zh_cn,
+            tags=merged_tags,
+            license_type=license_type,
+            license_source="sketchup_selection",
+            license_author=license_author,
+            license_url=license_url,
+            redistribution=redistribution,
+            overwrite=overwrite,
+        )
+
+        try:
+            data = json.loads(response.text)
+        except json.JSONDecodeError:
+            return TextContent(
+                type="text",
+                text=response.text.replace(
+                    "Project component failed:",
+                    "Project component from selection failed:",
+                    1,
+                ),
+            )
+
+        data["source_selection"] = {
+            "entity_id": str(entity.get("entityID", "")),
+            "type": entity.get("type"),
+            "name": entity.get("name"),
+            "definition_name": entity.get("definition_name"),
+            "layer": entity.get("layer"),
+            "bounding_box": entity.get("bounding_box"),
+        }
+        data["selection_count"] = selection_info.get("selected_count")
+        return TextContent(
+            type="text",
+            text=json.dumps(data, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(
+            type="text",
+            text=f"Project component from selection failed: {str(e)}",
+        )
 
 
 @mcp.tool()

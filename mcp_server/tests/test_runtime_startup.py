@@ -63,6 +63,7 @@ runpy.run_module("mcp_server.server", run_name="__main__")
     assert {
         "get_selection_info",
         "register_project_component",
+        "register_selected_component",
         "rotate_entity",
         "scale_entity",
         "copy_entity",

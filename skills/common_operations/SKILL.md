@@ -38,6 +38,7 @@ Components and layout:
 - `search_components`
 - `get_component_manifest`
 - `register_project_component`
+- `register_selected_component`
 - `add_component_instance`
 - `execute_component_instance`
 - `search_local_library`

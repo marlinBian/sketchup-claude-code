@@ -42,8 +42,23 @@ get_component_manifest(component_id="toilet_floor_mounted_basic")
 
 When the designer has a project-specific reusable object, register it before
 searching or placing it. If the object is already selected in SketchUp, use
-`get_selection_info` first to inspect its entity IDs and bounds, then register
-metadata that matches those dimensions:
+`register_selected_component` to infer dimensions from the selected SketchUp
+entity and write project-local metadata:
+
+```python
+register_selected_component(
+    project_path="<project-path>",
+    component_id="project_display_plinth",
+    category="furniture",
+    subcategory="display_plinth",
+    anchor_bottom="floor",
+    aliases_en=["display stand"]
+)
+```
+
+Use `get_selection_info` first only when the agent needs to choose between
+multiple selected entities or explain why registration cannot proceed. If
+SketchUp is not running, register metadata explicitly:
 
 ```python
 register_project_component(

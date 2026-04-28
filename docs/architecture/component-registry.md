@@ -134,9 +134,17 @@ dimensions, bounds, insertion point, anchors, clearances, asset path,
 procedural fallback, aliases, tags, and license/provenance fields. It does not
 yet extract a selected SketchUp entity into a `.skp` asset automatically.
 
-`get_selection_info` is the bridge-side inspection primitive for the next step:
-it returns selected SketchUp entity IDs, names, layers, types, and bounds so an
-agent can propose accurate project-local component metadata before registration.
+`register_selected_component` is the first bridge-assisted registration path.
+It reads the current SketchUp selection, infers dimensions from the selected
+entity bounds, and writes a project-local component manifest. It does not yet
+export the selected geometry into a reusable `.skp` asset; until export is
+implemented, the manifest points at the expected project-local asset path and
+keeps a procedural fallback.
+
+`get_selection_info` remains the bridge-side inspection primitive for cases
+where an agent needs to choose between multiple selected entities or explain why
+selection-based registration cannot proceed. It returns selected SketchUp entity
+IDs, names, layers, types, and bounds.
 
 ## Search Ranking
 
@@ -150,6 +158,8 @@ Agents should use machine-readable registry tools for reasoning:
   anchors, clearance data, asset metadata, license data, and match scores.
 - `get_component_manifest` returns one manifest entry by canonical component ID.
 - `register_project_component` adds a project-local manifest entry.
+- `register_selected_component` infers one project-local manifest entry from
+  the current SketchUp selection.
 - `add_component_instance` writes a selected registry component into
   `design_model.json` and refreshes `assets.lock.json`.
 - `execute_component_instance` sends a project-backed component instance to the
