@@ -55,9 +55,10 @@ model changes, component selections, rule updates, or material changes before
 mutating the project truth.
 
 Automatic application is intentionally narrow. Component, lighting, material,
-style, and note actions can be applied directly because they map to existing
-project truth fields. Geometry and rule actions must use dedicated structured
-tools so the agent does not infer physical changes directly from pixels.
+style, rule, and note actions can be applied directly because they map to
+existing project truth or `design_rules.json` fields. Geometry actions must use
+dedicated structured tools so the agent does not infer physical changes
+directly from pixels.
 
 Future image generation or rendering integrations should add renderer/model
 provenance to this manifest instead of writing untracked images.

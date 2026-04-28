@@ -479,6 +479,108 @@ def apply_material_visual_action(
     return metadata["materials"]
 
 
+def apply_rule_visual_action(
+    project_path: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply one structured visual feedback action to project design rules."""
+    path, rules, errors = load_or_create_project_design_rules(project_path)
+    if errors:
+        raise ValueError("; ".join(errors))
+
+    rule_kind = str(payload.get("rule_kind") or payload.get("kind") or "")
+    rules["source"] = str(payload.get("source") or "visual_feedback_override")
+
+    if rule_kind == "clearance":
+        rule_set = str(payload.get("rule_set") or "")
+        clearance_name = str(payload.get("clearance_name") or "")
+        if not rule_set or not clearance_name or "value" not in payload:
+            raise ValueError(
+                "rule payload must include rule_set, clearance_name, and value."
+            )
+        value = float(payload["value"])
+        if value < 0:
+            raise ValueError("clearance value must be non-negative.")
+        rules.setdefault("rule_sets", {})
+        rules["rule_sets"].setdefault(
+            rule_set,
+            {
+                "description": f"Project-local {rule_set} rules.",
+                "clearances": {},
+            },
+        )
+        rules["rule_sets"][rule_set].setdefault("clearances", {})
+        rules["rule_sets"][rule_set]["clearances"][clearance_name] = value
+        applied = {
+            "rule_kind": rule_kind,
+            "rule_set": rule_set,
+            "clearance_name": clearance_name,
+            "value": value,
+            "units": "mm",
+        }
+    elif rule_kind == "fixture_dimension":
+        rule_set = str(payload.get("rule_set") or "")
+        fixture_name = str(payload.get("fixture_name") or "")
+        dimensions = payload.get("dimensions")
+        if not rule_set or not fixture_name or not isinstance(dimensions, dict):
+            raise ValueError(
+                "rule payload must include rule_set, fixture_name, and dimensions."
+            )
+        normalized_dimensions = {
+            "width": float(dimensions["width"]),
+            "depth": float(dimensions["depth"]),
+            "height": float(dimensions["height"]),
+        }
+        if any(value < 0 for value in normalized_dimensions.values()):
+            raise ValueError("fixture dimensions must be non-negative.")
+        rules.setdefault("rule_sets", {})
+        rules["rule_sets"].setdefault(
+            rule_set,
+            {
+                "description": f"Project-local {rule_set} rules.",
+                "clearances": {},
+            },
+        )
+        rules["rule_sets"][rule_set].setdefault("fixture_dimensions", {})
+        rules["rule_sets"][rule_set]["fixture_dimensions"][fixture_name] = (
+            normalized_dimensions
+        )
+        applied = {
+            "rule_kind": rule_kind,
+            "rule_set": rule_set,
+            "fixture_name": fixture_name,
+            "dimensions": normalized_dimensions,
+            "units": "mm",
+        }
+    elif rule_kind == "preference":
+        preference_name = str(payload.get("preference_name") or "")
+        if not preference_name or "value" not in payload:
+            raise ValueError(
+                "rule payload must include preference_name and value."
+            )
+        value = str(payload["value"])
+        rules.setdefault("preferences", {})
+        rules["preferences"][preference_name] = value
+        applied = {
+            "rule_kind": rule_kind,
+            "preference_name": preference_name,
+            "value": value,
+        }
+    else:
+        raise ValueError(
+            "rule payload must set rule_kind to clearance, fixture_dimension, "
+            "or preference."
+        )
+
+    saved, save_errors = save_design_rules(path, rules)
+    if not saved:
+        raise ValueError("; ".join(save_errors))
+
+    applied["design_rules_path"] = str(path)
+    applied["source"] = rules["source"]
+    return applied
+
+
 @mcp.tool()
 async def get_bridge_info() -> TextContent:
     """Get live SketchUp bridge version and supported operation metadata."""
@@ -1495,6 +1597,7 @@ async def apply_visual_feedback_action(
 
         applied: dict[str, Any]
         refresh_lock = False
+        rules_path = None
         if action_type == "component":
             applied = apply_component_visual_action(
                 project_path,
@@ -1508,6 +1611,9 @@ async def apply_visual_feedback_action(
             refresh_lock = bool(payload.get("component_ref"))
         elif action_type == "material":
             applied = apply_material_visual_action(design_model, target, payload)
+        elif action_type == "rule":
+            applied = apply_rule_visual_action(project_path, payload)
+            rules_path = applied.get("design_rules_path")
         elif action_type == "style":
             style = (
                 payload.get("style")
@@ -1567,6 +1673,7 @@ async def apply_visual_feedback_action(
         response_payload = {
             "project_path": str(Path(project_path).expanduser().resolve()),
             "design_model_path": str(design_model_path),
+            "design_rules_path": str(rules_path) if rules_path else None,
             "assets_lock_path": str(lock_path) if lock_path else None,
             "manifest_path": str(manifest_path),
             "review_id": review_id,

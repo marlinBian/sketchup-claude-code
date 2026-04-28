@@ -192,8 +192,8 @@ component, rule, material, or style change, call
 
 For supported action types, use `apply_visual_feedback_action` to apply the
 structured change and mark the action as applied in one step. The automatic path
-is intentionally limited to component, lighting, material, style, and note
-actions; geometry and rule changes require a more specific structured tool.
+is intentionally limited to component, lighting, material, style, rule, and note
+actions; geometry changes require a more specific structured tool.
 
 ## Useful Dimensions
 

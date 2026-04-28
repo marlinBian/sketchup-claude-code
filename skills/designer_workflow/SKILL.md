@@ -132,8 +132,8 @@ actions. After an accepted action has been applied through structured tools, cal
 does not become a stale suggestion log.
 
 Use `apply_visual_feedback_action` only for supported structured actions:
-component, lighting, material, style, and note. Do not use it to apply geometry
-or rule changes from pixels; use dedicated geometry or rule tools instead.
+component, lighting, material, style, rule, and note. Do not use it to apply
+geometry changes from pixels; use dedicated geometry tools instead.
 
 ## Supported User Prompts
 

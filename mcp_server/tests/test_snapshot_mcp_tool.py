@@ -231,6 +231,54 @@ async def test_apply_visual_feedback_style_action_updates_metadata(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_apply_visual_feedback_rule_action_updates_design_rules(tmp_path):
+    from mcp_server import server
+
+    init_project(tmp_path, template="empty")
+    response = await server.record_visual_feedback(
+        project_path=str(tmp_path),
+        summary="The vanity needs more front clearance.",
+        actions=[
+            {
+                "type": "rule",
+                "target": "bathroom.vanity_front_clearance",
+                "intent": "Increase vanity front clearance.",
+                "status": "accepted",
+                "payload": {
+                    "rule_kind": "clearance",
+                    "rule_set": "bathroom",
+                    "clearance_name": "vanity_front_clearance",
+                    "value": 760,
+                },
+            }
+        ],
+    )
+    review_id = json.loads(response.text)["visual_feedback"]["id"]
+
+    apply_response = await server.apply_visual_feedback_action(
+        project_path=str(tmp_path),
+        review_id=review_id,
+        action_index=0,
+    )
+    data = json.loads(apply_response.text)
+    design_rules = json.loads((tmp_path / "design_rules.json").read_text())
+    design_model = json.loads((tmp_path / "design_model.json").read_text())
+    manifest = json.loads((tmp_path / "snapshots" / "manifest.json").read_text())
+
+    assert data["status"] == "applied"
+    assert data["applied"]["rule_kind"] == "clearance"
+    assert data["design_rules_path"].endswith("design_rules.json")
+    assert (
+        design_rules["rule_sets"]["bathroom"]["clearances"][
+            "vanity_front_clearance"
+        ]
+        == 760.0
+    )
+    assert design_model["metadata"]["visual_feedback"]["last_applied"]["type"] == "rule"
+    assert manifest["reviews"][0]["actions"][0]["status"] == "applied"
+
+
+@pytest.mark.asyncio
 async def test_apply_visual_feedback_rejects_unsupported_action_type(tmp_path):
     from mcp_server import server
 
