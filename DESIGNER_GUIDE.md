@@ -83,6 +83,12 @@ reusable semantic component. It writes metadata to `component_library.json`.
 Search and placement tools use this project-local registry when `project_path`
 is provided.
 
+Use `import_project_component_asset` when the reusable object already exists as
+a local `.skp` file. It copies that file into `assets/components/` and registers
+the required semantic metadata. The agent still needs dimensions, anchors,
+clearance assumptions, and license/provenance details; the model file alone is
+not sufficient.
+
 Use `add_component_instance` when a selected component should become part of the
 project source of truth. It updates `design_model.json` and refreshes
 `assets.lock.json`.

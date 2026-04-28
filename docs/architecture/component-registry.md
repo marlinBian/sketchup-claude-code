@@ -131,10 +131,16 @@ project's `component_library.json`. This supports early workflows where a
 designer creates or imports a SketchUp object and wants the agent to reuse it as
 a structured component later.
 
-The first supported project-local registration path records metadata only:
-dimensions, bounds, insertion point, anchors, clearances, asset path,
-procedural fallback, aliases, tags, and license/provenance fields. It does not
-yet extract a selected SketchUp entity into a `.skp` asset automatically.
+The metadata-only registration path records dimensions, bounds, insertion point,
+anchors, clearances, asset path, procedural fallback, aliases, tags, and
+license/provenance fields.
+
+`import_project_component_asset` copies an existing local `.skp` file into
+`assets/components/` and registers matching project-local semantic metadata in
+one operation. It is the asset-intake path for models downloaded from external
+sites or exported from another local project. It still requires explicit
+dimensions, anchors, clearances, and license/provenance metadata; the `.skp`
+geometry alone is not enough for agent placement.
 
 `register_selected_component` is the first bridge-assisted registration path.
 It reads the current SketchUp selection, infers dimensions from the selected
@@ -161,6 +167,8 @@ Agents should use machine-readable registry tools for reasoning:
   anchors, clearance data, asset metadata, license data, and match scores.
 - `get_component_manifest` returns one manifest entry by canonical component ID.
 - `register_project_component` adds a project-local manifest entry.
+- `import_project_component_asset` copies a local `.skp` into the project asset
+  cache and registers the corresponding project-local manifest entry.
 - `register_selected_component` infers one project-local manifest entry from
   the current SketchUp selection.
 - `add_component_instance` writes a selected registry component into

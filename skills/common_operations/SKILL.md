@@ -46,6 +46,7 @@ Components and layout:
 - `set_project_space`
 - `search_components`
 - `get_component_manifest`
+- `import_project_component_asset`
 - `register_project_component`
 - `register_selected_component`
 - `add_component_instance`

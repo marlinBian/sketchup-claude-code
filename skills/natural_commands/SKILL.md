@@ -26,6 +26,9 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
 - Search components: "find a sofa", "找一个马桶".
   Use `search_components` for machine-readable registry data. Use
   `search_local_library` only for a short display summary.
+- Import local component asset: "use this downloaded SKP as a component",
+  "把这个 skp 加入组件库". Use `import_project_component_asset` when the user
+  provides a local `.skp` path plus enough dimensions/license context.
 - Place component: "place the sofa here", "放一个沙发".
   When a project path exists, use `add_component_instance` to update
   `design_model.json`, then use `plan_project_execution` or

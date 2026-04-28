@@ -1,6 +1,7 @@
 """FastMCP entry point for SketchUp Agent Harness MCP server."""
 
 import json
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -2349,6 +2350,138 @@ async def register_project_component(
         )
     except Exception as e:
         return TextContent(type="text", text=f"Project component failed: {str(e)}")
+
+
+@mcp.tool()
+async def import_project_component_asset(
+    project_path: str,
+    source_path: str,
+    component_id: str,
+    name: str,
+    category: str,
+    width: float,
+    depth: float,
+    height: float,
+    subcategory: str | None = None,
+    asset_filename: str | None = None,
+    procedural_fallback: str | None = "box_component",
+    insertion_offset_x: float | None = None,
+    insertion_offset_y: float = 0,
+    insertion_offset_z: float = 0,
+    anchor_back: str | None = None,
+    anchor_bottom: str | None = "floor",
+    clearance_front: float | None = None,
+    clearance_left: float | None = None,
+    clearance_right: float | None = None,
+    aliases_en: list[str] | None = None,
+    aliases_zh_cn: list[str] | None = None,
+    tags: list[str] | None = None,
+    license_type: str = "unknown",
+    license_source: str = "local_file",
+    license_author: str | None = None,
+    license_url: str | None = None,
+    redistribution: str = (
+        "Project-local asset copied into project cache. Verify upstream license "
+        "before sharing."
+    ),
+    overwrite: bool = False,
+) -> TextContent:
+    """Copy a local .skp asset into the project cache and register metadata."""
+    try:
+        source = Path(source_path).expanduser().resolve()
+        if not source.exists() or not source.is_file():
+            return TextContent(
+                type="text",
+                text=f"Project asset import failed: source file not found: {source}",
+            )
+        if source.suffix.lower() != ".skp":
+            return TextContent(
+                type="text",
+                text="Project asset import failed: source asset must be a .skp file.",
+            )
+
+        project_root = Path(project_path).expanduser().resolve()
+        safe_asset_name = asset_filename or f"{component_id}.skp"
+        if Path(safe_asset_name).name != safe_asset_name:
+            return TextContent(
+                type="text",
+                text="Project asset import failed: asset_filename must be a filename.",
+            )
+        if Path(safe_asset_name).suffix.lower() != ".skp":
+            return TextContent(
+                type="text",
+                text="Project asset import failed: asset_filename must end with .skp.",
+            )
+
+        relative_skp_path = f"assets/components/{safe_asset_name}"
+        destination = project_root / relative_skp_path
+        destination_existed = destination.exists()
+        if destination_existed and not overwrite:
+            return TextContent(
+                type="text",
+                text=(
+                    "Project asset import failed: cached asset already exists: "
+                    f"{relative_skp_path}"
+                ),
+            )
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if source != destination:
+            shutil.copyfile(source, destination)
+
+        registration = await register_project_component(
+            project_path=project_path,
+            component_id=component_id,
+            name=name,
+            category=category,
+            width=width,
+            depth=depth,
+            height=height,
+            subcategory=subcategory,
+            skp_path=relative_skp_path,
+            procedural_fallback=procedural_fallback,
+            insertion_offset_x=insertion_offset_x,
+            insertion_offset_y=insertion_offset_y,
+            insertion_offset_z=insertion_offset_z,
+            anchor_back=anchor_back,
+            anchor_bottom=anchor_bottom,
+            clearance_front=clearance_front,
+            clearance_left=clearance_left,
+            clearance_right=clearance_right,
+            aliases_en=aliases_en,
+            aliases_zh_cn=aliases_zh_cn,
+            tags=tags,
+            license_type=license_type,
+            license_source=license_source,
+            license_author=license_author,
+            license_url=license_url,
+            redistribution=redistribution,
+            overwrite=overwrite,
+        )
+        if registration.text.startswith("Project component failed:"):
+            if source != destination and destination.exists() and not destination_existed:
+                destination.unlink()
+            return TextContent(
+                type="text",
+                text=registration.text.replace(
+                    "Project component failed:",
+                    "Project asset import failed:",
+                    1,
+                ),
+            )
+
+        data = json.loads(registration.text)
+        data["asset_import"] = {
+            "source_path": str(source),
+            "cached_asset_path": str(destination),
+            "skp_path": relative_skp_path,
+            "copied": source != destination,
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(data, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Project asset import failed: {str(e)}")
 
 
 @mcp.tool()

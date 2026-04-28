@@ -75,6 +75,32 @@ register_project_component(
 )
 ```
 
+If the object is already available as a local `.skp` file, use
+`import_project_component_asset` to copy it into `assets/components/` and
+register semantic metadata in one step:
+
+```python
+import_project_component_asset(
+    project_path="<project-path>",
+    source_path="~/Downloads/console-table.skp",
+    component_id="project_console_table",
+    name="Project console table",
+    category="furniture",
+    width=1200,
+    depth=350,
+    height=800,
+    anchor_back="wall",
+    clearance_front=600,
+    aliases_en=["console table"],
+    license_source="downloaded_file",
+    license_url="https://example.com/source"
+)
+```
+
+The model file alone is not enough. Provide dimensions, anchors, clearance
+assumptions, and license/provenance details before the component is used for
+placement.
+
 After registration, pass `project_path` to `search_components`,
 `get_component_manifest`, `add_component_instance`, and
 `execute_component_instance` so project-local metadata is included.

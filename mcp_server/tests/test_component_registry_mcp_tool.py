@@ -124,6 +124,89 @@ async def test_register_project_component_rejects_packaged_component_id(tmp_path
 
 
 @pytest.mark.asyncio
+async def test_import_project_component_asset_copies_and_registers_manifest(tmp_path):
+    from mcp_server.server import (
+        get_component_manifest,
+        import_project_component_asset,
+        search_components,
+    )
+
+    init_project(tmp_path, template="empty")
+    source = tmp_path / "downloads" / "console-table.skp"
+    source.parent.mkdir()
+    source.write_text("skp", encoding="utf-8")
+
+    response = await import_project_component_asset(
+        project_path=str(tmp_path),
+        source_path=str(source),
+        component_id="project_console_table",
+        name="Project console table",
+        category="furniture",
+        subcategory="console_table",
+        width=1200,
+        depth=350,
+        height=800,
+        anchor_back="wall",
+        clearance_front=600,
+        aliases_en=["console table"],
+        tags=["project-local"],
+        license_source="downloaded_file",
+        license_url="https://example.com/model/project-console-table",
+    )
+    data = json.loads(response.text)
+    cached_asset = tmp_path / "assets" / "components" / "project_console_table.skp"
+    manifest_response = await get_component_manifest(
+        "project_console_table",
+        project_path=str(tmp_path),
+    )
+    manifest_data = json.loads(manifest_response.text)
+    search_response = await search_components(
+        query="console table",
+        project_path=str(tmp_path),
+    )
+    search_data = json.loads(search_response.text)
+
+    assert cached_asset.read_text(encoding="utf-8") == "skp"
+    assert data["asset_import"]["skp_path"] == (
+        "assets/components/project_console_table.skp"
+    )
+    assert data["component"]["assets"]["skp_path"] == (
+        "assets/components/project_console_table.skp"
+    )
+    assert data["component"]["license"]["source"] == "downloaded_file"
+    assert manifest_data["component"]["dimensions"]["width"] == 1200
+    assert search_data["components"][0]["id"] == "project_console_table"
+
+
+@pytest.mark.asyncio
+async def test_import_project_component_asset_rejects_existing_cached_asset(tmp_path):
+    from mcp_server.server import import_project_component_asset
+
+    init_project(tmp_path, template="empty")
+    source = tmp_path / "source.skp"
+    source.write_text("skp", encoding="utf-8")
+    cached_asset = tmp_path / "assets" / "components" / "duplicate.skp"
+    cached_asset.write_text("existing", encoding="utf-8")
+
+    response = await import_project_component_asset(
+        project_path=str(tmp_path),
+        source_path=str(source),
+        component_id="duplicate",
+        name="Duplicate asset",
+        category="furniture",
+        width=100,
+        depth=100,
+        height=100,
+    )
+
+    assert response.text == (
+        "Project asset import failed: cached asset already exists: "
+        "assets/components/duplicate.skp"
+    )
+    assert cached_asset.read_text(encoding="utf-8") == "existing"
+
+
+@pytest.mark.asyncio
 async def test_register_selected_component_infers_manifest_from_selection(
     monkeypatch,
     tmp_path,

@@ -65,6 +65,7 @@ runpy.run_module("mcp_server.server", run_name="__main__")
         "get_bridge_info",
         "launch_sketchup_bridge",
         "get_selection_info",
+        "import_project_component_asset",
         "execute_project_model",
         "generate_project_report",
         "list_visual_feedback",
