@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -97,16 +98,17 @@ def install_bridge(
         else default_plugins_dir(sketchup_version).expanduser().resolve()
     )
     target = target_root / "su_bridge"
-
-    if target.exists() and not force:
-        raise FileExistsError(
-            f"Bridge already exists: {target}. Use --force to replace it."
-        )
+    backup_path = None
+    if target.exists():
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        backup_path = target_root / f"su_bridge.backup-{timestamp}"
 
     result = {
         "source": str(source),
         "plugins_dir": str(target_root),
         "target": str(target),
+        "target_exists": target.exists(),
+        "backup_path": str(backup_path) if backup_path else None,
         "dry_run": dry_run,
         "installed": False,
         "force": force,
@@ -116,9 +118,15 @@ def install_bridge(
     if dry_run:
         return result
 
+    if target.exists() and not force:
+        raise FileExistsError(
+            f"Bridge already exists: {target}. Use --force to replace it."
+        )
+
     target_root.mkdir(parents=True, exist_ok=True)
     if target.exists():
-        shutil.rmtree(target)
+        assert backup_path is not None
+        shutil.move(str(target), str(backup_path))
     shutil.copytree(
         source,
         target,

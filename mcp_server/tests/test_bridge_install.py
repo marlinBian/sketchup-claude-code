@@ -1,6 +1,7 @@
 """Tests for SketchUp Ruby bridge installation helpers."""
 
 import json
+from pathlib import Path
 
 from mcp_server.bridge_install import (
     default_plugins_dir,
@@ -85,7 +86,24 @@ def test_install_bridge_dry_run_does_not_copy(tmp_path):
 
     assert result["dry_run"] is True
     assert result["installed"] is False
+    assert result["target_exists"] is False
     assert not (plugins_dir / "su_bridge").exists()
+
+
+def test_install_bridge_dry_run_allows_existing_target(tmp_path):
+    source = make_bridge_source(tmp_path)
+    plugins_dir = tmp_path / "Plugins"
+    install_bridge(plugins_dir=plugins_dir, source_dir=source)
+
+    result = install_bridge(
+        plugins_dir=plugins_dir,
+        source_dir=source,
+        dry_run=True,
+    )
+
+    assert result["dry_run"] is True
+    assert result["installed"] is False
+    assert result["target_exists"] is True
 
 
 def test_install_bridge_requires_force_for_existing_target(tmp_path):
@@ -99,6 +117,26 @@ def test_install_bridge_requires_force_for_existing_target(tmp_path):
         assert "--force" in str(error)
     else:
         raise AssertionError("Expected FileExistsError")
+
+
+def test_install_bridge_force_backs_up_existing_target(tmp_path):
+    source = make_bridge_source(tmp_path)
+    plugins_dir = tmp_path / "Plugins"
+    install_bridge(plugins_dir=plugins_dir, source_dir=source)
+    (plugins_dir / "su_bridge" / "old.txt").write_text("old\n", encoding="utf-8")
+
+    result = install_bridge(
+        plugins_dir=plugins_dir,
+        source_dir=source,
+        force=True,
+    )
+    backup_path = result["backup_path"]
+
+    assert result["installed"] is True
+    assert backup_path is not None
+    assert (plugins_dir / "su_bridge" / "lib" / "su_bridge.rb").exists()
+    assert (plugins_dir / "su_bridge").exists()
+    assert (plugins_dir / Path(backup_path).name / "old.txt").exists()
 
 
 def test_cli_install_bridge_outputs_json(tmp_path, capsys):

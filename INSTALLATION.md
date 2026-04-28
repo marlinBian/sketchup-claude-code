@@ -101,6 +101,10 @@ The command prints the Ruby Console command needed to load and start the bridge.
 After installation, open SketchUp Ruby Console and run that `load ...;
 SuBridge.start` command.
 
+When `--force` replaces an existing `su_bridge` folder, the previous folder is
+moved to a timestamped `su_bridge.backup-*` directory in the same Plugins
+folder.
+
 Manual macOS fallback:
 
 ```bash
