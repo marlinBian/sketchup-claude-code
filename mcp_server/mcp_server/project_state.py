@@ -123,6 +123,7 @@ def summarize_snapshot_manifest(project_path: str | Path) -> dict[str, Any]:
         "exists": path.exists(),
         "valid": False,
         "snapshot_count": 0,
+        "render_count": 0,
         "review_count": 0,
         "action_count": 0,
         "pending_action_count": 0,
@@ -140,6 +141,7 @@ def summarize_snapshot_manifest(project_path: str | Path) -> dict[str, Any]:
         return summary
 
     snapshots = manifest.get("snapshots", [])
+    renders = manifest.get("renders", [])
     reviews = manifest.get("reviews", [])
     pending_actions: list[dict[str, Any]] = []
     accepted_count = 0
@@ -175,11 +177,21 @@ def summarize_snapshot_manifest(project_path: str | Path) -> dict[str, Any]:
             "file": latest.get("file"),
             "created_at": latest.get("created_at"),
         }
+    latest_render = None
+    if renders:
+        latest = renders[-1]
+        latest_render = {
+            "id": latest.get("id"),
+            "file": latest.get("file"),
+            "created_at": latest.get("created_at"),
+            "renderer": latest.get("renderer", {}),
+        }
 
     summary.update(
         {
             "valid": True,
             "snapshot_count": len(snapshots),
+            "render_count": len(renders),
             "review_count": len(reviews),
             "action_count": action_count,
             "pending_action_count": len(pending_actions),
@@ -187,6 +199,7 @@ def summarize_snapshot_manifest(project_path: str | Path) -> dict[str, Any]:
             "applied_action_count": applied_count,
             "pending_actions": pending_actions,
             "latest_snapshot": latest_snapshot,
+            "latest_render": latest_render,
         }
     )
     return summary

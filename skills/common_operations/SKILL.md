@@ -71,6 +71,7 @@ Views, reporting, and versions:
 - `set_camera_view`
 - `capture_design`
 - `capture_project_snapshot`
+- `record_render_artifact`
 - `record_visual_feedback`
 - `list_visual_feedback`
 - `update_visual_feedback_action_status`

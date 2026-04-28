@@ -71,6 +71,7 @@ runpy.run_module("mcp_server.server", run_name="__main__")
         "list_visual_feedback",
         "list_project_versions",
         "plan_project_execution",
+        "record_render_artifact",
         "record_visual_feedback",
         "register_project_component",
         "register_selected_component",

@@ -3,10 +3,12 @@
 import json
 
 from mcp_server.resources.snapshot_manifest_schema import (
+    append_render_artifact_entry,
     append_snapshot_entry,
     append_visual_feedback_entry,
     create_empty_snapshot_manifest,
     load_snapshot_manifest,
+    render_artifact_entry,
     snapshot_entry,
     snapshot_output_path,
     validate_snapshot_manifest,
@@ -23,6 +25,7 @@ def test_empty_snapshot_manifest_is_valid():
     assert errors == []
     assert manifest["snapshots"] == []
     assert manifest["reviews"] == []
+    assert manifest["renders"] == []
 
 
 def test_snapshot_output_path_uses_project_snapshots_dir(tmp_path):
@@ -130,6 +133,52 @@ def test_append_visual_feedback_entry_creates_manifest(tmp_path):
     assert loaded is not None
     assert manifest["reviews"][0]["summary"] == "No visual change needed."
     assert loaded["reviews"][0]["actions"][0]["type"] == "note"
+
+
+def test_render_artifact_entry_is_valid(tmp_path):
+    entry = render_artifact_entry(
+        project_path=tmp_path,
+        artifact_path=tmp_path / "snapshots" / "render.png",
+        prompt="Render this bathroom in a warm minimal style.",
+        renderer_tool="image_renderer",
+        renderer_model="image-2",
+        source_snapshot_id="top",
+        source_snapshot_file="snapshots/top.png",
+        width=1024,
+        height=768,
+        label="warm render",
+        created_at="2026-04-28T01:02:03+00:00",
+    )
+    manifest = create_empty_snapshot_manifest()
+    manifest["renders"].append(entry)
+
+    is_valid, errors = validate_snapshot_manifest(manifest)
+
+    assert is_valid is True
+    assert errors == []
+    assert entry["id"] == "render_warm-render"
+    assert entry["file"] == "snapshots/render.png"
+    assert entry["advisory"] is True
+    assert entry["renderer"] == {"tool": "image_renderer", "model": "image-2"}
+    assert entry["dimensions"] == {"width": 1024, "height": 768}
+
+
+def test_append_render_artifact_entry_creates_manifest(tmp_path):
+    entry = render_artifact_entry(
+        project_path=tmp_path,
+        artifact_path="https://example.com/render.png",
+        prompt="Render the current model.",
+        renderer_tool="external_renderer",
+        created_at="2026-04-28T01:02:03+00:00",
+    )
+
+    manifest = append_render_artifact_entry(tmp_path, entry)
+    loaded, errors = load_snapshot_manifest(tmp_path / "snapshots" / "manifest.json")
+
+    assert errors == []
+    assert loaded is not None
+    assert manifest["renders"][0]["file"] == "https://example.com/render.png"
+    assert loaded["renders"][0]["renderer"]["tool"] == "external_renderer"
 
 
 def test_invalid_manifest_missing_capture_fails_validation():

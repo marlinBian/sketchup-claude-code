@@ -192,6 +192,14 @@ async def test_get_project_state_summarizes_visual_feedback(tmp_path):
             },
         ],
     )
+    await server.record_render_artifact(
+        project_path=str(tmp_path),
+        artifact_path=str(tmp_path / "snapshots" / "warm-render.png"),
+        prompt="Render the bathroom with a warmer material direction.",
+        renderer_tool="image_renderer",
+        renderer_model="image-2",
+        label="warm render",
+    )
     review_id = json.loads(response.text)["visual_feedback"]["id"]
 
     state_response = await get_project_state(str(tmp_path))
@@ -200,6 +208,9 @@ async def test_get_project_state_summarizes_visual_feedback(tmp_path):
     visual_feedback = data["visual_feedback"]
     assert visual_feedback["valid"] is True
     assert visual_feedback["review_count"] == 1
+    assert visual_feedback["render_count"] == 1
+    assert visual_feedback["latest_render"]["id"] == "render_warm-render"
+    assert visual_feedback["latest_render"]["renderer"]["model"] == "image-2"
     assert visual_feedback["action_count"] == 3
     assert visual_feedback["pending_action_count"] == 2
     assert visual_feedback["accepted_action_count"] == 1

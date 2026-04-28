@@ -43,6 +43,9 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
   Use `apply_style`.
 - Capture view: "take a snapshot", "截图".
   Use `capture_project_snapshot` when a project path is available.
+- Record rendered image: "save this render", "记录这张渲染图".
+  Use `record_render_artifact` to preserve renderer/model provenance before
+  interpreting the image as feedback.
 - Save version: "save this version", "保存一下".
   Use `save_project_version` when a project path is available. `save_version`
   is only a compatibility alias.

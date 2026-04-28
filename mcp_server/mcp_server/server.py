@@ -18,9 +18,11 @@ from mcp_server.resources.asset_lock_schema import build_assets_lock
 from mcp_server.resources.component_manifest_schema import validate_component_library
 from mcp_server.resources.design_model_schema import load_design_model, save_design_model
 from mcp_server.resources.snapshot_manifest_schema import (
+    append_render_artifact_entry,
     append_snapshot_entry,
     append_visual_feedback_entry,
     load_snapshot_manifest,
+    render_artifact_entry,
     snapshot_entry,
     snapshot_output_path,
     validate_snapshot_manifest,
@@ -1599,6 +1601,47 @@ async def capture_project_snapshot(
         )
     finally:
         bridge.disconnect()
+
+
+@mcp.tool()
+async def record_render_artifact(
+    project_path: str,
+    artifact_path: str,
+    prompt: str,
+    renderer_tool: str,
+    renderer_model: str | None = None,
+    source_snapshot_id: str | None = None,
+    source_snapshot_file: str | None = None,
+    width: int | None = None,
+    height: int | None = None,
+    label: str | None = None,
+) -> TextContent:
+    """Record an advisory generated or rendered visual artifact."""
+    try:
+        entry = render_artifact_entry(
+            project_path=project_path,
+            artifact_path=artifact_path,
+            prompt=prompt,
+            renderer_tool=renderer_tool,
+            renderer_model=renderer_model,
+            source_snapshot_id=source_snapshot_id,
+            source_snapshot_file=source_snapshot_file,
+            width=width,
+            height=height,
+            label=label,
+        )
+        append_render_artifact_entry(project_path, entry)
+        response_payload = {
+            "render_artifact": entry,
+            "manifest_path": str(snapshot_manifest_path(project_path)),
+            "advisory": True,
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(response_payload, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Render artifact failed: {str(e)}")
 
 
 @mcp.tool()

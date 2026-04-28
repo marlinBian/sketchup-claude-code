@@ -127,6 +127,50 @@ SNAPSHOT_MANIFEST_SCHEMA: dict[str, Any] = {
                 "additionalProperties": False,
             },
         },
+        "renders": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "id",
+                    "file",
+                    "created_at",
+                    "source_model",
+                    "advisory",
+                    "prompt",
+                    "renderer",
+                ],
+                "properties": {
+                    "id": {"type": "string"},
+                    "file": {"type": "string"},
+                    "created_at": {"type": "string"},
+                    "source_model": {"type": "string"},
+                    "advisory": {"type": "boolean"},
+                    "source_snapshot_id": {"type": "string"},
+                    "source_snapshot_file": {"type": "string"},
+                    "prompt": {"type": "string"},
+                    "renderer": {
+                        "type": "object",
+                        "required": ["tool"],
+                        "properties": {
+                            "tool": {"type": "string"},
+                            "model": {"type": "string"},
+                        },
+                        "additionalProperties": False,
+                    },
+                    "dimensions": {
+                        "type": "object",
+                        "required": ["width", "height"],
+                        "properties": {
+                            "width": {"type": "integer", "minimum": 1},
+                            "height": {"type": "integer", "minimum": 1},
+                        },
+                        "additionalProperties": False,
+                    },
+                },
+                "additionalProperties": False,
+            },
+        },
     },
     "additionalProperties": False,
 }
@@ -148,6 +192,7 @@ def create_empty_snapshot_manifest() -> dict[str, Any]:
         "version": "1.0",
         "snapshots": [],
         "reviews": [],
+        "renders": [],
     }
 
 
@@ -244,6 +289,53 @@ def visual_feedback_entry(
     return entry
 
 
+def render_artifact_entry(
+    project_path: str | Path,
+    artifact_path: str | Path,
+    prompt: str,
+    renderer_tool: str,
+    renderer_model: str | None = None,
+    source_snapshot_id: str | None = None,
+    source_snapshot_file: str | None = None,
+    width: int | None = None,
+    height: int | None = None,
+    label: str | None = None,
+    created_at: str | None = None,
+) -> dict[str, Any]:
+    """Create one advisory generated/rendered visual artifact entry."""
+    timestamp = created_at or utc_now()
+    root = Path(project_path)
+    artifact = Path(artifact_path)
+    try:
+        file_value = str(artifact.relative_to(root))
+    except ValueError:
+        file_value = str(artifact_path)
+
+    if bool(width) != bool(height):
+        raise ValueError("render artifact width and height must be provided together.")
+
+    entry: dict[str, Any] = {
+        "id": f"render_{slugify_snapshot_label(label or artifact.stem or timestamp)}",
+        "file": file_value,
+        "created_at": timestamp,
+        "source_model": DESIGN_MODEL_FILENAME,
+        "advisory": True,
+        "prompt": prompt,
+        "renderer": {
+            "tool": renderer_tool,
+        },
+    }
+    if renderer_model:
+        entry["renderer"]["model"] = renderer_model
+    if source_snapshot_id:
+        entry["source_snapshot_id"] = source_snapshot_id
+    if source_snapshot_file:
+        entry["source_snapshot_file"] = source_snapshot_file
+    if width is not None and height is not None:
+        entry["dimensions"] = {"width": int(width), "height": int(height)}
+    return entry
+
+
 def validate_snapshot_manifest(data: dict[str, Any]) -> tuple[bool, list[str]]:
     """Validate a snapshot manifest."""
     if data is None or not isinstance(data, dict):
@@ -327,6 +419,35 @@ def append_visual_feedback_entry(
         manifest = create_empty_snapshot_manifest()
 
     manifest["reviews"].append(entry)
+    is_valid, errors = validate_snapshot_manifest(manifest)
+    if not is_valid:
+        raise ValueError("; ".join(errors))
+
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return manifest
+
+
+def append_render_artifact_entry(
+    project_path: str | Path,
+    entry: dict[str, Any],
+) -> dict[str, Any]:
+    """Append a generated/rendered visual artifact to the project manifest."""
+    manifest_path = snapshot_manifest_path(project_path)
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if manifest_path.exists():
+        manifest, errors = load_snapshot_manifest(manifest_path)
+        if errors:
+            raise ValueError("; ".join(errors))
+        assert manifest is not None
+        manifest.setdefault("renders", [])
+    else:
+        manifest = create_empty_snapshot_manifest()
+
+    manifest["renders"].append(entry)
     is_valid, errors = validate_snapshot_manifest(manifest)
     if not is_valid:
         raise ValueError("; ".join(errors))

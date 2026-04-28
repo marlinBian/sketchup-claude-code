@@ -93,6 +93,33 @@ async def test_record_visual_feedback_appends_structured_review(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_record_render_artifact_appends_advisory_render(tmp_path):
+    from mcp_server import server
+
+    response = await server.record_render_artifact(
+        project_path=str(tmp_path),
+        artifact_path=str(tmp_path / "snapshots" / "warm-render.png"),
+        prompt="Render the bathroom with warm minimal materials.",
+        renderer_tool="image_renderer",
+        renderer_model="image-2",
+        source_snapshot_id="review",
+        width=1024,
+        height=768,
+        label="warm render",
+    )
+    data = json.loads(response.text)
+    manifest = json.loads((tmp_path / "snapshots" / "manifest.json").read_text())
+
+    assert data["advisory"] is True
+    assert data["render_artifact"]["id"] == "render_warm-render"
+    assert data["render_artifact"]["file"] == "snapshots/warm-render.png"
+    assert data["render_artifact"]["renderer"]["model"] == "image-2"
+    assert manifest["renders"][0]["prompt"] == (
+        "Render the bathroom with warm minimal materials."
+    )
+
+
+@pytest.mark.asyncio
 async def test_visual_feedback_can_be_listed_and_marked_applied(tmp_path):
     from mcp_server import server
 

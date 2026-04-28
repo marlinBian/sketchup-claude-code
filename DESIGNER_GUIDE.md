@@ -103,4 +103,10 @@ design project.
 
 Screenshots and generated renderings are review artifacts. They can guide design
 decisions, but `design_model.json` remains the source of truth for the model.
-Snapshot provenance is stored in `snapshots/manifest.json`.
+Snapshot, render, and visual-feedback provenance is stored in
+`snapshots/manifest.json`.
+
+Use `record_render_artifact` for images produced by rendering or image
+generation tools. Use `record_visual_feedback` when a designer wants to convert
+visual observations into explicit component, lighting, material, style, rule, or
+note actions.
