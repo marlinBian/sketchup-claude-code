@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from mcp_server.bridge_install import (
+    bridge_loader_content,
     default_plugins_dir,
     install_bridge,
     installed_sketchup_plugin_dirs,
@@ -27,7 +28,6 @@ def test_default_plugins_dir_uses_requested_sketchup_version(tmp_path):
         tmp_path
         / "Library"
         / "Application Support"
-        / "SketchUp"
         / "SketchUp 2025"
         / "SketchUp"
         / "Plugins"
@@ -39,7 +39,6 @@ def test_installed_sketchup_plugin_dirs_detects_existing_dirs(tmp_path):
         tmp_path
         / "Library"
         / "Application Support"
-        / "SketchUp"
         / "SketchUp 2023"
         / "SketchUp"
         / "Plugins"
@@ -48,7 +47,6 @@ def test_installed_sketchup_plugin_dirs_detects_existing_dirs(tmp_path):
         tmp_path
         / "Library"
         / "Application Support"
-        / "SketchUp"
         / "SketchUp 2025"
         / "SketchUp"
         / "Plugins"
@@ -57,6 +55,21 @@ def test_installed_sketchup_plugin_dirs_detects_existing_dirs(tmp_path):
     newer.mkdir(parents=True)
 
     assert installed_sketchup_plugin_dirs(tmp_path) == [newer, older]
+
+
+def test_installed_sketchup_plugin_dirs_detects_legacy_layout(tmp_path):
+    plugins_dir = (
+        tmp_path
+        / "Library"
+        / "Application Support"
+        / "SketchUp"
+        / "SketchUp 2024"
+        / "SketchUp"
+        / "Plugins"
+    )
+    plugins_dir.mkdir(parents=True)
+
+    assert installed_sketchup_plugin_dirs(tmp_path) == [plugins_dir]
 
 
 def test_install_bridge_copies_source_and_ignores_vendor(tmp_path):
@@ -69,9 +82,12 @@ def test_install_bridge_copies_source_and_ignores_vendor(tmp_path):
     )
 
     assert result["installed"] is True
+    assert result["loader_preference"]["exists"] is False
     assert (plugins_dir / "su_bridge" / "lib" / "su_bridge.rb").exists()
+    assert (plugins_dir / "su_bridge.rb").exists()
     assert not (plugins_dir / "su_bridge" / "vendor").exists()
-    assert "SuBridge.start" in result["load_command"]
+    assert result["load_command"] == f"load '{plugins_dir / 'su_bridge.rb'}'"
+    assert "SuBridge.start" in (plugins_dir / "su_bridge.rb").read_text(encoding="utf-8")
 
 
 def test_install_bridge_dry_run_does_not_copy(tmp_path):
@@ -86,8 +102,11 @@ def test_install_bridge_dry_run_does_not_copy(tmp_path):
 
     assert result["dry_run"] is True
     assert result["installed"] is False
+    assert result["loader_preference"] is None
     assert result["target_exists"] is False
+    assert result["loader_exists"] is False
     assert not (plugins_dir / "su_bridge").exists()
+    assert not (plugins_dir / "su_bridge.rb").exists()
 
 
 def test_install_bridge_dry_run_allows_existing_target(tmp_path):
@@ -104,6 +123,7 @@ def test_install_bridge_dry_run_allows_existing_target(tmp_path):
     assert result["dry_run"] is True
     assert result["installed"] is False
     assert result["target_exists"] is True
+    assert result["loader_exists"] is True
 
 
 def test_install_bridge_requires_force_for_existing_target(tmp_path):
@@ -119,11 +139,26 @@ def test_install_bridge_requires_force_for_existing_target(tmp_path):
         raise AssertionError("Expected FileExistsError")
 
 
+def test_install_bridge_requires_force_for_existing_loader(tmp_path):
+    source = make_bridge_source(tmp_path)
+    plugins_dir = tmp_path / "Plugins"
+    plugins_dir.mkdir()
+    (plugins_dir / "su_bridge.rb").write_text("# old loader\n", encoding="utf-8")
+
+    try:
+        install_bridge(plugins_dir=plugins_dir, source_dir=source)
+    except FileExistsError as error:
+        assert "--force" in str(error)
+    else:
+        raise AssertionError("Expected FileExistsError")
+
+
 def test_install_bridge_force_backs_up_existing_target(tmp_path):
     source = make_bridge_source(tmp_path)
     plugins_dir = tmp_path / "Plugins"
     install_bridge(plugins_dir=plugins_dir, source_dir=source)
     (plugins_dir / "su_bridge" / "old.txt").write_text("old\n", encoding="utf-8")
+    (plugins_dir / "su_bridge.rb").write_text("# old loader\n", encoding="utf-8")
 
     result = install_bridge(
         plugins_dir=plugins_dir,
@@ -131,12 +166,37 @@ def test_install_bridge_force_backs_up_existing_target(tmp_path):
         force=True,
     )
     backup_path = result["backup_path"]
+    loader_backup_path = result["loader_backup_path"]
 
     assert result["installed"] is True
     assert backup_path is not None
+    assert loader_backup_path is not None
     assert (plugins_dir / "su_bridge" / "lib" / "su_bridge.rb").exists()
+    assert (plugins_dir / "su_bridge.rb").exists()
     assert (plugins_dir / "su_bridge").exists()
     assert (plugins_dir / Path(backup_path).name / "old.txt").exists()
+    assert (plugins_dir / Path(loader_backup_path).name).read_text(encoding="utf-8") == "# old loader\n"
+
+
+def test_install_bridge_enables_loader_preference_when_present(tmp_path):
+    source = make_bridge_source(tmp_path)
+    plugins_dir = tmp_path / "SketchUp 2024" / "SketchUp" / "Plugins"
+    plugins_dir.mkdir(parents=True)
+    preferences_path = plugins_dir.parent / "PrivatePreferences.json"
+    preferences_path.write_text(
+        json.dumps({"This Computer Only": {"Extensions": {}}}),
+        encoding="utf-8",
+    )
+
+    result = install_bridge(
+        plugins_dir=plugins_dir,
+        source_dir=source,
+    )
+    preferences = json.loads(preferences_path.read_text(encoding="utf-8"))
+
+    assert result["loader_preference"]["enabled"] is True
+    assert result["loader_preference"]["updated"] is True
+    assert preferences["This Computer Only"]["Extensions"]["su_bridge.rb"] == 1
 
 
 def test_cli_install_bridge_outputs_json(tmp_path, capsys):
@@ -158,3 +218,14 @@ def test_cli_install_bridge_outputs_json(tmp_path, capsys):
     assert exit_code == 0
     assert data["installed"] is True
     assert (plugins_dir / "su_bridge" / "lib" / "su_bridge.rb").exists()
+    assert (plugins_dir / "su_bridge.rb").exists()
+
+
+def test_bridge_loader_content_loads_installed_bridge():
+    content = bridge_loader_content()
+
+    assert 'File.expand_path("su_bridge/lib/su_bridge.rb", __dir__)' in content
+    assert "SketchupExtension.new" in content
+    assert "Sketchup.register_extension" in content
+    assert "require bridge_path" in content
+    assert "SuBridge.start" in content

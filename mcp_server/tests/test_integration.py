@@ -140,7 +140,6 @@ class TestIntegrationCreateOperations:
             entity_id = result["entity_ids"][0]
 
             print(f"Created box: {entity_id}")
-            return entity_id
         finally:
             bridge.disconnect()
 
@@ -175,7 +174,6 @@ class TestIntegrationCreateOperations:
             assert len(result["entity_ids"]) > 0, "Should return entity ID"
 
             print(f"Created wall: {result['entity_ids']}")
-            return result["entity_ids"][0]
         finally:
             bridge.disconnect()
 

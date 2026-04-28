@@ -25,8 +25,19 @@ module SuBridge
     @design_sync ||= DesignModelSync.new
   end
 
+  def self.listener
+    @listener ||= ServerListener.new
+  end
+
   def self.start
+    return listener if listener.running?
+
     design_sync.register_observer
-    ServerListener.new.start
+    listener.start
+    listener
+  end
+
+  def self.stop
+    @listener&.stop
   end
 end

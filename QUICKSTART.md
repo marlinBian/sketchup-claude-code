@@ -33,21 +33,16 @@ uv run --extra dev sketchup-agent validate ~/Design/my-bathroom
 
 ## 2. Start SketchUp Bridge
 
-Install the Ruby bridge into SketchUp:
+Quit SketchUp, then install the Ruby bridge into SketchUp:
 
 ```bash
 cd mcp_server
 uv run --extra dev sketchup-agent install-bridge --sketchup-version 2024 --force
 ```
 
-Then run the printed load command in the SketchUp Ruby Console. It has this
-shape:
-
-```ruby
-load '/path/to/SketchUp/Plugins/su_bridge/lib/su_bridge.rb'; SuBridge.start
-```
-
-The bridge is ready when `/tmp/su_bridge.sock` exists.
+Open SketchUp after installation. The installed `su_bridge.rb` loader starts
+the bridge automatically, and the bridge is ready when `/tmp/su_bridge.sock`
+exists.
 
 ## 3. Start an Agent CLI
 
@@ -115,5 +110,5 @@ cd mcp_server
 uv run --extra dev sketchup-agent smoke /tmp/sah-smoke --force
 ```
 
-Add `--with-bridge` only after SketchUp is open and `SuBridge.start` has created
-`/tmp/su_bridge.sock`.
+Add `--with-bridge` only after SketchUp is open and `/tmp/su_bridge.sock`
+exists.

@@ -83,7 +83,7 @@ through `.codex-plugin/plugin.json` and `.mcp.json`.
 
 ## SketchUp Ruby Bridge
 
-Install or update the bridge from the source checkout:
+Quit SketchUp first, then install or update the bridge from the source checkout:
 
 ```bash
 cd mcp_server
@@ -97,29 +97,33 @@ cd mcp_server
 uv run --extra dev sketchup-agent install-bridge --sketchup-version 2024 --dry-run
 ```
 
-The command prints the Ruby Console command needed to load and start the bridge.
-After installation, open SketchUp Ruby Console and run that `load ...;
-SuBridge.start` command.
+The installer copies the `su_bridge/` runtime folder and writes a
+`su_bridge.rb` loader into the SketchUp Plugins directory. SketchUp loads that
+file on startup, so opening SketchUp should start the bridge automatically. On
+macOS, the installer also enables `su_bridge.rb` in SketchUp's private extension
+preferences when that preferences file already exists.
 
-When `--force` replaces an existing `su_bridge` folder, the previous folder is
-moved to a timestamped `su_bridge.backup-*` directory in the same Plugins
-folder.
+When `--force` replaces an existing install, the previous `su_bridge/` folder
+and `su_bridge.rb` loader are moved to timestamped `*.backup-*` paths in the
+same Plugins folder.
 
 Manual macOS fallback:
 
 ```bash
-mkdir -p ~/Library/Application\ Support/SketchUp/SketchUp\ 2024/SketchUp/Plugins/
-cp -R su_bridge ~/Library/Application\ Support/SketchUp/SketchUp\ 2024/SketchUp/Plugins/
+mkdir -p ~/Library/Application\ Support/SketchUp\ 2024/SketchUp/Plugins/
+cp -R su_bridge ~/Library/Application\ Support/SketchUp\ 2024/SketchUp/Plugins/
+plugins_dir=~/Library/Application\ Support/SketchUp\ 2024/SketchUp/Plugins
+cat > "$plugins_dir/su_bridge.rb" <<'RUBY'
+# frozen_string_literal: true
+
+bridge_path = File.expand_path("su_bridge/lib/su_bridge.rb", __dir__)
+require bridge_path
+SuBridge.start if defined?(SuBridge)
+RUBY
 ```
 
-In the SketchUp Ruby Console:
-
-```ruby
-load '~/Library/Application Support/SketchUp/SketchUp 2024/SketchUp/Plugins/su_bridge/lib/su_bridge.rb'
-SuBridge.start
-```
-
-The bridge should create `/tmp/su_bridge.sock`.
+Open SketchUp after installing. The bridge is ready when
+`/tmp/su_bridge.sock` exists.
 
 ## Maintainer Setup
 
@@ -180,5 +184,6 @@ bundle exec rspec spec/ --format progress
 
 ## Cleanup
 
-Remove the SketchUp bridge by deleting the copied `su_bridge` folder from the
-SketchUp Plugins directory and restarting SketchUp.
+Remove the SketchUp bridge by deleting the copied `su_bridge` folder and
+`su_bridge.rb` loader from the SketchUp Plugins directory, then restart
+SketchUp.

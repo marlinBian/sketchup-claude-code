@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "securerandom"
+require "set"
 
 module SuBridge
   # Routes JSON-RPC requests to appropriate Ruby API handlers.

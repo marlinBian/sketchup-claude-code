@@ -72,8 +72,8 @@ uv run --extra dev sketchup-agent install-bridge --sketchup-version 2024 --dry-r
 
 ## Integration Tests
 
-Live integration tests require SketchUp with `SuBridge.start` running and
-`/tmp/su_bridge.sock` available:
+Live integration tests require SketchUp with the installed bridge loader running
+and `/tmp/su_bridge.sock` available:
 
 ```bash
 cd mcp_server
