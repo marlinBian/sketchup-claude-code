@@ -12,7 +12,7 @@ from mcp_server.project_init import (
 )
 from mcp_server.resources.asset_lock_schema import load_assets_lock
 from mcp_server.resources.component_manifest_schema import load_component_library
-from mcp_server.resources.design_model_schema import load_design_model, save_design_model
+from mcp_server.resources.design_model_schema import load_design_model
 from mcp_server.resources.design_rules_schema import load_design_rules
 from mcp_server.resources.project_files import (
     assets_cache_path,
@@ -26,11 +26,11 @@ from mcp_server.resources.project_files import (
 from mcp_server.resources.snapshot_manifest_schema import load_snapshot_manifest
 from mcp_server.runtime_skills import RUNTIME_SKILL_TARGETS
 from mcp_server.tools.bathroom_planner import plan_bathroom_project
-from mcp_server.tools.project_executor import build_project_execution_plan
-from mcp_server.tools.trace_executor import (
-    execute_bridge_operations,
-    sync_execution_report_to_design_model,
+from mcp_server.tools.project_executor import (
+    build_project_execution_plan,
+    execute_project_execution_plan,
 )
+from mcp_server.tools.trace_executor import execute_bridge_operations
 
 DEFAULT_SMOKE_PROJECT = "/tmp/sketchup-agent-smoke"
 DEFAULT_BRIDGE_SOCKET = "/tmp/su_bridge.sock"
@@ -275,7 +275,11 @@ def run_smoke(
         result["checks"].append(socket_check)
         if socket_check["ok"]:
             try:
-                execution_report = execute_bridge_operations(plan["bridge_operations"])
+                execution_result = execute_project_execution_plan(
+                    root,
+                    execute_fn=execute_bridge_operations,
+                )
+                execution_report = execution_result.get("execution_report", {})
                 result["bridge_execution"] = execution_report
                 result["checks"].append(
                     check_result(
@@ -288,32 +292,24 @@ def run_smoke(
                     )
                 )
                 if execution_report.get("status") == "success":
-                    sync_report = sync_execution_report_to_design_model(
-                        plan["design_model"],
-                        execution_report,
-                    )
-                    design_model_file = find_design_model_path(root)
-                    saved, save_errors = save_design_model(
-                        str(design_model_file),
-                        plan["design_model"],
-                    )
-                    sync_report["saved"] = saved
-                    sync_report["errors"] = save_errors
+                    sync_report = execution_result.get("execution_sync", {})
                     result["execution_sync"] = sync_report
                     result["checks"].append(
                         check_result(
                             "execution_sync",
-                            saved,
+                            bool(sync_report.get("saved")),
                             {
                                 "recorded_operations": len(
-                                    sync_report["recorded_operations"]
+                                    sync_report.get("recorded_operations", [])
                                 ),
                                 "updated_components": len(
-                                    sync_report["updated_components"]
+                                    sync_report.get("updated_components", [])
                                 ),
-                                "updated_lighting": len(sync_report["updated_lighting"]),
+                                "updated_lighting": len(
+                                    sync_report.get("updated_lighting", [])
+                                ),
                             },
-                            save_errors,
+                            sync_report.get("errors", []),
                         )
                     )
             except Exception as error:

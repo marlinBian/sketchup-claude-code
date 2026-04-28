@@ -16,7 +16,10 @@ from mcp_server.project_versions import (
 from mcp_server.project_init import init_project
 from mcp_server.runtime_skills import install_runtime_skills
 from mcp_server.smoke import DEFAULT_SMOKE_PROJECT, run_smoke, validate_project
-from mcp_server.tools.project_executor import build_project_execution_plan
+from mcp_server.tools.project_executor import (
+    build_project_execution_plan,
+    execute_project_execution_plan,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -78,6 +81,45 @@ def build_parser() -> argparse.ArgumentParser:
         help="Omit lighting operations",
     )
     plan_execution_parser.add_argument(
+        "--no-scene-info",
+        action="store_true",
+        help="Omit final scene info operation",
+    )
+
+    execute_project_parser = subparsers.add_parser(
+        "execute-project",
+        help="Execute current project truth against a live SketchUp bridge",
+    )
+    execute_project_parser.add_argument(
+        "project_path",
+        help="Project directory whose design_model.json should be executed",
+    )
+    execute_project_parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="Execute planned operations even when some instances are skipped",
+    )
+    execute_project_parser.add_argument(
+        "--continue-on-error",
+        action="store_true",
+        help="Continue bridge execution after a failed operation",
+    )
+    execute_project_parser.add_argument(
+        "--no-spaces",
+        action="store_true",
+        help="Omit space wall operations",
+    )
+    execute_project_parser.add_argument(
+        "--no-components",
+        action="store_true",
+        help="Omit component placement operations",
+    )
+    execute_project_parser.add_argument(
+        "--no-lighting",
+        action="store_true",
+        help="Omit lighting operations",
+    )
+    execute_project_parser.add_argument(
         "--no-scene-info",
         action="store_true",
         help="Omit final scene info operation",
@@ -283,6 +325,18 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result["skipped_count"] == 0 else 1
+        if args.command == "execute-project":
+            result = execute_project_execution_plan(
+                args.project_path,
+                stop_on_error=not args.continue_on_error,
+                allow_partial=args.allow_partial,
+                include_spaces=not args.no_spaces,
+                include_components=not args.no_components,
+                include_lighting=not args.no_lighting,
+                include_scene_info=not args.no_scene_info,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result.get("status") == "success" else 1
         if args.command == "save-version":
             result = save_project_version(
                 args.project_path,

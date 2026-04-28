@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from mcp_server.resources.design_model_schema import load_design_model
+from mcp_server.resources.design_model_schema import load_design_model, save_design_model
 from mcp_server.resources.project_files import find_design_model_path
 from mcp_server.tools import placement_tools
 from mcp_server.tools.local_library_search import (
     get_component_by_id,
     load_effective_library,
+)
+from mcp_server.tools.trace_executor import (
+    execute_bridge_operations,
+    sync_execution_report_to_design_model,
 )
 
 
@@ -321,3 +326,56 @@ def build_project_execution_plan(
         "bridge_operations": operations,
         "design_model": design_model,
     }
+
+
+def execute_project_execution_plan(
+    project_path: str | Path,
+    *,
+    stop_on_error: bool = True,
+    allow_partial: bool = False,
+    include_spaces: bool = True,
+    include_components: bool = True,
+    include_lighting: bool = True,
+    include_scene_info: bool = True,
+    execute_fn: Callable[..., dict[str, Any]] = execute_bridge_operations,
+) -> dict[str, Any]:
+    """Execute the current project truth and sync successful bridge feedback."""
+    plan = build_project_execution_plan(
+        project_path,
+        include_spaces=include_spaces,
+        include_components=include_components,
+        include_lighting=include_lighting,
+        include_scene_info=include_scene_info,
+    )
+    if plan["skipped_instances"] and not allow_partial:
+        return {
+            **plan,
+            "status": "not_executed",
+            "reason": (
+                "Project execution plan has skipped instances. Pass "
+                "allow_partial=True to execute only planned operations."
+            ),
+        }
+
+    execution_report = execute_fn(
+        plan["bridge_operations"],
+        stop_on_error=stop_on_error,
+    )
+    plan["execution_report"] = execution_report
+    plan["status"] = execution_report.get("status")
+
+    if execution_report.get("status") == "success":
+        sync_report = sync_execution_report_to_design_model(
+            plan["design_model"],
+            execution_report,
+        )
+        design_model_path = find_design_model_path(project_path)
+        saved, save_errors = save_design_model(
+            str(design_model_path),
+            plan["design_model"],
+        )
+        sync_report["saved"] = saved
+        sync_report["errors"] = save_errors
+        plan["execution_sync"] = sync_report
+
+    return plan

@@ -65,6 +65,7 @@ from mcp_server.tools.bathroom_planner import (
 from mcp_server.tools.project_executor import (
     bridge_operation_for_component_instance,
     build_project_execution_plan,
+    execute_project_execution_plan,
 )
 from mcp_server.tools.trace_executor import (
     execute_bridge_operations,
@@ -2410,48 +2411,16 @@ async def execute_project_model(
 ) -> TextContent:
     """Execute current design_model.json truth against the SketchUp bridge."""
     try:
-        plan = build_project_execution_plan(
+        plan = execute_project_execution_plan(
             project_path,
+            stop_on_error=stop_on_error,
+            allow_partial=allow_partial,
             include_spaces=include_spaces,
             include_components=include_components,
             include_lighting=include_lighting,
             include_scene_info=include_scene_info,
+            execute_fn=execute_bridge_operations,
         )
-        if plan["skipped_instances"] and not allow_partial:
-            response = {
-                **plan,
-                "status": "not_executed",
-                "reason": (
-                    "Project execution plan has skipped instances. Pass "
-                    "allow_partial=True to execute only planned operations."
-                ),
-            }
-            return TextContent(
-                type="text",
-                text=json.dumps(response, ensure_ascii=False, indent=2),
-            )
-
-        execution_report = execute_bridge_operations(
-            plan["bridge_operations"],
-            stop_on_error=stop_on_error,
-        )
-        plan["execution_report"] = execution_report
-        plan["status"] = execution_report.get("status")
-
-        if execution_report.get("status") == "success":
-            sync_report = sync_execution_report_to_design_model(
-                plan["design_model"],
-                execution_report,
-            )
-            design_model_path = find_design_model_path(project_path)
-            saved, save_errors = save_design_model(
-                str(design_model_path),
-                plan["design_model"],
-            )
-            sync_report["saved"] = saved
-            sync_report["errors"] = save_errors
-            plan["execution_sync"] = sync_report
-
         return TextContent(
             type="text",
             text=json.dumps(plan, ensure_ascii=False, indent=2),

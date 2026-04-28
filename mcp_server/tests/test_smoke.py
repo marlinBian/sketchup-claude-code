@@ -65,7 +65,7 @@ def test_run_headless_smoke(tmp_path):
 
 
 def test_run_live_smoke_syncs_execution_results(monkeypatch, tmp_path):
-    def fake_execute(operations):
+    def fake_execute(operations, stop_on_error=True):
         results = []
         for operation in operations:
             payload = operation.get("payload", {})

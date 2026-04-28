@@ -8,6 +8,7 @@ from mcp_server.project_init import init_project
 from mcp_server.resources.design_model_schema import load_design_model, save_design_model
 from mcp_server.tools.project_executor import (
     build_project_execution_plan,
+    execute_project_execution_plan,
     resolve_project_skp_path,
 )
 
@@ -65,6 +66,43 @@ def test_resolve_project_skp_path_makes_project_relative_paths_absolute(tmp_path
     resolved = resolve_project_skp_path("assets/components/custom.skp", tmp_path)
 
     assert resolved == str((tmp_path / "assets" / "components" / "custom.skp").resolve())
+
+
+def test_execute_project_execution_plan_accepts_injected_executor(tmp_path):
+    init_project(tmp_path, template="bathroom")
+
+    def fake_execute(operations, stop_on_error=True):
+        results = []
+        for operation in operations:
+            payload = operation.get("payload", {})
+            results.append(
+                {
+                    "operation_id": operation["operation_id"],
+                    "operation_type": operation["operation_type"],
+                    "request": {"params": {"payload": payload}},
+                    "response": {
+                        "result": {
+                            "status": "success",
+                            "entity_ids": [f"su-{operation['operation_id']}"],
+                            "spatial_delta": {},
+                        },
+                    },
+                    "ok": True,
+                }
+            )
+        return {
+            "status": "success",
+            "executed_count": len(operations),
+            "requested_count": len(operations),
+            "results": results,
+        }
+
+    result = execute_project_execution_plan(tmp_path, execute_fn=fake_execute)
+    design_model = json.loads((tmp_path / "design_model.json").read_text(encoding="utf-8"))
+
+    assert result["status"] == "success"
+    assert result["execution_sync"]["saved"] is True
+    assert design_model["components"]["toilet_001"]["entity_id"] == "su-place_toilet_001"
 
 
 @pytest.mark.asyncio
@@ -180,3 +218,30 @@ def test_cli_plan_execution_outputs_bridge_trace(tmp_path, capsys):
     assert exit_code == 0
     assert data["operation_count"] == 10
     assert data["skipped_count"] == 0
+
+
+def test_cli_execute_project_outputs_json(monkeypatch, tmp_path, capsys):
+    from mcp_server import cli
+
+    init_project(tmp_path, template="bathroom")
+
+    def fake_execute_project_execution_plan(project_path, **kwargs):
+        return {
+            "project_path": str(tmp_path.resolve()),
+            "status": "success",
+            "operation_count": 10,
+            "skipped_count": 0,
+        }
+
+    monkeypatch.setattr(
+        cli,
+        "execute_project_execution_plan",
+        fake_execute_project_execution_plan,
+    )
+
+    exit_code = cli.main(["execute-project", str(tmp_path)])
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert data["status"] == "success"

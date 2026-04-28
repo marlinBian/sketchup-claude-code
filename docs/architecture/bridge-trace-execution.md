@@ -92,5 +92,15 @@ cd mcp_server
 uv run --extra dev sketchup-agent plan-execution /tmp/sah-smoke
 ```
 
+When SketchUp is open with the bridge loaded, the same project truth can be
+executed from the CLI:
+
+```bash
+cd mcp_server
+uv run --extra dev sketchup-agent execute-project /tmp/sah-smoke
+```
+
 The default local smoke check also verifies that the initialized project can
-produce a project execution trace with no skipped instances.
+produce a project execution trace with no skipped instances. With
+`--with-bridge`, smoke executes that project trace rather than a separate
+bathroom-only plan.
