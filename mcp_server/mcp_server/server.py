@@ -36,6 +36,9 @@ from mcp_server.resources.project_files import (
     project_component_library_path,
     snapshot_manifest_path,
 )
+from mcp_server.project_assets import (
+    refresh_project_asset_lock as refresh_project_asset_lock_file,
+)
 from mcp_server.project_state import read_project_state
 from mcp_server.smoke import validate_project as run_project_validation
 from mcp_server.tools.local_library_search import (
@@ -818,6 +821,19 @@ async def validate_design_project(project_path: str) -> TextContent:
         )
     except Exception as e:
         return TextContent(type="text", text=f"Project validation failed: {str(e)}")
+
+
+@mcp.tool()
+async def refresh_project_asset_lock(project_path: str) -> TextContent:
+    """Regenerate assets.lock.json from current project truth and components."""
+    try:
+        result = refresh_project_asset_lock_file(project_path)
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Project asset lock failed: {str(e)}")
 
 
 @mcp.tool()

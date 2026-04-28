@@ -111,6 +111,10 @@ add_component_instance(
 
 This updates `design_model.json` and `assets.lock.json`.
 
+If a project-local `.skp` asset is added, exported, or removed after placement,
+use `refresh_project_asset_lock` to regenerate `assets.lock.json` before
+reporting cache status.
+
 Use `place_component` only when the designer wants direct SketchUp execution
 and the bridge is running. If the component was already recorded in
 `design_model.json`, prefer `execute_component_instance` so SketchUp execution

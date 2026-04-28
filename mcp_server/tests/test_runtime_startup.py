@@ -68,6 +68,7 @@ runpy.run_module("mcp_server.server", run_name="__main__")
         "record_visual_feedback",
         "register_project_component",
         "register_selected_component",
+        "refresh_project_asset_lock",
         "update_visual_feedback_action_status",
         "rotate_entity",
         "scale_entity",

@@ -165,6 +165,8 @@ Agents should use machine-readable registry tools for reasoning:
   the current SketchUp selection.
 - `add_component_instance` writes a selected registry component into
   `design_model.json` and refreshes `assets.lock.json`.
+- `refresh_project_asset_lock` regenerates `assets.lock.json` after project
+  assets are added, exported, deleted, or otherwise changed.
 - `execute_component_instance` sends a project-backed component instance to the
   SketchUp bridge and records the returned entity ID when available.
 

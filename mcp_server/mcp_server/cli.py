@@ -6,6 +6,7 @@ import sys
 
 from mcp_server.bridge_install import install_bridge
 from mcp_server.doctor import run_doctor
+from mcp_server.project_assets import refresh_project_asset_lock
 from mcp_server.project_state import read_project_state
 from mcp_server.project_init import init_project
 from mcp_server.runtime_skills import install_runtime_skills
@@ -37,6 +38,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate a design project workspace",
     )
     validate_parser.add_argument("project_path", help="Project directory to validate")
+
+    refresh_assets_parser = subparsers.add_parser(
+        "refresh-assets",
+        help="Regenerate assets.lock.json from current project truth",
+    )
+    refresh_assets_parser.add_argument(
+        "project_path",
+        help="Project directory whose asset lock should be refreshed",
+    )
 
     state_parser = subparsers.add_parser(
         "state",
@@ -184,6 +194,10 @@ def main(argv: list[str] | None = None) -> int:
             result = validate_project(args.project_path)
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result["ok"] else 1
+        if args.command == "refresh-assets":
+            result = refresh_project_asset_lock(args.project_path)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
         if args.command == "state":
             result = read_project_state(
                 args.project_path,
