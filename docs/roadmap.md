@@ -130,6 +130,7 @@ Goal: turn seed components into a maintainable semantic component system.
 - expose `search_components` for JSON component search results
 - expose `get_component_manifest` for canonical component ID lookup
 - expose `add_component_instance` for source-of-truth component insertion
+- expose `execute_component_instance` for project-backed SketchUp execution
 - validate component manifests and project asset locks
 - add project-local cache shape at `assets/components/`
 - populate `assets.lock.json` from used `component_ref` values

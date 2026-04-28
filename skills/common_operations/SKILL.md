@@ -37,6 +37,7 @@ Components and layout:
 - `search_components`
 - `get_component_manifest`
 - `add_component_instance`
+- `execute_component_instance`
 - `search_local_library`
 - `place_component`
 - `move_entity`
@@ -72,6 +73,10 @@ add_component_instance(
     position_y=2000,
     position_z=0
 )
+execute_component_instance(
+    project_path="<project-path>",
+    instance_id="sofa_001"
+)
 place_component(
     component_name="Modern 2-Seat Sofa",
     position_x=3000,
@@ -82,9 +87,9 @@ place_component(
 )
 ```
 
-Use `place_component` only when the designer also wants SketchUp updated and the
-bridge is running. Project truth should be updated with `add_component_instance`
-first when a project path exists.
+Use `execute_component_instance` when the designer also wants SketchUp updated
+and the bridge is running. Use `place_component` only for ad hoc execution
+without a project-backed instance.
 
 ### Create Simple Geometry
 

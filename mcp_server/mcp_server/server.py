@@ -152,6 +152,36 @@ def component_instance_anchors(
     }
 
 
+def bridge_operation_for_component_instance(
+    instance_id: str,
+    instance: dict[str, Any],
+    component: dict[str, Any],
+) -> dict[str, Any]:
+    """Build one bridge operation from a design model component instance."""
+    return {
+        "operation_id": f"place_{instance_id}",
+        "operation_type": "place_component",
+        "payload": {
+            "component_id": component["id"],
+            "instance_id": instance_id,
+            "name": instance["name"],
+            "skp_path": instance.get(
+                "skp_path",
+                placement_tools.resolve_skp_path(
+                    placement_tools.component_skp_path(component)
+                ),
+            ),
+            "procedural_fallback": component["assets"].get("procedural_fallback"),
+            "dimensions": instance["dimensions"],
+            "layer": instance["layer"],
+            "position": instance["position"],
+            "rotation": instance.get("rotation", 0),
+            "scale": 1,
+        },
+        "rollback_on_failure": True,
+    }
+
+
 @mcp.tool()
 async def get_scene_info() -> TextContent:
     """Get current SketchUp scene information.
@@ -1280,6 +1310,78 @@ async def add_component_instance(
         )
     except Exception as e:
         return TextContent(type="text", text=f"Component instance failed: {str(e)}")
+
+
+@mcp.tool()
+async def execute_component_instance(
+    project_path: str,
+    instance_id: str,
+    stop_on_error: bool = True,
+) -> TextContent:
+    """Execute one project component instance against the SketchUp bridge."""
+    try:
+        design_model_path = find_design_model_path(project_path)
+        design_model, model_errors = load_design_model(str(design_model_path))
+        if model_errors or design_model is None:
+            return TextContent(
+                type="text",
+                text=f"Component execution failed: {'; '.join(model_errors)}",
+            )
+
+        instance = design_model.get("components", {}).get(instance_id)
+        if instance is None:
+            return TextContent(
+                type="text",
+                text=f"Component execution failed: instance not found: {instance_id}",
+            )
+
+        component_id = instance.get("component_ref")
+        component = get_component_by_id(component_id)
+        if component is None:
+            return TextContent(
+                type="text",
+                text=f"Component execution failed: component not found: {component_id}",
+            )
+
+        operation = bridge_operation_for_component_instance(
+            instance_id=instance_id,
+            instance=instance,
+            component=component,
+        )
+        execution_report = execute_bridge_operations(
+            [operation],
+            stop_on_error=stop_on_error,
+        )
+
+        entity_id = None
+        if execution_report.get("status") == "success":
+            first_result = execution_report["results"][0]["response"].get("result", {})
+            entity_ids = first_result.get("entity_ids", [])
+            if entity_ids:
+                entity_id = str(entity_ids[0])
+                design_model["components"][instance_id]["entity_id"] = entity_id
+                saved, save_errors = save_design_model(str(design_model_path), design_model)
+                if not saved:
+                    return TextContent(
+                        type="text",
+                        text=f"Component execution failed: {'; '.join(save_errors)}",
+                    )
+
+        response = {
+            "project_path": str(Path(project_path).expanduser().resolve()),
+            "design_model_path": str(design_model_path),
+            "instance_id": instance_id,
+            "component_id": component_id,
+            "entity_id": entity_id,
+            "operation": operation,
+            "execution_report": execution_report,
+        }
+        return TextContent(
+            type="text",
+            text=json.dumps(response, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Component execution failed: {str(e)}")
 
 
 @mcp.tool()

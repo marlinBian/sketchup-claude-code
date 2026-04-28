@@ -105,3 +105,67 @@ async def test_add_component_instance_rejects_unknown_component(tmp_path):
     assert response.text == (
         "Component instance failed: component not found: missing_component"
     )
+
+
+@pytest.mark.asyncio
+async def test_execute_component_instance_sends_bridge_operation_and_saves_entity_id(
+    monkeypatch,
+    tmp_path,
+):
+    from mcp_server import server
+
+    init_project(tmp_path, template="empty")
+    await server.add_component_instance(
+        project_path=str(tmp_path),
+        component_id="mirror_wall_500",
+        position_x=500,
+        position_y=0,
+        instance_id="mirror_custom",
+    )
+
+    captured = {}
+
+    def fake_execute(operations, stop_on_error=True):
+        captured["operations"] = operations
+        captured["stop_on_error"] = stop_on_error
+        return {
+            "status": "success",
+            "executed_count": 1,
+            "requested_count": 1,
+            "results": [
+                {
+                    "operation_id": operations[0]["operation_id"],
+                    "operation_type": "place_component",
+                    "response": {"result": {"entity_ids": ["42"]}},
+                    "ok": True,
+                }
+            ],
+        }
+
+    monkeypatch.setattr(server, "execute_bridge_operations", fake_execute)
+
+    response = await server.execute_component_instance(
+        project_path=str(tmp_path),
+        instance_id="mirror_custom",
+    )
+    data = json.loads(response.text)
+    design_model = json.loads((tmp_path / "design_model.json").read_text())
+
+    assert data["entity_id"] == "42"
+    assert captured["operations"][0]["operation_type"] == "place_component"
+    assert captured["operations"][0]["payload"]["instance_id"] == "mirror_custom"
+    assert design_model["components"]["mirror_custom"]["entity_id"] == "42"
+
+
+@pytest.mark.asyncio
+async def test_execute_component_instance_reports_missing_instance(tmp_path):
+    from mcp_server.server import execute_component_instance
+
+    init_project(tmp_path, template="empty")
+
+    response = await execute_component_instance(
+        project_path=str(tmp_path),
+        instance_id="missing",
+    )
+
+    assert response.text == "Component execution failed: instance not found: missing"

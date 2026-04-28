@@ -68,6 +68,9 @@ Use `add_component_instance` when a selected component should become part of the
 project source of truth. It updates `design_model.json` and refreshes
 `assets.lock.json`.
 
+Use `execute_component_instance` when that project-backed instance should be
+sent to SketchUp and linked to the returned SketchUp entity ID.
+
 Project `assets.lock.json` records the components actually referenced by the
 design project.
 

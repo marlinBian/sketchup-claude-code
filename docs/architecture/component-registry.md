@@ -130,6 +130,8 @@ Agents should use machine-readable registry tools for reasoning:
 - `get_component_manifest` returns one manifest entry by canonical component ID.
 - `add_component_instance` writes a selected registry component into
   `design_model.json` and refreshes `assets.lock.json`.
+- `execute_component_instance` sends a project-backed component instance to the
+  SketchUp bridge and records the returned entity ID when available.
 
 `search_local_library` remains a human-readable summary path for short display
 responses, not the preferred reasoning contract.

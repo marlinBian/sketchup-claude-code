@@ -73,7 +73,19 @@ add_component_instance(
 This updates `design_model.json` and `assets.lock.json`.
 
 Use `place_component` only when the designer wants direct SketchUp execution
-and the bridge is running:
+and the bridge is running. If the component was already recorded in
+`design_model.json`, prefer `execute_component_instance` so SketchUp execution
+uses project truth and can save the returned entity ID:
+
+```python
+execute_component_instance(
+    project_path="<project-path>",
+    instance_id="toilet_001"
+)
+```
+
+Use direct `place_component` only for ad hoc execution without a project
+instance:
 
 ```python
 place_component(
@@ -117,6 +129,7 @@ When reporting placement:
 
 - Say whether SketchUp execution succeeded or failed.
 - Say whether project files were updated when `add_component_instance` was used.
+- Say whether `entity_id` was saved when `execute_component_instance` succeeded.
 - If SketchUp is unavailable, keep the selected component and intended position
   clear so the user can retry after starting the bridge.
 - Do not describe placeholder geometry as a final production model.
