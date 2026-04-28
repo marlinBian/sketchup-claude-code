@@ -3,7 +3,9 @@
 import json
 
 from mcp_server.project_init import init_project
+from mcp_server.project_assets import refresh_project_asset_lock
 from mcp_server import smoke as smoke_module
+from mcp_server.resources.design_model_schema import load_design_model, save_design_model
 from mcp_server.smoke import (
     bridge_socket_check,
     component_refs_from_model,
@@ -31,6 +33,7 @@ def test_validate_project_accepts_initialized_bathroom(tmp_path):
         "codex_runtime_skills",
         "claude_runtime_skills",
         "asset_refs_locked",
+        "project_execution_plan",
     }
 
 
@@ -54,6 +57,33 @@ def test_validate_project_detects_missing_asset_lock_ref(tmp_path):
     )
     assert asset_ref_check["ok"] is False
     assert "toilet_floor_mounted_basic" in asset_ref_check["errors"][0]
+
+
+def test_validate_project_detects_unplannable_project_execution(tmp_path):
+    project_path = tmp_path / "missing-component"
+    init_project(project_path, template="empty")
+    design_model_path = project_path / "design_model.json"
+    design_model, errors = load_design_model(str(design_model_path))
+    assert errors == []
+    assert design_model is not None
+    design_model["components"]["missing_001"] = {
+        "type": "fixture",
+        "name": "Missing fixture",
+        "component_ref": "missing_component",
+        "position": [0, 0, 0],
+    }
+    saved, save_errors = save_design_model(str(design_model_path), design_model)
+    assert saved, save_errors
+    refresh_project_asset_lock(project_path)
+
+    result = validate_project(project_path)
+
+    assert result["ok"] is False
+    execution_check = next(
+        check for check in result["checks"] if check["name"] == "project_execution_plan"
+    )
+    assert execution_check["ok"] is False
+    assert "missing_component" in execution_check["errors"][0]
 
 
 def test_run_headless_smoke(tmp_path):

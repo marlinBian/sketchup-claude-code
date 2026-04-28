@@ -56,7 +56,8 @@ Agents can inspect project state through MCP tools:
   exist
 - `list_project_components` returns component and lighting instances
 - `validate_design_project` runs the same core checks as
-  `sketchup-agent validate`
+  `sketchup-agent validate`, including whether current project truth can produce
+  a bridge execution trace without skipped instances
 - `add_component_instance` records a selected registry component in
   `design_model.json` and refreshes `assets.lock.json`
 - `execute_component_instance` executes a project-backed component instance in

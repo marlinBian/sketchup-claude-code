@@ -187,6 +187,28 @@ def validate_project(project_path: str | Path) -> dict[str, Any]:
             )
         )
 
+    if design_model is not None:
+        try:
+            execution_plan = build_project_execution_plan(root)
+            checks.append(
+                check_result(
+                    "project_execution_plan",
+                    execution_plan["operation_count"] > 0
+                    and execution_plan["skipped_count"] == 0,
+                    {
+                        "bridge_operation_count": execution_plan["operation_count"],
+                        "skipped_count": execution_plan["skipped_count"],
+                    },
+                    [
+                        f"Skipped instances: {execution_plan['skipped_instances']}"
+                    ] if execution_plan["skipped_instances"] else [],
+                )
+            )
+        except Exception as error:
+            checks.append(
+                check_result("project_execution_plan", False, errors=[str(error)])
+            )
+
     return {
         "project_path": str(root),
         "ok": all(check["ok"] for check in checks),
@@ -240,27 +262,16 @@ def run_smoke(
         )
     )
 
-    try:
-        execution_plan = build_project_execution_plan(root)
-        result["project_execution_plan"] = {
-            "bridge_operation_count": execution_plan["operation_count"],
-            "skipped_count": execution_plan["skipped_count"],
-        }
-        result["checks"].append(
-            check_result(
-                "project_execution_plan",
-                execution_plan["operation_count"] > 0
-                and execution_plan["skipped_count"] == 0,
-                result["project_execution_plan"],
-                [
-                    f"Skipped instances: {execution_plan['skipped_instances']}"
-                ] if execution_plan["skipped_instances"] else [],
-            )
-        )
-    except Exception as error:
-        result["checks"].append(
-            check_result("project_execution_plan", False, errors=[str(error)])
-        )
+    execution_plan_check = next(
+        (
+            check
+            for check in project_validation["checks"]
+            if check["name"] == "project_execution_plan"
+        ),
+        None,
+    )
+    if execution_plan_check:
+        result["project_execution_plan"] = execution_plan_check.get("details", {})
 
     plan = plan_bathroom_project(project_name=root.name)
     plan_ok = bool(plan["validation_report"]["valid"]) and len(plan["bridge_operations"]) > 0
