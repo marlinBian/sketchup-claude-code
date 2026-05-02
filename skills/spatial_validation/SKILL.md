@@ -1,3 +1,8 @@
+---
+name: spatial_validation
+description: Check project-backed layouts for geometric plausibility, containment, overlap, and simple clearance issues.
+---
+
 # Spatial Validation Skill
 
 ## Purpose

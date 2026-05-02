@@ -16,6 +16,18 @@ from mcp_server.runtime_skills import (
 )
 
 
+def parse_skill_frontmatter(path):
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert lines[0] == "---", f"{path} must start with YAML frontmatter"
+    end_index = lines.index("---", 1)
+    frontmatter = {}
+    for line in lines[1:end_index]:
+        key, separator, value = line.partition(":")
+        assert separator, f"{path} frontmatter line must be key: value: {line}"
+        frontmatter[key.strip()] = value.strip()
+    return frontmatter
+
+
 def make_runtime_skill_source(tmp_path):
     source = tmp_path / "skills"
     skill_dir = source / "bathroom_planning"
@@ -184,6 +196,10 @@ def test_product_runtime_skills_are_skill_directories():
     assert top_level_markdown == []
     assert skill_dirs
     assert all((path / "SKILL.md").exists() for path in skill_dirs)
+    for skill_dir in skill_dirs:
+        frontmatter = parse_skill_frontmatter(skill_dir / "SKILL.md")
+        assert frontmatter["name"] == skill_dir.name
+        assert frontmatter["description"]
 
 
 def test_wheel_contains_packaged_runtime_skills(tmp_path):

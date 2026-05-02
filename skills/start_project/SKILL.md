@@ -1,3 +1,8 @@
+---
+name: start_project
+description: Start or inspect a clean designer project workspace without operating from the harness source checkout.
+---
+
 # Start Project Runtime Guide
 
 ## Purpose

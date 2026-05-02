@@ -1,3 +1,8 @@
+---
+name: bathroom_planning
+description: Plan and execute the supported bathroom vertical slice with structured project truth, validation, and bridge operations.
+---
+
 # Bathroom Planning Skill
 
 ## Purpose

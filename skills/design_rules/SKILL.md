@@ -1,3 +1,8 @@
+---
+name: design_rules
+description: Read and update project-local or reusable designer design rules for planning preferences and clearances.
+---
+
 # Design Rules Skill
 
 ## Purpose

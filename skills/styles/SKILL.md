@@ -1,3 +1,8 @@
+---
+name: styles
+description: Map designer style language to supported SketchUp style presets and presentation guidance.
+---
+
 # Design Style Presets
 
 ## Purpose

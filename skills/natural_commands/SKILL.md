@@ -1,3 +1,8 @@
+---
+name: natural_commands
+description: Map English and Chinese natural-language design requests to supported SketchUp Agent Harness tools.
+---
+
 # Natural Command Mapping
 
 ## Purpose

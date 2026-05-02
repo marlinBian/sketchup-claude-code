@@ -1,3 +1,8 @@
+---
+name: common_operations
+description: Use implemented SketchUp Agent Harness MCP tools for frequent designer requests while preserving project truth.
+---
+
 # Common Operations Skill
 
 ## Purpose

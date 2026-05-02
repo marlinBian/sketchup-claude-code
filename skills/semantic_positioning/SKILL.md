@@ -1,3 +1,8 @@
+---
+name: semantic_positioning
+description: Resolve supported space-relative and component-relative placement language into project-backed coordinates.
+---
+
 # Semantic Positioning Skill
 
 ## Purpose

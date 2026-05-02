@@ -1,3 +1,8 @@
+---
+name: designer_workflow
+description: Guide designers through project setup, planning, placement, validation, execution, versioning, and visual review workflows.
+---
+
 # Designer Workflow Skill
 
 ## Purpose
