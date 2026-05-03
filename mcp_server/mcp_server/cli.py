@@ -33,6 +33,7 @@ from mcp_server.tools.import_pipeline import (
     list_import_sessions,
     normalize_imported_wall_alignment,
     register_import_source,
+    repair_imported_corner_notch,
     repair_imported_region,
     rescale_imported_model,
 )
@@ -386,6 +387,48 @@ def build_parser() -> argparse.ArgumentParser:
         help="Delete snapped connector walls at or below this plan length in mm",
     )
     normalize_import_parser.add_argument("--notes", help="Repair notes")
+
+    corner_notch_parser = subparsers.add_parser(
+        "repair-import-corner-notch",
+        help="Restore a missing exterior corner notch in imported working truth",
+    )
+    corner_notch_parser.add_argument("project_path", help="Design project directory")
+    corner_notch_parser.add_argument("import_id", help="Import session ID")
+    corner_notch_parser.add_argument(
+        "--corner",
+        required=True,
+        choices=["top_left", "top_right", "bottom_left", "bottom_right"],
+        help="Imported exterior corner to notch",
+    )
+    corner_notch_parser.add_argument(
+        "--horizontal-offset",
+        type=float,
+        required=True,
+        help="Horizontal notch offset in mm",
+    )
+    corner_notch_parser.add_argument(
+        "--vertical-offset",
+        type=float,
+        required=True,
+        help="Vertical notch offset in mm",
+    )
+    corner_notch_parser.add_argument(
+        "--target-space-id",
+        help="Imported space whose footprint should receive the notch",
+    )
+    corner_notch_parser.add_argument(
+        "--coordinate-match-tolerance",
+        type=float,
+        default=1,
+        help="Point-coordinate equality tolerance in mm",
+    )
+    corner_notch_parser.add_argument(
+        "--min-wall-length",
+        type=float,
+        default=20,
+        help="Delete edited boundary walls at or below this plan length in mm",
+    )
+    corner_notch_parser.add_argument("--notes", help="Repair notes")
 
     repair_import_parser = subparsers.add_parser(
         "repair-import",
@@ -755,6 +798,20 @@ def main(argv: list[str] | None = None) -> int:
                 args.project_path,
                 args.import_id,
                 tolerance=args.tolerance,
+                coordinate_match_tolerance=args.coordinate_match_tolerance,
+                min_wall_length=args.min_wall_length,
+                notes=args.notes,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "repair-import-corner-notch":
+            result = repair_imported_corner_notch(
+                args.project_path,
+                args.import_id,
+                corner=args.corner,
+                horizontal_offset=args.horizontal_offset,
+                vertical_offset=args.vertical_offset,
+                target_space_id=args.target_space_id,
                 coordinate_match_tolerance=args.coordinate_match_tolerance,
                 min_wall_length=args.min_wall_length,
                 notes=args.notes,

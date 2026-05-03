@@ -86,6 +86,7 @@ runpy.run_module("mcp_server.server", run_name="__main__")
         "register_import_source",
         "register_project_component",
         "register_selected_component",
+        "repair_imported_corner_notch",
         "repair_imported_region",
         "refresh_project_asset_lock",
         "restore_project_version",

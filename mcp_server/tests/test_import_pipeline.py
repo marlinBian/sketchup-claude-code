@@ -11,6 +11,7 @@ from mcp_server.tools.import_pipeline import (
     import_floorplan_to_model,
     normalize_imported_wall_alignment,
     register_import_source,
+    repair_imported_corner_notch,
     repair_imported_region,
     rescale_imported_model,
     review_model_against_import_source,
@@ -310,6 +311,75 @@ def test_normalize_imported_wall_alignment_snaps_boundary_offsets(tmp_path):
     assert design_model["metadata"]["execution_sync"]["status"] == "dirty"
     assert manifest["status"] == "repaired"
     assert manifest["repair_history"][-1]["action"] == "normalize_imported_wall_alignment"
+
+
+def test_repair_imported_corner_notch_restores_missing_step(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path)
+    import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        width=6000,
+        depth=4000,
+    )
+    design_model = json.loads((project / "design_model.json").read_text(encoding="utf-8"))
+    design_model["openings"]["import_001_door_001"]["host_wall"] = "import_001_wall_west"
+    design_model["openings"]["import_001_door_001"]["offset"] = 2500
+    (project / "design_model.json").write_text(
+        json.dumps(design_model, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = repair_imported_corner_notch(
+        project,
+        "import_001",
+        corner="top_left",
+        horizontal_offset=500,
+        vertical_offset=600,
+        target_space_id="import_001_space_001",
+        notes="Restore top-left exterior notch from source review.",
+    )
+    design_model = json.loads((project / "design_model.json").read_text(encoding="utf-8"))
+    manifest = json.loads(
+        (project / "imports" / "import_001" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    plan = build_project_execution_plan(project)
+
+    assert result["status"] == "repaired"
+    assert result["added_walls"] == [
+        "import_001_top_left_notch_vertical",
+        "import_001_top_left_notch_horizontal",
+    ]
+    assert design_model["walls"]["import_001_wall_north"]["path"] == [
+        [6000, 4000, 0],
+        [500.0, 4000.0, 0.0],
+    ]
+    assert design_model["walls"]["import_001_wall_west"]["path"] == [
+        [0.0, 3400.0, 0.0],
+        [0, 0, 0],
+    ]
+    assert design_model["spaces"]["import_001_space_001"]["footprint"] == [
+        [500.0, 4000.0, 0.0],
+        [6000.0, 4000.0, 0.0],
+        [6000.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [0.0, 3400.0, 0.0],
+        [500.0, 3400.0, 0.0],
+    ]
+    assert design_model["openings"]["import_001_door_001"]["offset"] == 1900.0
+    assert "exterior_corner_notch_repaired" in (
+        design_model["import_sessions"]["import_001"]["quality_flags"]
+    )
+    assert "import_001_top_left_notch_vertical" in (
+        design_model["import_sessions"]["import_001"]["generated_model"]["wall_ids"]
+    )
+    assert design_model["metadata"]["execution_sync"]["status"] == "dirty"
+    assert manifest["repair_history"][-1]["action"] == "repair_imported_corner_notch"
+    assert plan["skipped_count"] == 0
 
 
 def test_review_and_repair_imported_region_update_source_backed_truth(tmp_path):

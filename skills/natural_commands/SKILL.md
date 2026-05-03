@@ -47,6 +47,9 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
   offset", "这条外墙应该是直的". Use
   `normalize_imported_wall_alignment` when imported near-boundary wall segments
   are offset by a small wall-thickness-sized step.
+- Repair imported exterior corner notch: "the top-left corner notch is
+  missing", "左上角折角漏掉了". Use `repair_imported_corner_notch` when a
+  source-backed exterior stepped corner is missing from generated truth.
 - Search components: "find a sofa", "找一个马桶".
   Use `search_components` for machine-readable registry data. Use
   `search_local_library` only for a short display summary.

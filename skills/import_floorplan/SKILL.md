@@ -94,11 +94,16 @@ whole import by default.
    import ID before using a broader repair. This snaps near-boundary wall
    segments onto shared exterior lines, removes zero-length connector walls, and
    marks the project for clean replay.
-3. Call `repair_imported_region` with the specific correction, such as target
+3. If the source shows an exterior corner notch or stepped corner that is
+   missing from the generated model, call `repair_imported_corner_notch` with the
+   corner, horizontal/vertical offsets in millimeters, and the affected imported
+   space ID when known. This splits the boundary walls, adds the return walls,
+   updates the space footprint, and records source-backed repair history.
+4. Call `repair_imported_region` with the specific correction, such as target
    dimensions or wall thickness, when the issue is not an exterior alignment
    normalization case.
-4. Call `plan_project_execution` again.
-5. Execute the project with `clean_before_execute=true` and `clean_scope="all"`
+5. Call `plan_project_execution` again.
+6. Execute the project with `clean_before_execute=true` and `clean_scope="all"`
    when the designer wants SketchUp updated, so stale geometry does not remain
    beside the repaired truth.
 
@@ -106,6 +111,10 @@ Example prompts:
 
 ```text
 This wall is too thick compared with the source. Set imported walls to 180 mm.
+```
+
+```text
+The top-left exterior corner has a missing notch. Restore it from the source.
 ```
 
 ```text

@@ -135,6 +135,39 @@ async def test_normalize_imported_wall_alignment_tool_repairs_offset(tmp_path):
     assert "import_001_wall_east_step" in data["removed_walls"]
 
 
+@pytest.mark.asyncio
+async def test_repair_imported_corner_notch_tool_restores_step(tmp_path):
+    from mcp_server import server
+
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path)
+    await server.import_floorplan_to_model(
+        project_path=str(project),
+        source_path=str(source),
+        import_id="import_001",
+        width=6000,
+        depth=4000,
+    )
+
+    response = await server.repair_imported_corner_notch(
+        project_path=str(project),
+        import_id="import_001",
+        corner="top_left",
+        horizontal_offset=500,
+        vertical_offset=600,
+        target_space_id="import_001_space_001",
+    )
+    data = json.loads(response.text)
+
+    assert data["status"] == "repaired"
+    assert data["added_walls"] == [
+        "import_001_top_left_notch_vertical",
+        "import_001_top_left_notch_horizontal",
+    ]
+    assert "import_001_space_001" in data["changed_spaces"]
+
+
 def test_cli_import_floorplan_summary_and_rescale(tmp_path, capsys):
     project = tmp_path / "project"
     init_project(project, template="empty")
@@ -166,6 +199,22 @@ def test_cli_import_floorplan_summary_and_rescale(tmp_path, capsys):
         ]
     )
     normalize_output = json.loads(capsys.readouterr().out)
+    corner_notch_code = main(
+        [
+            "repair-import-corner-notch",
+            str(project),
+            "import_001",
+            "--corner",
+            "top_left",
+            "--horizontal-offset",
+            "500",
+            "--vertical-offset",
+            "600",
+            "--target-space-id",
+            "import_001_space_001",
+        ]
+    )
+    corner_notch_output = json.loads(capsys.readouterr().out)
     summary_code = main(["import-summary", str(project), "--import-id", "import_001"])
     summary_output = json.loads(capsys.readouterr().out)
     list_code = main(["list-imports", str(project)])
@@ -183,11 +232,13 @@ def test_cli_import_floorplan_summary_and_rescale(tmp_path, capsys):
 
     assert exit_code == 0
     assert normalize_code == 0
+    assert corner_notch_code == 0
     assert summary_code == 0
     assert list_code == 0
     assert rescale_code == 0
     assert import_output["status"] == "imported"
     assert normalize_output["status"] == "normalized"
+    assert corner_notch_output["status"] == "repaired"
     assert summary_output["count"] == 1
     assert list_output["imports"][0]["import_id"] == "import_001"
     assert rescale_output["scale_x"] == 1.5

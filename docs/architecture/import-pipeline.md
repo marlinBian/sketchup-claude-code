@@ -196,6 +196,7 @@ The first tool set should be small and structured:
 - `get_import_summary`
 - `rescale_imported_model`
 - `normalize_imported_wall_alignment`
+- `repair_imported_corner_notch`
 - `review_model_against_import_source`
 - `repair_imported_region`
 - `list_import_sessions`
@@ -231,6 +232,12 @@ that case is `normalize_imported_wall_alignment`: it snaps near-boundary importe
 wall segments onto shared exterior lines, removes zero-length connector walls,
 records the repair in the manifest, and marks project truth for clean replay.
 
+When the first generated truth simplifies an exterior stepped corner into a
+rectangle, the repair path is `repair_imported_corner_notch`: it splits the two
+boundary walls at the selected corner, adds the vertical and horizontal return
+walls, updates the affected imported space footprint when provided, records
+source-backed repair history, and marks project truth for clean replay.
+
 ## Validation Direction
 
 Validation should check import quality without blocking momentum:
@@ -261,8 +268,8 @@ interpretation:
 5. Write imported `spaces`, `walls`, `openings`, `import_sessions`, and
    `quality_flags` into `design_model.json`.
 6. Produce a headless bridge trace for imported walls and opening placeholders.
-7. Expose list, summary, rescale, wall-alignment normalization, review, and
-   repair tools through MCP and CLI.
+7. Expose list, summary, rescale, wall-alignment normalization, corner-notch
+   repair, review, and repair tools through MCP and CLI.
 
 Richer extractors should replace only the interpretation stage. They must keep
 the same manifest, generated truth, quality flag, and repair contracts.

@@ -31,6 +31,7 @@ DEFAULT_WALL_THICKNESS = 120.0
 DEFAULT_ALIGNMENT_TOLERANCE = 250.0
 DEFAULT_COORDINATE_MATCH_TOLERANCE = 1.0
 DEFAULT_MIN_WALL_LENGTH = 20.0
+VALID_CORNER_NOTCHES = {"top_left", "top_right", "bottom_left", "bottom_right"}
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".heic"}
 CAD_EXTENSIONS = {".dwg", ".dxf"}
@@ -831,6 +832,212 @@ def add_import_quality_flag(
     )
 
 
+def point_matches(
+    point: list[Any],
+    target: list[float],
+    *,
+    tolerance: float,
+) -> bool:
+    """Return whether two plan points are effectively equal."""
+    return (
+        abs(float(point[0]) - target[0]) <= tolerance
+        and abs(float(point[1]) - target[1]) <= tolerance
+    )
+
+
+def replace_wall_endpoint(
+    wall: dict[str, Any],
+    old_point: list[float],
+    new_point: list[float],
+    *,
+    tolerance: float,
+) -> tuple[bool, float]:
+    """Replace one matching wall endpoint and return start-offset adjustment."""
+    path = wall.get("path", [])
+    if not isinstance(path, list) or len(path) < 2:
+        return False, 0.0
+    for index in (0, len(path) - 1):
+        if point_matches(path[index], old_point, tolerance=tolerance):
+            offset_adjustment = wall_length([old_point, new_point]) if index == 0 else 0.0
+            path[index] = [float(new_point[0]), float(new_point[1]), float(path[index][2])]
+            wall["path"] = path
+            wall.pop("execution", None)
+            return True, offset_adjustment
+    return False, 0.0
+
+
+def find_boundary_wall_at_corner(
+    design_model: dict[str, Any],
+    import_id: str,
+    corner_point: list[float],
+    axis: str,
+    *,
+    coordinate_match_tolerance: float,
+) -> tuple[str, dict[str, Any]] | None:
+    """Find an imported boundary wall endpoint at one corner."""
+    for wall_id, wall in design_model.get("walls", {}).items():
+        source = wall.get("source", {}) if isinstance(wall, dict) else {}
+        if not isinstance(source, dict) or source.get("import_id") != import_id:
+            continue
+        path = wall.get("path", [])
+        if wall_axis(path) != axis:
+            continue
+        if any(
+            point_matches(point, corner_point, tolerance=coordinate_match_tolerance)
+            for point in (path[0], path[-1])
+        ):
+            return wall_id, wall
+    return None
+
+
+def imported_plan_bounds(
+    design_model: dict[str, Any],
+    import_id: str,
+) -> tuple[float, float, float, float]:
+    """Return imported model plan bounds as min_x, max_x, min_y, max_y."""
+    x_bounds = imported_axis_bounds(design_model, import_id, "x")
+    y_bounds = imported_axis_bounds(design_model, import_id, "y")
+    if x_bounds is None or y_bounds is None:
+        raise ValueError(f"no imported walls or spaces found for import_id: {import_id}")
+    return x_bounds[0], x_bounds[1], y_bounds[0], y_bounds[1]
+
+
+def corner_notch_geometry(
+    bounds: tuple[float, float, float, float],
+    corner: str,
+    horizontal_offset: float,
+    vertical_offset: float,
+) -> dict[str, Any]:
+    """Return wall edit geometry for an exterior corner notch."""
+    min_x, max_x, min_y, max_y = bounds
+    if corner == "top_left":
+        corner_point = [min_x, max_y, 0.0]
+        top_endpoint = [min_x + horizontal_offset, max_y, 0.0]
+        side_endpoint = [min_x, max_y - vertical_offset, 0.0]
+        return {
+            "corner_point": corner_point,
+            "top_endpoint": top_endpoint,
+            "side_endpoint": side_endpoint,
+            "vertical_return": [top_endpoint, [min_x + horizontal_offset, max_y - vertical_offset, 0.0]],
+            "horizontal_return": [[min_x + horizontal_offset, max_y - vertical_offset, 0.0], side_endpoint],
+            "top_axis": "y",
+            "side_axis": "x",
+        }
+    if corner == "top_right":
+        corner_point = [max_x, max_y, 0.0]
+        top_endpoint = [max_x - horizontal_offset, max_y, 0.0]
+        side_endpoint = [max_x, max_y - vertical_offset, 0.0]
+        return {
+            "corner_point": corner_point,
+            "top_endpoint": top_endpoint,
+            "side_endpoint": side_endpoint,
+            "vertical_return": [top_endpoint, [max_x - horizontal_offset, max_y - vertical_offset, 0.0]],
+            "horizontal_return": [[max_x - horizontal_offset, max_y - vertical_offset, 0.0], side_endpoint],
+            "top_axis": "y",
+            "side_axis": "x",
+        }
+    if corner == "bottom_left":
+        corner_point = [min_x, min_y, 0.0]
+        bottom_endpoint = [min_x + horizontal_offset, min_y, 0.0]
+        side_endpoint = [min_x, min_y + vertical_offset, 0.0]
+        return {
+            "corner_point": corner_point,
+            "top_endpoint": bottom_endpoint,
+            "side_endpoint": side_endpoint,
+            "vertical_return": [bottom_endpoint, [min_x + horizontal_offset, min_y + vertical_offset, 0.0]],
+            "horizontal_return": [[min_x + horizontal_offset, min_y + vertical_offset, 0.0], side_endpoint],
+            "top_axis": "y",
+            "side_axis": "x",
+        }
+    if corner == "bottom_right":
+        corner_point = [max_x, min_y, 0.0]
+        bottom_endpoint = [max_x - horizontal_offset, min_y, 0.0]
+        side_endpoint = [max_x, min_y + vertical_offset, 0.0]
+        return {
+            "corner_point": corner_point,
+            "top_endpoint": bottom_endpoint,
+            "side_endpoint": side_endpoint,
+            "vertical_return": [bottom_endpoint, [max_x - horizontal_offset, min_y + vertical_offset, 0.0]],
+            "horizontal_return": [[max_x - horizontal_offset, min_y + vertical_offset, 0.0], side_endpoint],
+            "top_axis": "y",
+            "side_axis": "x",
+        }
+    raise ValueError(f"unsupported corner: {corner}")
+
+
+def wall_payload_from_reference(
+    wall_id: str,
+    path: list[list[float]],
+    reference_wall: dict[str, Any],
+) -> dict[str, Any]:
+    """Create an imported wall payload from an existing imported wall."""
+    return {
+        "path": path,
+        "height": float(reference_wall.get("height", DEFAULT_WALL_HEIGHT)),
+        "thickness": float(reference_wall.get("thickness", DEFAULT_WALL_THICKNESS)),
+        "alignment": reference_wall.get("alignment", "inner"),
+        "layer": reference_wall.get("layer", "Walls"),
+        "source": reference_wall.get("source", {}),
+    }
+
+
+def notched_space_footprint(
+    space: dict[str, Any],
+    corner: str,
+    horizontal_offset: float,
+    vertical_offset: float,
+) -> list[list[float]]:
+    """Return a rectangular space footprint with one exterior corner notched."""
+    bounds = space.get("bounds", {})
+    if not isinstance(bounds, dict) or "min" not in bounds or "max" not in bounds:
+        raise ValueError("target space must have rectangular bounds.")
+    min_x, min_y, min_z = [float(value) for value in bounds["min"]]
+    max_x, max_y, _max_z = [float(value) for value in bounds["max"]]
+    z = min_z
+    if horizontal_offset >= max_x - min_x:
+        raise ValueError("horizontal_offset must be smaller than target space width.")
+    if vertical_offset >= max_y - min_y:
+        raise ValueError("vertical_offset must be smaller than target space depth.")
+
+    if corner == "top_left":
+        return [
+            [min_x + horizontal_offset, max_y, z],
+            [max_x, max_y, z],
+            [max_x, min_y, z],
+            [min_x, min_y, z],
+            [min_x, max_y - vertical_offset, z],
+            [min_x + horizontal_offset, max_y - vertical_offset, z],
+        ]
+    if corner == "top_right":
+        return [
+            [min_x, max_y, z],
+            [max_x - horizontal_offset, max_y, z],
+            [max_x - horizontal_offset, max_y - vertical_offset, z],
+            [max_x, max_y - vertical_offset, z],
+            [max_x, min_y, z],
+            [min_x, min_y, z],
+        ]
+    if corner == "bottom_left":
+        return [
+            [min_x, max_y, z],
+            [max_x, max_y, z],
+            [max_x, min_y, z],
+            [min_x + horizontal_offset, min_y, z],
+            [min_x + horizontal_offset, min_y + vertical_offset, z],
+            [min_x, min_y + vertical_offset, z],
+        ]
+    if corner == "bottom_right":
+        return [
+            [min_x, max_y, z],
+            [max_x, max_y, z],
+            [max_x, min_y + vertical_offset, z],
+            [max_x - horizontal_offset, min_y + vertical_offset, z],
+            [max_x - horizontal_offset, min_y, z],
+            [min_x, min_y, z],
+        ]
+    raise ValueError(f"unsupported corner: {corner}")
+
+
 def normalize_imported_wall_alignment(
     project_path: str | Path,
     import_id: str,
@@ -1056,6 +1263,277 @@ def normalize_imported_wall_alignment(
         "snap_maps": action["snap_maps"],
         "coordinate_match_tolerance": coordinate_match_tolerance,
         "changed_walls": changed_walls,
+        "removed_walls": removed_walls,
+        "changed_spaces": changed_spaces,
+        "changed_openings": changed_openings,
+        "changed_model_ids": changed_model_ids,
+        "active_changed_model_ids": active_changed_model_ids,
+        "quality_flags": session.get("quality_flags", []),
+    }
+
+
+def repair_imported_corner_notch(
+    project_path: str | Path,
+    import_id: str,
+    *,
+    corner: str,
+    horizontal_offset: float,
+    vertical_offset: float,
+    target_space_id: str | None = None,
+    coordinate_match_tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
+    min_wall_length: float = DEFAULT_MIN_WALL_LENGTH,
+    notes: str | None = None,
+) -> dict[str, Any]:
+    """Add a source-backed exterior corner notch to imported working truth."""
+    if corner not in VALID_CORNER_NOTCHES:
+        raise ValueError(f"corner must be one of: {', '.join(sorted(VALID_CORNER_NOTCHES))}")
+    if horizontal_offset <= 0:
+        raise ValueError("horizontal_offset must be positive.")
+    if vertical_offset <= 0:
+        raise ValueError("vertical_offset must be positive.")
+    if coordinate_match_tolerance <= 0:
+        raise ValueError("coordinate_match_tolerance must be positive.")
+    if min_wall_length < 0:
+        raise ValueError("min_wall_length must be non-negative.")
+
+    root = Path(project_path).expanduser().resolve()
+    chosen_id = import_safe_id(import_id)
+    design_model_path = find_design_model_path(root)
+    design_model, errors = load_design_model(str(design_model_path))
+    if errors or design_model is None:
+        raise ValueError("; ".join(errors))
+    session = design_model.get("import_sessions", {}).get(chosen_id)
+    if not isinstance(session, dict):
+        raise ValueError(f"import session not found in design_model.json: {chosen_id}")
+
+    bounds = imported_plan_bounds(design_model, chosen_id)
+    min_x, max_x, min_y, max_y = bounds
+    if horizontal_offset >= max_x - min_x:
+        raise ValueError("horizontal_offset must be smaller than imported width.")
+    if vertical_offset >= max_y - min_y:
+        raise ValueError("vertical_offset must be smaller than imported depth.")
+
+    geometry = corner_notch_geometry(bounds, corner, horizontal_offset, vertical_offset)
+    corner_point = geometry["corner_point"]
+    horizontal_wall = find_boundary_wall_at_corner(
+        design_model,
+        chosen_id,
+        corner_point,
+        geometry["top_axis"],
+        coordinate_match_tolerance=coordinate_match_tolerance,
+    )
+    side_wall = find_boundary_wall_at_corner(
+        design_model,
+        chosen_id,
+        corner_point,
+        geometry["side_axis"],
+        coordinate_match_tolerance=coordinate_match_tolerance,
+    )
+    if horizontal_wall is None or side_wall is None:
+        raise ValueError(
+            "corner boundary walls not found; run source review before corner repair."
+        )
+
+    horizontal_wall_id, horizontal_wall_payload = horizontal_wall
+    side_wall_id, side_wall_payload = side_wall
+    changed_walls: list[str] = []
+    removed_walls: list[str] = []
+    added_walls: list[str] = []
+    changed_spaces: list[str] = []
+    changed_openings: list[str] = []
+    opening_offset_adjustments: dict[str, float] = {}
+
+    horizontal_changed, horizontal_offset_adjustment = replace_wall_endpoint(
+        horizontal_wall_payload,
+        corner_point,
+        geometry["top_endpoint"],
+        tolerance=coordinate_match_tolerance,
+    )
+    if horizontal_changed:
+        changed_walls.append(horizontal_wall_id)
+        if horizontal_offset_adjustment:
+            opening_offset_adjustments[horizontal_wall_id] = horizontal_offset_adjustment
+    side_changed, side_offset_adjustment = replace_wall_endpoint(
+        side_wall_payload,
+        corner_point,
+        geometry["side_endpoint"],
+        tolerance=coordinate_match_tolerance,
+    )
+    if side_changed:
+        changed_walls.append(side_wall_id)
+        if side_offset_adjustment:
+            opening_offset_adjustments[side_wall_id] = side_offset_adjustment
+
+    for wall_id, wall in (
+        (horizontal_wall_id, horizontal_wall_payload),
+        (side_wall_id, side_wall_payload),
+    ):
+        if wall_length(wall.get("path", [])) <= min_wall_length:
+            removed_walls.append(wall_id)
+            design_model["walls"].pop(wall_id, None)
+
+    vertical_wall_id = f"{chosen_id}_{corner}_notch_vertical"
+    horizontal_return_wall_id = f"{chosen_id}_{corner}_notch_horizontal"
+    reference_wall = horizontal_wall_payload or side_wall_payload
+    design_model.setdefault("walls", {})[vertical_wall_id] = wall_payload_from_reference(
+        vertical_wall_id,
+        geometry["vertical_return"],
+        reference_wall,
+    )
+    design_model["walls"][horizontal_return_wall_id] = wall_payload_from_reference(
+        horizontal_return_wall_id,
+        geometry["horizontal_return"],
+        reference_wall,
+    )
+    added_walls.extend([vertical_wall_id, horizontal_return_wall_id])
+
+    if target_space_id:
+        space = design_model.get("spaces", {}).get(target_space_id)
+        if not isinstance(space, dict):
+            raise ValueError(f"target space not found: {target_space_id}")
+        source = space.get("source", {})
+        if not isinstance(source, dict) or source.get("import_id") != chosen_id:
+            raise ValueError("target_space_id must belong to the selected import session.")
+        space["footprint"] = notched_space_footprint(
+            space,
+            corner,
+            horizontal_offset,
+            vertical_offset,
+        )
+        space.pop("execution", None)
+        changed_spaces.append(target_space_id)
+
+    if changed_walls or added_walls or removed_walls or changed_spaces:
+        for opening_id in imported_ids_in_model(design_model, chosen_id)["openings"]:
+            opening = design_model.get("openings", {}).get(opening_id)
+            if isinstance(opening, dict):
+                offset_adjustment = opening_offset_adjustments.get(opening.get("host_wall"))
+                if offset_adjustment and "offset" in opening:
+                    opening["offset"] = max(0.0, float(opening["offset"]) - offset_adjustment)
+                opening.pop("execution", None)
+                changed_openings.append(opening_id)
+
+    changed_model_ids = list(
+        dict.fromkeys(
+            [
+                *changed_spaces,
+                *changed_walls,
+                *added_walls,
+                *removed_walls,
+                *changed_openings,
+            ]
+        )
+    )
+    active_changed_model_ids = [
+        entity_id for entity_id in changed_model_ids if entity_id not in removed_walls
+    ]
+
+    generated_model = session.setdefault("generated_model", {})
+    if isinstance(generated_model.get("wall_ids"), list):
+        generated_model["wall_ids"] = [
+            wall_id for wall_id in generated_model["wall_ids"] if wall_id not in removed_walls
+        ]
+        for wall_id in added_walls:
+            if wall_id not in generated_model["wall_ids"]:
+                generated_model["wall_ids"].append(wall_id)
+    if isinstance(generated_model.get("changed_model_ids"), list):
+        generated_model["changed_model_ids"] = [
+            entity_id
+            for entity_id in generated_model["changed_model_ids"]
+            if entity_id not in removed_walls
+        ]
+        for entity_id in active_changed_model_ids:
+            if entity_id not in generated_model["changed_model_ids"]:
+                generated_model["changed_model_ids"].append(entity_id)
+
+    action = {
+        "created_at": utc_now(),
+        "action": "repair_imported_corner_notch",
+        "corner": corner,
+        "horizontal_offset": horizontal_offset,
+        "vertical_offset": vertical_offset,
+        "coordinate_match_tolerance": coordinate_match_tolerance,
+        "min_wall_length": min_wall_length,
+        "target_space_id": target_space_id,
+        "changed_walls": changed_walls,
+        "added_walls": added_walls,
+        "removed_walls": removed_walls,
+        "changed_spaces": changed_spaces,
+        "changed_openings": changed_openings,
+        "opening_offset_adjustments": opening_offset_adjustments,
+        "notes": notes,
+    }
+
+    add_import_quality_flag(
+        design_model,
+        chosen_id,
+        "exterior_corner_notch_repaired",
+        message="Imported exterior corner notch was restored from source-backed repair.",
+    )
+    add_import_quality_flag(
+        design_model,
+        chosen_id,
+        "source_backed_boundary_step_added",
+        severity="warning",
+        message="A missing source-backed exterior boundary step was added to working truth.",
+    )
+    design_model["updated_at"] = utc_now()
+    mark_execution_dirty(
+        design_model,
+        reason="import_corner_notch_repaired",
+        source="repair_imported_corner_notch",
+        details={"import_id": chosen_id, "changed_model_ids": changed_model_ids},
+    )
+
+    saved, save_errors = save_design_model(str(design_model_path), design_model)
+    if not saved:
+        raise ValueError("; ".join(save_errors))
+
+    manifest, manifest_file = load_project_import_manifest(root, chosen_id)
+    manifest["status"] = "repaired"
+    manifest["quality_flags"] = dedupe_quality_flags(
+        [
+            *manifest.get("quality_flags", []),
+            "exterior_corner_notch_repaired",
+            "source_backed_boundary_step_added",
+        ]
+    )
+    append_processing_step(
+        manifest,
+        "repair_imported_corner_notch",
+        details=action,
+    )
+    manifest.setdefault("repair_history", []).append(action)
+    saved_manifest, manifest_errors = save_import_manifest(manifest_file, manifest)
+    if not saved_manifest:
+        raise ValueError("; ".join(manifest_errors))
+
+    interpretation_path = import_session_path(root, chosen_id) / "extracted" / "interpretation.json"
+    if interpretation_path.exists():
+        try:
+            interpretation = json.loads(interpretation_path.read_text(encoding="utf-8"))
+            interpretation.setdefault("processing_notes", []).append(
+                "Restored a missing exterior corner notch from source-backed repair."
+            )
+            interpretation.setdefault("repairs", []).append(action)
+            interpretation_path.write_text(
+                json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        except json.JSONDecodeError:
+            pass
+
+    return {
+        "project_path": str(root),
+        "design_model_path": str(design_model_path),
+        "import_id": chosen_id,
+        "status": "repaired",
+        "corner": corner,
+        "horizontal_offset": horizontal_offset,
+        "vertical_offset": vertical_offset,
+        "target_space_id": target_space_id,
+        "changed_walls": changed_walls,
+        "added_walls": added_walls,
         "removed_walls": removed_walls,
         "changed_spaces": changed_spaces,
         "changed_openings": changed_openings,

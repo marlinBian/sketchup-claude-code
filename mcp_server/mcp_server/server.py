@@ -83,6 +83,7 @@ from mcp_server.tools.import_pipeline import (
     list_import_sessions as list_import_sessions_file,
     normalize_imported_wall_alignment as normalize_imported_wall_alignment_file,
     register_import_source as register_import_source_file,
+    repair_imported_corner_notch as repair_imported_corner_notch_file,
     repair_imported_region as repair_imported_region_file,
     rescale_imported_model as rescale_imported_model_file,
     review_model_against_import_source as review_model_against_import_source_file,
@@ -1893,6 +1894,42 @@ async def normalize_imported_wall_alignment(
         return TextContent(
             type="text",
             text=f"Import alignment normalization failed: {str(e)}",
+        )
+
+
+@mcp.tool()
+async def repair_imported_corner_notch(
+    project_path: str,
+    import_id: str,
+    corner: str,
+    horizontal_offset: float,
+    vertical_offset: float,
+    target_space_id: str | None = None,
+    coordinate_match_tolerance: float = 1,
+    min_wall_length: float = 20,
+    notes: str | None = None,
+) -> TextContent:
+    """Restore a missing source-backed exterior corner notch in imported truth."""
+    try:
+        result = repair_imported_corner_notch_file(
+            project_path,
+            import_id,
+            corner=corner,
+            horizontal_offset=horizontal_offset,
+            vertical_offset=vertical_offset,
+            target_space_id=target_space_id,
+            coordinate_match_tolerance=coordinate_match_tolerance,
+            min_wall_length=min_wall_length,
+            notes=notes,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(
+            type="text",
+            text=f"Import corner notch repair failed: {str(e)}",
         )
 
 
