@@ -84,6 +84,51 @@ def create_shell_overreach(project):
     )
 
 
+def create_semantic_false_opening_gap(project):
+    """Create a short living-balcony boundary gap that should be auto-filled."""
+    design_model_path = project / "design_model.json"
+    design_model = json.loads(design_model_path.read_text(encoding="utf-8"))
+    source = {
+        "kind": "import_floorplan",
+        "import_id": "import_001",
+        "confidence": 0.7,
+        "assumptions": ["Semantic false-opening fixture."],
+    }
+    living = design_model["spaces"]["import_001_space_001"]
+    living["type"] = "living_room"
+    living["source"] = source
+    design_model["spaces"]["import_001_balcony_001"] = {
+        "type": "balcony",
+        "bounds": {"min": [3000.0, -1000.0, 0.0], "max": [4200.0, 0.0, 2800.0]},
+        "center": [3600.0, -500.0, 1400.0],
+        "footprint": [
+            [3000.0, 0.0, 0.0],
+            [4200.0, 0.0, 0.0],
+            [4200.0, -1000.0, 0.0],
+            [3000.0, -1000.0, 0.0],
+        ],
+        "source": source,
+    }
+    reference_wall = design_model["walls"]["import_001_wall_south"]
+    reference_wall["path"] = [[0.0, 0.0, 0.0], [3400.0, 0.0, 0.0]]
+    design_model["walls"]["import_001_wall_south_right"] = {
+        **reference_wall,
+        "path": [[3900.0, 0.0, 0.0], [6000.0, 0.0, 0.0]],
+    }
+    generated = design_model["import_sessions"]["import_001"]["generated_model"]
+    if "import_001_balcony_001" not in generated["space_ids"]:
+        generated["space_ids"].append("import_001_balcony_001")
+    if "import_001_wall_south_right" not in generated["wall_ids"]:
+        generated["wall_ids"].append("import_001_wall_south_right")
+    generated["changed_model_ids"].extend(
+        ["import_001_balcony_001", "import_001_wall_south_right"]
+    )
+    design_model_path.write_text(
+        json.dumps(design_model, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 @pytest.mark.asyncio
 async def test_import_floorplan_to_model_tool_writes_project_truth(tmp_path):
     from mcp_server import server
@@ -241,6 +286,43 @@ async def test_boundary_coverage_tools_review_and_repair_missing_wall(tmp_path):
     assert review["gaps"][0]["classification"] == "candidate_missing_wall"
     assert repair["status"] == "repaired"
     assert repair["added_walls"][0].startswith("import_001_boundary_gap_")
+
+
+@pytest.mark.asyncio
+async def test_boundary_coverage_tool_auto_repairs_semantic_false_opening(tmp_path):
+    from mcp_server import server
+
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path)
+    await server.import_floorplan_to_model(
+        project_path=str(project),
+        source_path=str(source),
+        import_id="import_001",
+        width=6000,
+        depth=4000,
+    )
+    create_semantic_false_opening_gap(project)
+
+    review_response = await server.review_imported_boundary_coverage(
+        project_path=str(project),
+        import_id="import_001",
+    )
+    repair_response = await server.repair_imported_boundary_coverage(
+        project_path=str(project),
+        import_id="import_001",
+    )
+    review = json.loads(review_response.text)
+    repair = json.loads(repair_response.text)
+
+    assert review["recommended_repair_count"] == 1
+    assert review["gaps"][0]["classification"] == (
+        "candidate_false_opening_or_missing_wall"
+    )
+    assert repair["status"] == "repaired"
+    assert repair["repaired_gaps"][0]["classification"] == (
+        "candidate_false_opening_or_missing_wall"
+    )
 
 
 @pytest.mark.asyncio

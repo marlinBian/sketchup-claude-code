@@ -453,6 +453,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Classify uncovered gaps at or below this length as possible openings",
     )
     boundary_review_parser.add_argument(
+        "--no-infer-semantic-short-gaps",
+        action="store_true",
+        help="Disable automatic semantic repair recommendations for short false openings",
+    )
+    boundary_review_parser.add_argument(
+        "--max-semantic-gap-length",
+        type=float,
+        default=900,
+        help="Maximum short gap length in mm for semantic false-opening inference",
+    )
+    boundary_review_parser.add_argument(
         "--coordinate-match-tolerance",
         type=float,
         default=1,
@@ -481,6 +492,17 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1200,
         help="Treat larger uncovered gaps as missing-wall candidates",
+    )
+    boundary_repair_parser.add_argument(
+        "--no-infer-semantic-short-gaps",
+        action="store_true",
+        help="Disable automatic repair of semantically unlikely short opening gaps",
+    )
+    boundary_repair_parser.add_argument(
+        "--max-semantic-gap-length",
+        type=float,
+        default=900,
+        help="Maximum short gap length in mm for semantic false-opening repair",
     )
     boundary_repair_parser.add_argument(
         "--coordinate-match-tolerance",
@@ -951,6 +973,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.import_id,
                 min_gap_length=args.min_gap_length,
                 max_opening_gap_length=args.max_opening_gap_length,
+                infer_semantic_short_gaps=not args.no_infer_semantic_short_gaps,
+                max_semantic_gap_length=args.max_semantic_gap_length,
                 coordinate_match_tolerance=args.coordinate_match_tolerance,
                 require_structural_endpoints=not args.allow_unsupported_endpoints,
             )
@@ -962,6 +986,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.import_id,
                 min_gap_length=args.min_gap_length,
                 max_opening_gap_length=args.max_opening_gap_length,
+                infer_semantic_short_gaps=not args.no_infer_semantic_short_gaps,
+                max_semantic_gap_length=args.max_semantic_gap_length,
                 coordinate_match_tolerance=args.coordinate_match_tolerance,
                 require_structural_endpoints=not args.allow_unsupported_endpoints,
                 max_repairs=args.max_repairs,

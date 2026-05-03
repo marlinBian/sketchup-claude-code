@@ -129,7 +129,8 @@ is a better overall width, depth, or scale factor. Use
 corner notch missing from the generated model. Use
 `review_imported_boundary_coverage` and `repair_imported_boundary_coverage` when
 the imported footprint contains a room edge but the explicit wall list missed a
-long segment. Use `review_imported_wall_space_consistency` and
+long wall segment, or when the tool auto-classifies a short semantic
+false-opening candidate. Use `review_imported_wall_space_consistency` and
 `repair_imported_shell_overreach` when explicit imported walls enclose an extra
 area that no imported room or balcony footprint claims. Use
 `repair_imported_region` for other specific corrections.

@@ -34,6 +34,7 @@ DEFAULT_MIN_WALL_LENGTH = 20.0
 DEFAULT_MIN_BOUNDARY_GAP_LENGTH = 50.0
 DEFAULT_MIN_SHELL_OVERREACH_LENGTH = 250.0
 DEFAULT_MAX_OPENING_GAP_LENGTH = 1200.0
+DEFAULT_MAX_SEMANTIC_SHORT_GAP_LENGTH = 900.0
 VALID_CORNER_NOTCHES = {"top_left", "top_right", "bottom_left", "bottom_right"}
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".heic"}
@@ -1045,6 +1046,100 @@ def wall_coverage_for_edge(
     return coverage
 
 
+def spaces_covering_edge_segment(
+    design_model: dict[str, Any],
+    import_id: str,
+    *,
+    axis: str,
+    line_coordinate: float,
+    segment_interval_value: tuple[float, float],
+    coordinate_match_tolerance: float,
+) -> list[dict[str, Any]]:
+    """Return imported spaces whose footprint edge covers a plan segment."""
+    segment_start, segment_end = segment_interval_value
+    spaces: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for space_id, space in design_model.get("spaces", {}).items():
+        source = space.get("source", {}) if isinstance(space, dict) else {}
+        if not isinstance(source, dict) or source.get("import_id") != import_id:
+            continue
+        footprint = space.get("footprint")
+        if not isinstance(footprint, list) or len(footprint) < 3:
+            continue
+        for index, raw_start in enumerate(footprint):
+            raw_end = footprint[(index + 1) % len(footprint)]
+            edge_path = [
+                normalize_3d_point(raw_start, label=f"{space_id} footprint[{index}]"),
+                normalize_3d_point(
+                    raw_end,
+                    label=f"{space_id} footprint[{(index + 1) % len(footprint)}]",
+                ),
+            ]
+            if wall_axis(edge_path, tolerance=coordinate_match_tolerance) != axis:
+                continue
+            if (
+                abs(segment_line_coordinate(edge_path, axis) - line_coordinate)
+                > coordinate_match_tolerance
+            ):
+                continue
+            edge_start, edge_end = segment_interval(edge_path, axis)
+            if (
+                segment_start < edge_start - coordinate_match_tolerance
+                or segment_end > edge_end + coordinate_match_tolerance
+            ):
+                continue
+            if space_id in seen:
+                continue
+            seen.add(space_id)
+            spaces.append(
+                {
+                    "space_id": space_id,
+                    "type": space.get("type", "other"),
+                    "label": space.get("label"),
+                    "edge_index": index,
+                }
+            )
+    return spaces
+
+
+def semantic_short_gap_repair_signal(
+    *,
+    axis: str,
+    length: float,
+    adjacent_spaces: list[dict[str, Any]],
+    max_semantic_gap_length: float,
+) -> dict[str, Any]:
+    """Return whether a short footprint gap should be auto-filled as false opening."""
+    space_types = {str(space.get("type", "other")) for space in adjacent_spaces}
+    reasons: list[str] = []
+    if length > max_semantic_gap_length:
+        return {
+            "repair_recommended": False,
+            "confidence": 0.0,
+            "reasons": ["gap exceeds semantic short-gap length threshold"],
+            "adjacent_space_types": sorted(space_types),
+        }
+    if axis == "y" and {"living_room", "balcony"}.issubset(space_types):
+        reasons.extend(
+            [
+                "short horizontal shared edge between living room and balcony",
+                "no explicit imported opening owns this footprint gap",
+            ]
+        )
+        return {
+            "repair_recommended": True,
+            "confidence": 0.68,
+            "reasons": reasons,
+            "adjacent_space_types": sorted(space_types),
+        }
+    return {
+        "repair_recommended": False,
+        "confidence": 0.0,
+        "reasons": ["no high-confidence semantic false-opening pattern matched"],
+        "adjacent_space_types": sorted(space_types),
+    }
+
+
 def space_edge_coverage_for_wall(
     design_model: dict[str, Any],
     import_id: str,
@@ -1236,6 +1331,8 @@ def imported_boundary_coverage_gaps(
     *,
     min_gap_length: float = DEFAULT_MIN_BOUNDARY_GAP_LENGTH,
     max_opening_gap_length: float = DEFAULT_MAX_OPENING_GAP_LENGTH,
+    infer_semantic_short_gaps: bool = True,
+    max_semantic_gap_length: float = DEFAULT_MAX_SEMANTIC_SHORT_GAP_LENGTH,
     coordinate_match_tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
     require_structural_endpoints: bool = True,
 ) -> list[dict[str, Any]]:
@@ -1244,6 +1341,8 @@ def imported_boundary_coverage_gaps(
         raise ValueError("min_gap_length must be positive.")
     if max_opening_gap_length < 0:
         raise ValueError("max_opening_gap_length must be non-negative.")
+    if max_semantic_gap_length < 0:
+        raise ValueError("max_semantic_gap_length must be non-negative.")
     if coordinate_match_tolerance <= 0:
         raise ValueError("coordinate_match_tolerance must be positive.")
 
@@ -1318,10 +1417,35 @@ def imported_boundary_coverage_gaps(
                     if length <= max_opening_gap_length
                     else "candidate_missing_wall"
                 )
+                adjacent_spaces = spaces_covering_edge_segment(
+                    design_model,
+                    import_id,
+                    axis=axis,
+                    line_coordinate=line_coordinate,
+                    segment_interval_value=(gap_start, gap_end),
+                    coordinate_match_tolerance=coordinate_match_tolerance,
+                )
+                semantic_repair = semantic_short_gap_repair_signal(
+                    axis=axis,
+                    length=length,
+                    adjacent_spaces=adjacent_spaces,
+                    max_semantic_gap_length=max_semantic_gap_length,
+                )
+                if (
+                    infer_semantic_short_gaps
+                    and classification == "candidate_opening_or_intentional_gap"
+                    and semantic_repair["repair_recommended"]
+                ):
+                    classification = "candidate_false_opening_or_missing_wall"
                 repair_recommended = classification == "candidate_missing_wall" and (
                     not require_structural_endpoints
                     or (start_supported and end_supported)
                 )
+                if classification == "candidate_false_opening_or_missing_wall":
+                    repair_recommended = (
+                        not require_structural_endpoints
+                        or (start_supported and end_supported)
+                    )
                 gaps.append(
                     {
                         "space_id": space_id,
@@ -1334,6 +1458,8 @@ def imported_boundary_coverage_gaps(
                         "length": length,
                         "classification": classification,
                         "repair_recommended": repair_recommended,
+                        "adjacent_spaces": adjacent_spaces,
+                        "semantic_repair": semantic_repair,
                         "endpoint_support": {
                             "start": start_supported,
                             "end": end_supported,
@@ -2082,6 +2208,8 @@ def review_imported_boundary_coverage(
     *,
     min_gap_length: float = DEFAULT_MIN_BOUNDARY_GAP_LENGTH,
     max_opening_gap_length: float = DEFAULT_MAX_OPENING_GAP_LENGTH,
+    infer_semantic_short_gaps: bool = True,
+    max_semantic_gap_length: float = DEFAULT_MAX_SEMANTIC_SHORT_GAP_LENGTH,
     coordinate_match_tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
     require_structural_endpoints: bool = True,
 ) -> dict[str, Any]:
@@ -2101,6 +2229,8 @@ def review_imported_boundary_coverage(
         chosen_id,
         min_gap_length=min_gap_length,
         max_opening_gap_length=max_opening_gap_length,
+        infer_semantic_short_gaps=infer_semantic_short_gaps,
+        max_semantic_gap_length=max_semantic_gap_length,
         coordinate_match_tolerance=coordinate_match_tolerance,
         require_structural_endpoints=require_structural_endpoints,
     )
@@ -2114,6 +2244,8 @@ def review_imported_boundary_coverage(
         "recommended_repair_count": len(recommended),
         "min_gap_length": min_gap_length,
         "max_opening_gap_length": max_opening_gap_length,
+        "infer_semantic_short_gaps": infer_semantic_short_gaps,
+        "max_semantic_gap_length": max_semantic_gap_length,
         "coordinate_match_tolerance": coordinate_match_tolerance,
         "require_structural_endpoints": require_structural_endpoints,
         "gaps": gaps,
@@ -2126,6 +2258,8 @@ def repair_imported_boundary_coverage(
     *,
     min_gap_length: float = DEFAULT_MIN_BOUNDARY_GAP_LENGTH,
     max_opening_gap_length: float = DEFAULT_MAX_OPENING_GAP_LENGTH,
+    infer_semantic_short_gaps: bool = True,
+    max_semantic_gap_length: float = DEFAULT_MAX_SEMANTIC_SHORT_GAP_LENGTH,
     coordinate_match_tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
     require_structural_endpoints: bool = True,
     max_repairs: int = 20,
@@ -2150,6 +2284,8 @@ def repair_imported_boundary_coverage(
         chosen_id,
         min_gap_length=min_gap_length,
         max_opening_gap_length=max_opening_gap_length,
+        infer_semantic_short_gaps=infer_semantic_short_gaps,
+        max_semantic_gap_length=max_semantic_gap_length,
         coordinate_match_tolerance=coordinate_match_tolerance,
         require_structural_endpoints=require_structural_endpoints,
     )
@@ -2197,6 +2333,23 @@ def repair_imported_boundary_coverage(
             severity="warning",
             message="A missing source-backed boundary wall was added to working truth.",
         )
+        if any(
+            gap.get("classification") == "candidate_false_opening_or_missing_wall"
+            for gap in repaired_gaps
+        ):
+            add_import_quality_flag(
+                design_model,
+                chosen_id,
+                "import_false_opening_repaired",
+                message="A semantically unlikely imported opening gap was filled as a wall.",
+            )
+            add_import_quality_flag(
+                design_model,
+                chosen_id,
+                "semantic_short_gap_wall_added",
+                severity="warning",
+                message="A short boundary gap was auto-filled using semantic space context.",
+            )
         design_model["updated_at"] = utc_now()
         mark_execution_dirty(
             design_model,
@@ -2210,6 +2363,8 @@ def repair_imported_boundary_coverage(
         chosen_id,
         min_gap_length=min_gap_length,
         max_opening_gap_length=max_opening_gap_length,
+        infer_semantic_short_gaps=infer_semantic_short_gaps,
+        max_semantic_gap_length=max_semantic_gap_length,
         coordinate_match_tolerance=coordinate_match_tolerance,
         require_structural_endpoints=require_structural_endpoints,
     )
@@ -2224,6 +2379,8 @@ def repair_imported_boundary_coverage(
         "action": "repair_imported_boundary_coverage",
         "min_gap_length": min_gap_length,
         "max_opening_gap_length": max_opening_gap_length,
+        "infer_semantic_short_gaps": infer_semantic_short_gaps,
+        "max_semantic_gap_length": max_semantic_gap_length,
         "coordinate_match_tolerance": coordinate_match_tolerance,
         "require_structural_endpoints": require_structural_endpoints,
         "max_repairs": max_repairs,
@@ -2238,12 +2395,24 @@ def repair_imported_boundary_coverage(
 
     manifest, manifest_file = load_project_import_manifest(root, chosen_id)
     if added_walls:
+        semantic_flags = (
+            [
+                "import_false_opening_repaired",
+                "semantic_short_gap_wall_added",
+            ]
+            if any(
+                gap.get("classification") == "candidate_false_opening_or_missing_wall"
+                for gap in repaired_gaps
+            )
+            else []
+        )
         manifest["status"] = "repaired"
         manifest["quality_flags"] = dedupe_quality_flags(
             [
                 *manifest.get("quality_flags", []),
                 "import_boundary_coverage_repaired",
                 "source_backed_boundary_wall_added",
+                *semantic_flags,
             ]
         )
     append_processing_step(

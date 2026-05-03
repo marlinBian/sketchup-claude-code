@@ -246,12 +246,16 @@ Imported space `footprint` edges are also a source of truth that can expose
 missing wall segments. If an extracted model contains a footprint edge but the
 explicit `walls` list does not cover a long segment of that edge, the review
 path is `review_imported_boundary_coverage` and the repair path is
-`repair_imported_boundary_coverage`. The repair fills only high-confidence
+`repair_imported_boundary_coverage`. The repair fills high-confidence
 missing-wall candidates: uncovered segments longer than normal door/opening
 gaps and supported by nearby structural wall endpoints by default. Shorter
-uncovered segments remain classified as possible openings or intentional gaps so
-the first import stays autonomous and editable instead of blocking on
-confirmation.
+uncovered segments normally remain classified as possible openings or
+intentional gaps, but the review can promote a short segment to
+`candidate_false_opening_or_missing_wall` when semantic space context makes an
+opening unlikely. The first implemented rule promotes a short horizontal
+living-room to balcony boundary gap with no explicit opening owner; this fixes
+false openings such as a balcony edge that should remain a solid wall without
+asking the designer to inspect numeric candidates one by one.
 
 Imported walls also need the inverse consistency check: every meaningful
 imported wall segment should be explainable by at least one imported room,

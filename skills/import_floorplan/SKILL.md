@@ -101,10 +101,13 @@ whole import by default.
    updates the space footprint, and records source-backed repair history.
 4. If a space footprint edge exists in `design_model.json` but the explicit wall
    list missed a long segment, call `review_imported_boundary_coverage`, then
-   `repair_imported_boundary_coverage`. The repair fills high-confidence gaps
-   that are longer than normal door/opening candidates and have structural wall
-   endpoints, records source-backed repair history, and marks the project for
-   clean replay.
+   `repair_imported_boundary_coverage`. The review also auto-classifies
+   semantically unlikely short gaps, such as a short horizontal living-room to
+   balcony edge with no explicit opening evidence, as false-opening candidates.
+   The repair fills high-confidence long missing-wall gaps and those semantic
+   false-opening gaps, records source-backed repair history, and marks the
+   project for clean replay. Do not ask the designer to confirm those candidates
+   one by one before the first repair pass.
 5. If the generated shell encloses an extra pocket that is not part of any
    imported room or balcony footprint, call
    `review_imported_wall_space_consistency`, then
@@ -133,6 +136,10 @@ The top-left exterior corner has a missing notch. Restore it from the source.
 
 ```text
 The living room boundary is missing a wall segment compared with the source.
+```
+
+```text
+The balcony B boundary should be a solid wall, not an opening.
 ```
 
 ```text

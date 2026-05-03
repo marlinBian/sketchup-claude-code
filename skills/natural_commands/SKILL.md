@@ -53,7 +53,10 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
 - Repair imported boundary coverage: "this room boundary is missing a wall",
   "这里漏了一段墙". Use `review_imported_boundary_coverage`, then
   `repair_imported_boundary_coverage` when an imported space footprint edge
-  exists but the explicit wall list missed a long wall segment.
+  exists but the explicit wall list missed a wall segment. The review can also
+  auto-promote semantically unlikely short gaps, for example "balcony B should
+  be a solid wall", "阳台B这里应该是实墙", from possible openings into repairable
+  false-opening candidates.
 - Repair imported shell overreach: "the import has an extra enclosed area",
   "这里多包了一块空间", "右下角多出一块区域". Use
   `review_imported_wall_space_consistency`, then

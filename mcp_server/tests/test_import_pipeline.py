@@ -121,6 +121,52 @@ def create_shell_overreach(project):
     )
 
 
+def create_semantic_false_opening_gap(project):
+    """Create a short living-balcony boundary gap that should be auto-filled."""
+    design_model_path = project / "design_model.json"
+    design_model = json.loads(design_model_path.read_text(encoding="utf-8"))
+    source = {
+        "kind": "import_floorplan",
+        "import_id": "import_001",
+        "confidence": 0.7,
+        "assumptions": ["Semantic false-opening fixture."],
+    }
+    living = design_model["spaces"]["import_001_space_001"]
+    living["type"] = "living_room"
+    living["source"] = source
+    design_model["spaces"]["import_001_balcony_001"] = {
+        "type": "balcony",
+        "bounds": {"min": [3000.0, -1000.0, 0.0], "max": [4200.0, 0.0, 2800.0]},
+        "center": [3600.0, -500.0, 1400.0],
+        "footprint": [
+            [3000.0, 0.0, 0.0],
+            [4200.0, 0.0, 0.0],
+            [4200.0, -1000.0, 0.0],
+            [3000.0, -1000.0, 0.0],
+        ],
+        "source": source,
+    }
+
+    reference_wall = design_model["walls"]["import_001_wall_south"]
+    reference_wall["path"] = [[0.0, 0.0, 0.0], [3400.0, 0.0, 0.0]]
+    design_model["walls"]["import_001_wall_south_right"] = {
+        **reference_wall,
+        "path": [[3900.0, 0.0, 0.0], [6000.0, 0.0, 0.0]],
+    }
+    generated = design_model["import_sessions"]["import_001"]["generated_model"]
+    if "import_001_balcony_001" not in generated["space_ids"]:
+        generated["space_ids"].append("import_001_balcony_001")
+    if "import_001_wall_south_right" not in generated["wall_ids"]:
+        generated["wall_ids"].append("import_001_wall_south_right")
+    generated["changed_model_ids"].extend(
+        ["import_001_balcony_001", "import_001_wall_south_right"]
+    )
+    design_model_path.write_text(
+        json.dumps(design_model, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 def test_register_import_source_creates_manifest_and_source_copy(tmp_path):
     init_project(tmp_path / "project", template="empty")
     source = make_source(tmp_path)
@@ -479,6 +525,53 @@ def test_boundary_coverage_review_and_repair_adds_missing_wall(tmp_path):
         "repair_imported_boundary_coverage"
     )
     assert plan["skipped_count"] == 0
+
+
+def test_boundary_coverage_auto_fills_semantic_false_opening(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path)
+    import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        width=6000,
+        depth=4000,
+    )
+    create_semantic_false_opening_gap(project)
+
+    review = review_imported_boundary_coverage(project, "import_001")
+    repair = repair_imported_boundary_coverage(
+        project,
+        "import_001",
+        notes="Auto-fill a semantic false opening on a living-balcony boundary.",
+    )
+    design_model = json.loads((project / "design_model.json").read_text(encoding="utf-8"))
+    added_wall_id = repair["added_walls"][0]
+    semantic_gap = next(
+        gap
+        for gap in review["gaps"]
+        if gap["classification"] == "candidate_false_opening_or_missing_wall"
+    )
+
+    assert review["recommended_repair_count"] == 1
+    assert semantic_gap["interval"] == [3400.0, 3900.0]
+    assert semantic_gap["semantic_repair"]["repair_recommended"] is True
+    assert semantic_gap["semantic_repair"]["adjacent_space_types"] == [
+        "balcony",
+        "living_room",
+    ]
+    assert repair["status"] == "repaired"
+    assert repair["repaired_gaps"][0]["classification"] == (
+        "candidate_false_opening_or_missing_wall"
+    )
+    assert design_model["walls"][added_wall_id]["path"] == [
+        [3400.0, 0.0, 0.0],
+        [3900.0, 0.0, 0.0],
+    ]
+    assert "import_false_opening_repaired" in (
+        design_model["import_sessions"]["import_001"]["quality_flags"]
+    )
 
 
 def test_shell_overreach_review_and_repair_trim_phantom_pocket(tmp_path):
