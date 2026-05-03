@@ -127,6 +127,7 @@ def test_install_runtime_skills_force_removes_previously_installed_stale_files(t
 
     assert "legacy/SKILL.md" in result["installs"]["codex"]["stale_files"]
     assert not stale_target.exists()
+    assert not stale_target.parent.exists()
     manifest = project_path / ".agents" / "skills" / RUNTIME_SKILL_MANIFEST
     assert manifest.exists()
 

@@ -82,6 +82,17 @@ def read_runtime_skill_manifest(target: Path) -> dict[str, Any]:
     return manifest
 
 
+def remove_empty_skill_parents(target: Path, stale_file: str) -> None:
+    """Remove empty directories left behind by stale installed skill files."""
+    parent = (target / stale_file).parent
+    while parent != target and parent.exists():
+        try:
+            parent.rmdir()
+        except OSError:
+            return
+        parent = parent.parent
+
+
 def copy_skill_tree(
     source: Path,
     target: Path,
@@ -141,6 +152,7 @@ def copy_skill_tree(
                 stale_path = target / stale_file
                 if stale_path.exists() and stale_path.is_file():
                     stale_path.unlink()
+                remove_empty_skill_parents(target, stale_file)
         manifest_path.write_text(
             json.dumps(
                 {
