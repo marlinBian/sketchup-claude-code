@@ -26,6 +26,13 @@ my-design-project/
     skills/
   assets/
     components/
+  imports/
+    import_001/
+      manifest.json
+      source/
+      previews/
+      evidence/
+      extracted/
   model.skp
   snapshots/
     manifest.json
@@ -54,6 +61,42 @@ Chinese:
 ```text
 创建一个 2 米 x 1.8 米的卫生间，包含马桶、洗手台、门、镜子、基础照明，并检查通行距离。
 ```
+
+## Import Existing Plans
+
+When you provide a DWG, DXF, PDF, image, scan, or photo of a floor plan, the
+agent should generate an editable first model directly instead of asking you to
+approve every detected wall or dimension. The first pass is a working model, not
+a verified survey.
+
+Example:
+
+```text
+Import this PDF floor plan and generate an editable model. The overall plan is
+about 7200 mm wide and 5100 mm deep.
+```
+
+The agent should call `import_floorplan_to_model`, then inspect or plan the
+result with `get_import_summary`, `list_import_sessions`,
+`plan_project_execution`, or `validate_design_project`. Imported walls,
+openings, footprints, assumptions, scale, and quality flags are written into
+`design_model.json`; retained source evidence lives under `imports/<import_id>/`.
+
+If you later notice a mismatch, describe the correction in normal language:
+
+```text
+This imported plan should be 8200 mm wide.
+```
+
+or:
+
+```text
+This wall is too thick compared with the source. Set imported walls to 180 mm.
+```
+
+The agent should use `rescale_imported_model`,
+`review_model_against_import_source`, or `repair_imported_region` to patch the
+working truth. It should not restart the whole import unless you ask for that.
 
 ## Design Rules
 

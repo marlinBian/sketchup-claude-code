@@ -29,6 +29,7 @@ def generate_project_report(
         "component_count": len(state["design_model"].get("components", {})),
         "lighting_count": len(state["design_model"].get("lighting", {})),
         "asset_count": state.get("assets_lock", {}).get("asset_count", 0),
+        "import_count": state.get("imports", {}).get("count", 0),
         "snapshot_count": state.get("visual_feedback", {}).get("snapshot_count", 0),
         "pending_visual_action_count": state.get("visual_feedback", {}).get(
             "pending_action_count",
@@ -54,6 +55,7 @@ def build_project_report(state: dict[str, Any]) -> str:
     metadata = design_model.get("metadata", {})
     validation = design_model.get("validation", {})
     assets = state.get("assets_lock", {})
+    imports = state.get("imports", {})
     visual_feedback = state.get("visual_feedback", {})
     design_rules = state.get("design_rules", {})
     execution = state.get("execution", {})
@@ -69,6 +71,9 @@ def build_project_report(state: dict[str, Any]) -> str:
         f"- Style: {metadata.get('style', 'not specified')}",
         f"- Spaces: {len(design_model.get('spaces', {}))}",
         f"- Components: {len(design_model.get('components', {}))}",
+        f"- Walls: {len(design_model.get('walls', {}))}",
+        f"- Openings: {len(design_model.get('openings', {}))}",
+        f"- Imports: {imports.get('count', 0)}",
         f"- Lighting items: {len(design_model.get('lighting', {}))}",
         f"- SketchUp sync status: {execution.get('sync_status', 'unknown')}",
         "",
@@ -129,6 +134,36 @@ def build_project_report(state: dict[str, Any]) -> str:
             f"- Cached: {assets.get('cached_asset_count', 0)}",
             f"- Referenced: {assets.get('referenced_asset_count', 0)}",
             f"- Missing metadata: {assets.get('missing_asset_count', 0)}",
+            "",
+            "## Imports",
+            "",
+        ]
+    )
+
+    sessions = imports.get("sessions", [])
+    if sessions:
+        lines.extend(
+            [
+                "| Import | Status | Source Type | Quality Flags |",
+                "| --- | --- | --- | --- |",
+            ]
+        )
+        for session in sessions:
+            source = session.get("source", {})
+            flags = session.get("quality_flags", [])
+            lines.append(
+                "| {import_id} | {status} | {source_type} | {flags} |".format(
+                    import_id=session.get("import_id", ""),
+                    status=session.get("status", ""),
+                    source_type=source.get("source_type", ""),
+                    flags=", ".join(flags) if isinstance(flags, list) else "",
+                )
+            )
+    else:
+        lines.append("No import sessions are recorded.")
+
+    lines.extend(
+        [
             "",
             "## Visual Review",
             "",

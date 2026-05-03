@@ -249,7 +249,8 @@ Acceptance:
 ```bash
 cd mcp_server && uv run --extra dev pytest \
   tests/test_import_manifest_schema.py \
-  tests/test_import_project_files.py -q
+  tests/test_import_pipeline.py \
+  tests/test_project_init.py -q
 ```
 
 ## P12: Direct Import To Working Truth
@@ -269,7 +270,8 @@ Acceptance:
 
 ```bash
 cd mcp_server && uv run --extra dev pytest \
-  tests/test_import_floorplan_to_model.py \
+  tests/test_import_pipeline.py \
+  tests/test_import_mcp_tool.py \
   tests/test_design_model_schema.py -q
 ```
 
@@ -288,7 +290,7 @@ Acceptance:
 
 ```bash
 cd mcp_server && uv run --extra dev pytest \
-  tests/test_import_trace_executor.py \
+  tests/test_import_pipeline.py \
   tests/test_project_executor.py -q
 cd su_bridge && bundle exec rspec spec/ --format progress
 ```
@@ -308,8 +310,8 @@ Acceptance:
 
 ```bash
 cd mcp_server && uv run --extra dev pytest \
-  tests/test_import_scale.py \
-  tests/test_import_repair.py -q
+  tests/test_import_pipeline.py \
+  tests/test_import_mcp_tool.py -q
 ```
 
 ## P15: Source-Backed Repair
@@ -328,8 +330,8 @@ Acceptance:
 
 ```bash
 cd mcp_server && uv run --extra dev pytest \
-  tests/test_import_source_review.py \
-  tests/test_import_repair.py -q
+  tests/test_import_pipeline.py \
+  tests/test_import_mcp_tool.py -q
 ```
 
 ## P16: Rich Floorplan Interpretation

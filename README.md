@@ -26,11 +26,13 @@ not the designer's operating surface.
 
 ## Current Status
 
-This project is in early development. The current priority is stabilizing the
-baseline, then building the bathroom vertical slice:
+This project is in early development. The baseline bathroom slice is available,
+and the current priority is extending it toward imported source material:
 
-> Create a 2m x 1.8m bathroom with a toilet, sink, door, mirror, basic light,
-> and clearance check.
+- Create a 2m x 1.8m bathroom with a toilet, sink, door, mirror, basic light,
+  and clearance check.
+- Import a DWG, DXF, PDF, image, scan, or photo floor plan directly into
+  editable `design_model.json` truth for later repair and design iteration.
 
 ## Repository Layout
 
@@ -114,6 +116,20 @@ Project bridge trace planning without SketchUp:
 ```bash
 cd mcp_server
 uv run --extra dev sketchup-agent plan-execution /tmp/sah-smoke
+```
+
+Import pipeline smoke without SketchUp:
+
+```bash
+cd mcp_server
+tmp=$(mktemp -d)
+printf 'floorplan fixture\n' > "$tmp/floorplan.pdf"
+uv run --extra dev sketchup-agent init "$tmp/project" --template empty --force
+uv run --extra dev sketchup-agent import-floorplan "$tmp/project" \
+  "$tmp/floorplan.pdf" --width 7200 --depth 5100 --force
+uv run --extra dev sketchup-agent list-imports "$tmp/project"
+uv run --extra dev sketchup-agent plan-execution "$tmp/project"
+uv run --extra dev sketchup-agent validate "$tmp/project"
 ```
 
 Project bridge execution with SketchUp running:

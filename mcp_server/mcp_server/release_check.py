@@ -178,6 +178,7 @@ def wheel_install_check(
     project = Path(project_path).expanduser().resolve()
     plugins = Path(plugins_dir).expanduser().resolve()
     profile = Path(profile_path).expanduser().resolve()
+    import_source = project.parent / "sah-release-floorplan.pdf"
     commands: list[dict[str, Any]] = []
     errors: list[str] = []
 
@@ -235,6 +236,10 @@ def wheel_install_check(
         if not install["ok"]:
             errors.append(install["stderr"] or install["stdout"])
 
+    if not errors:
+        import_source.parent.mkdir(parents=True, exist_ok=True)
+        import_source.write_bytes(b"release floorplan fixture\n")
+
     installed_commands = [
         [
             str(agent),
@@ -274,6 +279,22 @@ def wheel_install_check(
         [str(agent), "validate", str(project)],
         [
             str(agent),
+            "import-floorplan",
+            str(project),
+            str(import_source),
+            "--import-id",
+            "import_001",
+            "--width",
+            "7200",
+            "--depth",
+            "5100",
+            "--force",
+        ],
+        [str(agent), "list-imports", str(project)],
+        [str(agent), "plan-execution", str(project)],
+        [str(agent), "validate", str(project)],
+        [
+            str(agent),
             "install-skills",
             str(project),
             "--target",
@@ -295,6 +316,8 @@ def wheel_install_check(
         plugins / "su_bridge.rb",
         project / ".agents" / "skills" / "bathroom_planning" / "SKILL.md",
         project / ".claude" / "skills" / "bathroom_planning" / "SKILL.md",
+        project / "imports" / "import_001" / "manifest.json",
+        project / "imports" / "import_001" / "source" / import_source.name,
     ]
     if not errors:
         missing_files = [str(path) for path in expected_files if not path.exists()]

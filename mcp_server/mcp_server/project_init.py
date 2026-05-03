@@ -17,6 +17,7 @@ from mcp_server.resources.project_files import (
     project_component_library_path,
     snapshot_manifest_path,
     snapshots_path,
+    imports_path,
 )
 from mcp_server.resources.snapshot_manifest_schema import create_empty_snapshot_manifest
 from mcp_server.runtime_skills import install_runtime_skills
@@ -73,6 +74,9 @@ This is a SketchUp Agent Harness design project.
 - Use `assets.lock.json` before relying on component assets.
 - Use `component_library.json` for project-local semantic components that are
   not part of the packaged registry.
+- Use `imports/` for source material, import manifests, previews, extracted
+  evidence, and source-backed repair records. Imported files are evidence;
+  `design_model.json` remains the working truth.
 - Use `/tmp/su_bridge.sock` only as the live SketchUp execution bridge; SketchUp
   is the rendered/executed view, not the source of truth.
 - Use project-local runtime skills from `.agents/skills/` for Codex and
@@ -92,11 +96,23 @@ For a small bathroom, prefer:
    available.
 3. `validate_design_project` after project files change.
 
+## Import Existing Source Material
+
+For a DWG, DXF, PDF, image, scan, or floor-plan photo, prefer
+`import_floorplan_to_model`. It registers the source under `imports/`, writes a
+best-effort editable model directly into `design_model.json`, and records
+quality flags for later repair.
+
+Use `rescale_imported_model` when a better overall dimension is known. Use
+`review_model_against_import_source` and `repair_imported_region` when a
+specific imported wall, opening, or region differs from the source.
+
 ## Useful Inspection Tools
 
 - `get_project_state`
 - `list_project_components`
 - `validate_design_project`
+- `get_import_summary`
 - `get_design_rules`
 - `search_components`
 - `get_component_manifest`
@@ -153,8 +169,10 @@ def init_project(
     assets_cache = assets_cache_path(root)
     snapshots_dir = snapshots_path(root)
     snapshot_manifest = snapshot_manifest_path(root)
+    imports_dir = imports_path(root)
     assets_cache.mkdir(parents=True, exist_ok=True)
     snapshots_dir.mkdir(exist_ok=True)
+    imports_dir.mkdir(exist_ok=True)
 
     if assets_lock is not None:
         write_json(assets_lock_path, assets_lock, overwrite)
@@ -192,6 +210,7 @@ def init_project(
             "claude_guidance": str(claude_guidance_path),
             "snapshots": str(snapshots_dir),
             "snapshot_manifest": str(snapshot_manifest),
+            "imports": str(imports_dir),
             "codex_runtime_skills": runtime_skills["installs"]["codex"]["target"],
             "claude_runtime_skills": runtime_skills["installs"]["claude"]["target"],
         },

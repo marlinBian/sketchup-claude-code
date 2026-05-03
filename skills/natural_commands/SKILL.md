@@ -28,6 +28,17 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
 - Start SketchUp bridge: "open SketchUp", "启动 SketchUp", "连接 SketchUp".
   Use `launch_sketchup_bridge` and report `possible_blockers` if
   `socket_ready` is false.
+- Import floor plan source: "import this floor plan", "导入这张户型图".
+  Use `import_floorplan_to_model` to register the source and write an editable
+  working model directly into `design_model.json`. Do not ask the designer to
+  confirm routine wall, door, window, or numeric candidates before generating
+  the first model.
+- Rescale imported source: "this plan should be 8200 mm wide",
+  "这个户型整体宽度应该是 8200 毫米". Use `rescale_imported_model` or
+  `repair_imported_region` rather than asking the designer to edit JSON.
+- Repair imported mismatch: "this door differs from the source",
+  "这个门和原图不一致". Use `review_model_against_import_source`, then
+  `repair_imported_region` with the specific correction.
 - Search components: "find a sofa", "找一个马桶".
   Use `search_components` for machine-readable registry data. Use
   `search_local_library` only for a short display summary.
@@ -107,5 +118,7 @@ search_components(query="toilet", category="fixture", limit=5)
 
 - Do not invent unsupported automation from a natural-language request.
 - Do not ask multiple survey-style questions before using implemented defaults.
+- Do not turn import into a preflight approval workflow; import should generate
+  working truth first and support source-backed repair later.
 - Do not mix Chinese into code identifiers, schema keys, or tool names.
 - Do not treat rendered images as source of truth.

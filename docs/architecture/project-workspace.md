@@ -92,9 +92,15 @@ Agents can inspect project state through MCP tools:
   current `design_model.json` without requiring SketchUp
 - `execute_project_model` runs that project trace against the bridge and records
   returned entity IDs and operation metadata back into `design_model.json`
-- future import tools should register source material, generate working truth
-  from that material, summarize assumptions, and repair source-backed mismatches
-  without treating import evidence as the canonical model
+- `register_import_source` registers DWG, DXF, PDF, image, scan, photo, or other
+  source material under `imports/<import_id>/`
+- `import_floorplan_to_model` generates editable first-pass working truth from
+  a registered or provided source without routine preflight confirmation
+- `list_import_sessions` and `get_import_summary` inspect retained import
+  manifests, generated model IDs, quality flags, scale, and assumptions
+- `rescale_imported_model`, `review_model_against_import_source`, and
+  `repair_imported_region` patch imported working truth when a designer later
+  points out a scale or source mismatch
 
 `snapshots/` stores captures used for review, regression checks, and visual
 handoff. `snapshots/manifest.json` records provenance for each artifact and

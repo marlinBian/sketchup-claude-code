@@ -19,6 +19,7 @@ from mcp_server.resources.project_files import (
     assets_lock_path,
     design_rules_path,
     find_design_model_path,
+    imports_path,
     project_component_library_path,
     snapshot_manifest_path,
     snapshots_path,
@@ -139,6 +140,16 @@ def validate_project(project_path: str | Path) -> dict[str, Any]:
             snapshot_dir.is_dir() and snapshot_manifest is not None,
             {"path": str(manifest_file)},
             manifest_errors if snapshot_dir.is_dir() else ["Snapshots directory is missing."],
+        )
+    )
+
+    imports_dir = imports_path(root)
+    checks.append(
+        check_result(
+            "imports",
+            imports_dir.is_dir(),
+            {"path": str(imports_dir)},
+            [] if imports_dir.is_dir() else ["Imports directory is missing."],
         )
     )
 

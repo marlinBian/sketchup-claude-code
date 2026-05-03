@@ -99,6 +99,24 @@ DESIGN_MODEL_SCHEMA: Dict[str, Any] = {
                             "minItems": 3,
                             "maxItems": 3,
                         },
+                        "footprint": {
+                            "type": "array",
+                            "description": (
+                                "Optional non-rectangular floor-plan footprint in "
+                                "millimeters. Bounds remain the broad containing box."
+                            ),
+                            "items": {
+                                "type": "array",
+                                "items": {"type": "number"},
+                                "minItems": 3,
+                                "maxItems": 3,
+                            },
+                            "minItems": 3,
+                        },
+                        "source": {
+                            "type": "object",
+                            "description": "Provenance for imported or generated spaces",
+                        },
                         "execution": {
                             "type": "object",
                             "description": (
@@ -331,6 +349,149 @@ DESIGN_MODEL_SCHEMA: Dict[str, Any] = {
                 },
             },
         },
+        "walls": {
+            "type": "object",
+            "description": "Imported or generated building shell walls keyed by wall ID",
+            "patternProperties": {
+                "^[a-zA-Z0-9_]+$": {
+                    "type": "object",
+                    "required": ["path", "height", "thickness"],
+                    "properties": {
+                        "path": {
+                            "type": "array",
+                            "description": "Wall baseline points in millimeters",
+                            "items": {
+                                "type": "array",
+                                "items": {"type": "number"},
+                                "minItems": 3,
+                                "maxItems": 3,
+                            },
+                            "minItems": 2,
+                        },
+                        "height": {"type": "number", "minimum": 0},
+                        "thickness": {"type": "number", "minimum": 0},
+                        "alignment": {
+                            "type": "string",
+                            "enum": ["center", "inner", "outer"],
+                        },
+                        "layer": {
+                            "type": "string",
+                            "enum": ["Walls", "Other"],
+                        },
+                        "source": {
+                            "type": "object",
+                            "description": "Source import or generation provenance",
+                        },
+                        "execution": {
+                            "type": "object",
+                            "description": "Live bridge execution metadata",
+                            "properties": {
+                                "operation_id": {"type": "string"},
+                                "entity_ids": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "spatial_delta": {"type": "object"},
+                                "status": {"type": "string"},
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        "openings": {
+            "type": "object",
+            "description": "Doors and windows hosted by building shell walls",
+            "patternProperties": {
+                "^[a-zA-Z0-9_]+$": {
+                    "type": "object",
+                    "required": ["type", "host_wall", "offset", "width", "height"],
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "enum": ["door", "window", "opening"],
+                        },
+                        "host_wall": {"type": "string"},
+                        "offset": {
+                            "type": "number",
+                            "minimum": 0,
+                            "description": "Distance from host wall start in mm",
+                        },
+                        "width": {"type": "number", "minimum": 0},
+                        "height": {"type": "number", "minimum": 0},
+                        "sill_height": {"type": "number", "minimum": 0},
+                        "swing_direction": {
+                            "type": "string",
+                            "enum": ["left", "right"],
+                        },
+                        "representation": {
+                            "type": "string",
+                            "enum": ["placeholder", "hosted"],
+                        },
+                        "layer": {
+                            "type": "string",
+                            "enum": ["Doors", "Windows", "Other"],
+                        },
+                        "source": {
+                            "type": "object",
+                            "description": "Source import or generation provenance",
+                        },
+                        "execution": {
+                            "type": "object",
+                            "description": "Live bridge execution metadata",
+                            "properties": {
+                                "operation_id": {"type": "string"},
+                                "entity_ids": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "spatial_delta": {"type": "object"},
+                                "status": {"type": "string"},
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        "import_sessions": {
+            "type": "object",
+            "description": "Summaries of source material imported into working truth",
+            "patternProperties": {
+                "^[a-zA-Z0-9_]+$": {
+                    "type": "object",
+                    "required": ["source_file", "source_type", "status"],
+                    "properties": {
+                        "source_file": {"type": "string"},
+                        "source_type": {"type": "string"},
+                        "status": {"type": "string"},
+                        "manifest_path": {"type": "string"},
+                        "scale": {"type": "object"},
+                        "quality_flags": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "generated_model": {"type": "object"},
+                    },
+                },
+            },
+        },
+        "quality_flags": {
+            "type": "array",
+            "description": "Project-level non-blocking model quality warnings",
+            "items": {
+                "type": "object",
+                "required": ["code", "severity", "message"],
+                "properties": {
+                    "code": {"type": "string"},
+                    "severity": {
+                        "type": "string",
+                        "enum": ["info", "warning", "error"],
+                    },
+                    "message": {"type": "string"},
+                    "source": {"type": "object"},
+                },
+            },
+        },
         "execution": {
             "type": "object",
             "description": "Live bridge execution metadata and operation results",
@@ -413,6 +574,10 @@ def create_empty_template(project_name: str = "untitled") -> Dict[str, Any]:
         "spaces": {},
         "components": {},
         "lighting": {},
+        "walls": {},
+        "openings": {},
+        "import_sessions": {},
+        "quality_flags": [],
         "semantic_anchors": {},
         "layers": {},
     }

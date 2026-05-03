@@ -16,9 +16,11 @@ from mcp_server.resources.project_files import (
     assets_lock_path,
     design_rules_path,
     find_design_model_path,
+    imports_path,
     snapshot_manifest_path,
 )
 from mcp_server.resources.snapshot_manifest_schema import load_snapshot_manifest
+from mcp_server.tools.import_pipeline import list_import_sessions
 
 
 def summarize_design_rules(project_path: str | Path) -> dict[str, Any]:
@@ -205,6 +207,22 @@ def summarize_snapshot_manifest(project_path: str | Path) -> dict[str, Any]:
     return summary
 
 
+def summarize_imports(project_path: str | Path) -> dict[str, Any]:
+    """Return compact import session summaries for project state inspection."""
+    path = imports_path(project_path)
+    sessions = list_import_sessions(project_path)
+    imported_count = sum(1 for session in sessions if session.get("status") == "imported")
+    repaired_count = sum(1 for session in sessions if session.get("status") == "repaired")
+    return {
+        "path": str(path),
+        "exists": path.exists(),
+        "count": len(sessions),
+        "imported_count": imported_count,
+        "repaired_count": repaired_count,
+        "sessions": sessions,
+    }
+
+
 def summarize_execution(design_model: dict[str, Any]) -> dict[str, Any]:
     """Return compact bridge execution state from design_model.json."""
     metadata = (
@@ -250,6 +268,19 @@ def summarize_execution(design_model: dict[str, Any]) -> dict[str, Any]:
             if isinstance(wall, dict) and wall.get("entity_ids"):
                 space_walls_with_entity_ids.append(f"{space_id}.{wall_side}")
 
+    walls_with_entity_ids = sorted(
+        wall_id
+        for wall_id, wall in design_model.get("walls", {}).items()
+        if isinstance(wall.get("execution"), dict)
+        and wall["execution"].get("entity_ids")
+    )
+    openings_with_entity_ids = sorted(
+        opening_id
+        for opening_id, opening in design_model.get("openings", {}).items()
+        if isinstance(opening.get("execution"), dict)
+        and opening["execution"].get("entity_ids")
+    )
+
     has_execution_feedback = bool(bridge_operations)
     sync_status = execution_sync.get("status")
     if sync_status is None:
@@ -262,8 +293,12 @@ def summarize_execution(design_model: dict[str, Any]) -> dict[str, Any]:
         "component_entity_count": len(components_with_entity_ids),
         "lighting_entity_count": len(lighting_with_entity_ids),
         "space_walls_with_entity_ids": sorted(space_walls_with_entity_ids),
+        "wall_entity_count": len(walls_with_entity_ids),
+        "opening_entity_count": len(openings_with_entity_ids),
         "components_with_entity_ids": components_with_entity_ids,
         "lighting_with_entity_ids": lighting_with_entity_ids,
+        "walls_with_entity_ids": walls_with_entity_ids,
+        "openings_with_entity_ids": openings_with_entity_ids,
         "has_execution_feedback": has_execution_feedback,
         "sync_status": sync_status,
         "sync_metadata": execution_sync,
@@ -274,6 +309,7 @@ def read_project_state(
     project_path: str | Path,
     include_rules: bool = True,
     include_assets: bool = True,
+    include_imports: bool = True,
     include_visual_feedback: bool = True,
     include_versions: bool = True,
     include_execution: bool = True,
@@ -292,6 +328,7 @@ def read_project_state(
             "design_model_path": str(model_path),
             "design_rules_path": str(design_rules_path(resolved_project_path)),
             "assets_lock_path": str(assets_lock_path(resolved_project_path)),
+            "imports_path": str(imports_path(resolved_project_path)),
             "snapshot_manifest_path": str(
                 snapshot_manifest_path(resolved_project_path)
             ),
@@ -302,6 +339,8 @@ def read_project_state(
         state["design_rules"] = summarize_design_rules(resolved_project_path)
     if include_assets:
         state["assets_lock"] = summarize_assets_lock(resolved_project_path)
+    if include_imports:
+        state["imports"] = summarize_imports(resolved_project_path)
     if include_visual_feedback:
         state["visual_feedback"] = summarize_snapshot_manifest(resolved_project_path)
     if include_versions:

@@ -28,6 +28,7 @@ def test_validate_project_accepts_initialized_bathroom(tmp_path):
         "component_library",
         "assets_cache",
         "snapshot_manifest",
+        "imports",
         "codex_guidance",
         "claude_guidance",
         "codex_runtime_skills",

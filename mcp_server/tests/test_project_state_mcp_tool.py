@@ -20,6 +20,7 @@ async def test_get_project_state_reads_design_model(tmp_path):
     assert data["project_path"] == str(tmp_path.resolve())
     assert data["design_model_path"].endswith("design_model.json")
     assert data["project_files"]["assets_lock_path"].endswith("assets.lock.json")
+    assert data["project_files"]["imports_path"].endswith("imports")
     assert data["project_files"]["snapshot_manifest_path"].endswith(
         "snapshots/manifest.json"
     )
@@ -32,6 +33,7 @@ async def test_get_project_state_reads_design_model(tmp_path):
     assert data["assets_lock"]["asset_count"] == 5
     assert data["assets_lock"]["referenced_asset_count"] == 5
     assert data["assets_lock"]["cached_asset_count"] == 0
+    assert data["imports"]["count"] == 0
     assert data["visual_feedback"]["valid"] is True
     assert data["visual_feedback"]["snapshot_count"] == 0
     assert data["visual_feedback"]["pending_action_count"] == 0
@@ -51,6 +53,7 @@ async def test_get_project_state_can_skip_optional_summaries(tmp_path):
         str(tmp_path),
         include_rules=False,
         include_assets=False,
+        include_imports=False,
         include_visual_feedback=False,
         include_versions=False,
         include_execution=False,
@@ -60,6 +63,7 @@ async def test_get_project_state_can_skip_optional_summaries(tmp_path):
     assert "design_model" in data
     assert "design_rules" not in data
     assert "assets_lock" not in data
+    assert "imports" not in data
     assert "visual_feedback" not in data
     assert "versions" not in data
     assert "execution" not in data

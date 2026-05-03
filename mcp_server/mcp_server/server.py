@@ -77,6 +77,15 @@ from mcp_server.tools.project_executor import (
     build_project_execution_plan,
     execute_project_execution_plan,
 )
+from mcp_server.tools.import_pipeline import (
+    get_import_summary as get_import_summary_file,
+    import_floorplan_to_model as import_floorplan_to_model_file,
+    list_import_sessions as list_import_sessions_file,
+    register_import_source as register_import_source_file,
+    repair_imported_region as repair_imported_region_file,
+    rescale_imported_model as rescale_imported_model_file,
+    review_model_against_import_source as review_model_against_import_source_file,
+)
 from mcp_server.tools.render_brief import build_render_brief
 from mcp_server.tools.trace_executor import (
     execute_bridge_operations,
@@ -1714,6 +1723,7 @@ async def get_project_state(
     project_path: str,
     include_rules: bool = True,
     include_assets: bool = True,
+    include_imports: bool = True,
     include_visual_feedback: bool = True,
     include_versions: bool = True,
     include_execution: bool = True,
@@ -1724,6 +1734,7 @@ async def get_project_state(
             project_path,
             include_rules=include_rules,
             include_assets=include_assets,
+            include_imports=include_imports,
             include_visual_feedback=include_visual_feedback,
             include_versions=include_versions,
             include_execution=include_execution,
@@ -1734,6 +1745,172 @@ async def get_project_state(
         )
     except Exception as e:
         return TextContent(type="text", text=f"Project state failed: {str(e)}")
+
+
+@mcp.tool()
+async def register_import_source(
+    project_path: str,
+    source_path: str,
+    import_id: str | None = None,
+    label: str | None = None,
+    overwrite: bool = False,
+) -> TextContent:
+    """Register a DWG, DXF, PDF, image, or other source file for import."""
+    try:
+        result = register_import_source_file(
+            project_path,
+            source_path,
+            import_id=import_id,
+            label=label,
+            overwrite=overwrite,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Import source failed: {str(e)}")
+
+
+@mcp.tool()
+async def import_floorplan_to_model(
+    project_path: str,
+    source_path: str | None = None,
+    import_id: str | None = None,
+    label: str | None = None,
+    width: float | None = None,
+    depth: float | None = None,
+    wall_height: float = 2800,
+    wall_thickness: float = 120,
+    overwrite: bool = False,
+) -> TextContent:
+    """Import a floor plan source directly into editable design_model.json truth."""
+    try:
+        result = import_floorplan_to_model_file(
+            project_path,
+            source_path=source_path,
+            import_id=import_id,
+            label=label,
+            width=width,
+            depth=depth,
+            wall_height=wall_height,
+            wall_thickness=wall_thickness,
+            overwrite=overwrite,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Floorplan import failed: {str(e)}")
+
+
+@mcp.tool()
+async def get_import_summary(
+    project_path: str,
+    import_id: str | None = None,
+) -> TextContent:
+    """Read import manifests plus design_model import session summaries."""
+    try:
+        result = get_import_summary_file(project_path, import_id=import_id)
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Import summary failed: {str(e)}")
+
+
+@mcp.tool()
+async def list_import_sessions(
+    project_path: str,
+) -> TextContent:
+    """List import sessions registered under the project imports directory."""
+    try:
+        result = {
+            "project_path": project_path,
+            "imports": list_import_sessions_file(project_path),
+        }
+        result["count"] = len(result["imports"])
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Import session list failed: {str(e)}")
+
+
+@mcp.tool()
+async def rescale_imported_model(
+    project_path: str,
+    import_id: str,
+    scale_factor: float | None = None,
+    target_width: float | None = None,
+    target_depth: float | None = None,
+) -> TextContent:
+    """Rescale imported working truth after the designer gives a better dimension."""
+    try:
+        result = rescale_imported_model_file(
+            project_path,
+            import_id,
+            scale_factor=scale_factor,
+            target_width=target_width,
+            target_depth=target_depth,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Import rescale failed: {str(e)}")
+
+
+@mcp.tool()
+async def review_model_against_import_source(
+    project_path: str,
+    import_id: str,
+    target_id: str | None = None,
+) -> TextContent:
+    """Review imported model entities against retained source evidence."""
+    try:
+        result = review_model_against_import_source_file(
+            project_path,
+            import_id,
+            target_id=target_id,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Import source review failed: {str(e)}")
+
+
+@mcp.tool()
+async def repair_imported_region(
+    project_path: str,
+    import_id: str,
+    target_width: float | None = None,
+    target_depth: float | None = None,
+    wall_thickness: float | None = None,
+    notes: str | None = None,
+) -> TextContent:
+    """Patch imported working truth using retained source evidence and user notes."""
+    try:
+        result = repair_imported_region_file(
+            project_path,
+            import_id,
+            target_width=target_width,
+            target_depth=target_depth,
+            wall_thickness=wall_thickness,
+            notes=notes,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Import repair failed: {str(e)}")
 
 
 @mcp.tool()
@@ -3781,6 +3958,8 @@ async def execute_component_instance(
 async def plan_project_execution(
     project_path: str,
     include_spaces: bool = True,
+    include_walls: bool = True,
+    include_openings: bool = True,
     include_components: bool = True,
     include_lighting: bool = True,
     include_scene_info: bool = True,
@@ -3790,6 +3969,8 @@ async def plan_project_execution(
         plan = build_project_execution_plan(
             project_path,
             include_spaces=include_spaces,
+            include_walls=include_walls,
+            include_openings=include_openings,
             include_components=include_components,
             include_lighting=include_lighting,
             include_scene_info=include_scene_info,
@@ -3808,6 +3989,8 @@ async def execute_project_model(
     stop_on_error: bool = True,
     allow_partial: bool = False,
     include_spaces: bool = True,
+    include_walls: bool = True,
+    include_openings: bool = True,
     include_components: bool = True,
     include_lighting: bool = True,
     include_scene_info: bool = True,
@@ -3819,6 +4002,8 @@ async def execute_project_model(
             stop_on_error=stop_on_error,
             allow_partial=allow_partial,
             include_spaces=include_spaces,
+            include_walls=include_walls,
+            include_openings=include_openings,
             include_components=include_components,
             include_lighting=include_lighting,
             include_scene_info=include_scene_info,

@@ -28,6 +28,7 @@ def test_init_project_empty_template_creates_workspace_files(tmp_path):
     assert (project_path / ".claude" / "skills" / "bathroom_planning" / "SKILL.md").exists()
     assert (project_path / "snapshots").is_dir()
     assert (project_path / "snapshots" / "manifest.json").exists()
+    assert (project_path / "imports").is_dir()
 
     design_model = json.loads((project_path / "design_model.json").read_text())
     assets_lock = json.loads((project_path / "assets.lock.json").read_text())
@@ -47,6 +48,7 @@ def test_init_project_empty_template_creates_workspace_files(tmp_path):
     assert "design_rules.json" in (project_path / "CLAUDE.md").read_text(encoding="utf-8")
     assert "codex_runtime_skills" in result["files"]
     assert "claude_runtime_skills" in result["files"]
+    assert "imports" in result["files"]
     assert result["runtime_skills"]["installed"] is True
 
 
@@ -67,6 +69,7 @@ def test_init_project_bathroom_template_creates_seed_bathroom(tmp_path):
     assert (project_path / "assets" / "components").is_dir()
     assert (project_path / "component_library.json").exists()
     assert (project_path / "snapshots" / "manifest.json").exists()
+    assert (project_path / "imports").is_dir()
     assert (project_path / "AGENTS.md").exists()
     assert (project_path / "CLAUDE.md").exists()
     assert (project_path / ".agents" / "skills" / "designer_workflow" / "SKILL.md").exists()
@@ -145,6 +148,7 @@ def test_cli_state_outputs_project_summaries(tmp_path, capsys):
     assert data["design_model"]["spaces"]["bathroom_001"]["type"] == "bathroom"
     assert data["design_rules"]["effective_valid"] is True
     assert data["assets_lock"]["asset_count"] == 5
+    assert data["imports"]["count"] == 0
     assert data["visual_feedback"]["pending_action_count"] == 0
     assert data["versions"]["count"] == 0
     assert data["execution"]["operation_count"] == 0
@@ -160,6 +164,7 @@ def test_cli_state_can_skip_optional_summaries(tmp_path, capsys):
             str(project_path),
             "--no-rules",
             "--no-assets",
+            "--no-imports",
             "--no-visual-feedback",
             "--no-versions",
             "--no-execution",
@@ -172,6 +177,7 @@ def test_cli_state_can_skip_optional_summaries(tmp_path, capsys):
     assert "design_model" in data
     assert "design_rules" not in data
     assert "assets_lock" not in data
+    assert "imports" not in data
     assert "visual_feedback" not in data
     assert "versions" not in data
     assert "execution" not in data

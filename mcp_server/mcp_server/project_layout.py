@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
@@ -201,11 +202,143 @@ def normalized_components(
     return components, checks
 
 
+def point_3d(value: Any, label: str) -> tuple[list[float] | None, list[str]]:
+    """Return one normalized 3D point or validation errors."""
+    if not isinstance(value, list) or len(value) != 3:
+        return None, [f"{label} must be a 3D point."]
+    return [float(value[0]), float(value[1]), float(value[2])], []
+
+
+def wall_path_length(path: list[list[float]]) -> float:
+    """Return the total length of a wall path in millimeters."""
+    length = 0.0
+    for index in range(len(path) - 1):
+        first = path[index]
+        second = path[index + 1]
+        length += math.sqrt(
+            (second[0] - first[0]) ** 2
+            + (second[1] - first[1]) ** 2
+            + (second[2] - first[2]) ** 2
+        )
+    return length
+
+
+def normalized_walls(
+    design_model: dict[str, Any],
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    """Return normalized explicit walls and validation checks."""
+    walls: dict[str, dict[str, Any]] = {}
+    checks: list[dict[str, Any]] = []
+    for wall_id, wall in design_model.get("walls", {}).items():
+        errors: list[str] = []
+        if not isinstance(wall, dict):
+            errors.append(f"wall must be an object: {wall_id}")
+            checks.append(
+                {
+                    "name": "wall_geometry",
+                    "valid": False,
+                    "wall_id": wall_id,
+                    "errors": errors,
+                }
+            )
+            continue
+        path = wall.get("path")
+        normalized_path: list[list[float]] = []
+        if not isinstance(path, list) or len(path) < 2:
+            errors.append(f"wall path must include at least two points: {wall_id}")
+        else:
+            for index, point in enumerate(path):
+                normalized_point, point_errors = point_3d(
+                    point,
+                    f"wall {wall_id} path[{index}]",
+                )
+                errors.extend(point_errors)
+                if normalized_point is not None:
+                    normalized_path.append(normalized_point)
+        height = float(wall.get("height", 0))
+        thickness = float(wall.get("thickness", 0))
+        if height <= 0:
+            errors.append(f"wall height must be positive: {wall_id}")
+        if thickness <= 0:
+            errors.append(f"wall thickness must be positive: {wall_id}")
+        if normalized_path and wall_path_length(normalized_path) <= 0:
+            errors.append(f"wall path length must be positive: {wall_id}")
+
+        checks.append(
+            {
+                "name": "wall_geometry",
+                "valid": not errors,
+                "wall_id": wall_id,
+                "errors": errors,
+            }
+        )
+        if not errors:
+            walls[wall_id] = {
+                "wall": wall,
+                "path": normalized_path,
+                "length": wall_path_length(normalized_path),
+            }
+    return walls, checks
+
+
+def normalized_openings(
+    design_model: dict[str, Any],
+    walls: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return validation checks for hosted wall openings."""
+    checks: list[dict[str, Any]] = []
+    for opening_id, opening in design_model.get("openings", {}).items():
+        errors: list[str] = []
+        if not isinstance(opening, dict):
+            errors.append(f"opening must be an object: {opening_id}")
+            checks.append(
+                {
+                    "name": "opening_geometry",
+                    "valid": False,
+                    "opening_id": opening_id,
+                    "errors": errors,
+                }
+            )
+            continue
+
+        host_wall = opening.get("host_wall")
+        wall = walls.get(host_wall)
+        if wall is None:
+            errors.append(f"opening host_wall not found: {host_wall}")
+        offset = float(opening.get("offset", -1))
+        width = float(opening.get("width", 0))
+        height = float(opening.get("height", 0))
+        if offset < 0:
+            errors.append(f"opening offset must be non-negative: {opening_id}")
+        if width <= 0:
+            errors.append(f"opening width must be positive: {opening_id}")
+        if height <= 0:
+            errors.append(f"opening height must be positive: {opening_id}")
+        if wall is not None and offset + width > wall["length"] + 0.001:
+            errors.append(
+                f"opening exceeds host wall length: {opening_id} "
+                f"offset={offset} width={width} wall_length={wall['length']}"
+            )
+
+        checks.append(
+            {
+                "name": "opening_geometry",
+                "valid": not errors,
+                "opening_id": opening_id,
+                "host_wall": host_wall,
+                "errors": errors,
+            }
+        )
+    return checks
+
+
 def validate_layout_model(design_model: dict[str, Any]) -> dict[str, Any]:
     """Validate component containment, physical overlap, and simple clearances."""
     spaces, space_checks = normalized_spaces(design_model)
     components, component_checks = normalized_components(design_model)
-    checks = [*space_checks, *component_checks]
+    walls, wall_checks = normalized_walls(design_model)
+    opening_checks = normalized_openings(design_model, walls)
+    checks = [*space_checks, *component_checks, *wall_checks, *opening_checks]
     component_spaces: dict[str, str | None] = {}
 
     for instance_id, payload in components.items():

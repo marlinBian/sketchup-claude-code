@@ -36,7 +36,7 @@ The project directory now owns `design_model.json`, `design_rules.json`,
 `component_library.json`, `assets.lock.json`, `.mcp.json`, `AGENTS.md`,
 `CLAUDE.md`, the project-local runtime skill directories `.agents/skills/` and
 `.claude/skills/`, the `assets/components/` cache directory, and
-`snapshots/manifest.json`.
+`imports/`, `snapshots/manifest.json`, and `versions/`.
 
 Validate the generated project:
 
@@ -124,7 +124,39 @@ Current MCP tools for this slice:
 - `execute_bathroom_plan`: plans the same bathroom and sends the trace to the
   SketchUp bridge.
 
-## 5. Try a Simple Prompt
+## 5. Try an Import
+
+Use this when you already have a PDF, DWG, DXF, image, scan, or photo of a
+floor plan and want an editable first model.
+
+Agent prompt:
+
+```text
+Import this floor plan and generate an editable model: ~/Downloads/floorplan.pdf.
+The overall plan is about 7200 mm wide and 5100 mm deep.
+```
+
+Equivalent local CLI smoke:
+
+```bash
+sketchup-agent import-floorplan ~/Design/my-bathroom ~/Downloads/floorplan.pdf \
+  --width 7200 --depth 5100 --force
+sketchup-agent list-imports ~/Design/my-bathroom
+sketchup-agent plan-execution ~/Design/my-bathroom
+sketchup-agent validate ~/Design/my-bathroom
+```
+
+If the imported scale is wrong, correct it without restarting the design:
+
+```bash
+sketchup-agent rescale-import ~/Design/my-bathroom import_001 --target-width 8200
+```
+
+Import is autonomous-first. The first pass writes useful working truth directly
+to `design_model.json`; source material and interpretation evidence are kept
+under `imports/<import_id>/` for later repair.
+
+## 6. Try a Simple Prompt
 
 English:
 

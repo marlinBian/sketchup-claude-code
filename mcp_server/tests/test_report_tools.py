@@ -6,6 +6,7 @@ import re
 import pytest
 
 from mcp_server.project_init import init_project
+from mcp_server.tools.import_pipeline import import_floorplan_to_model
 from mcp_server.tools.report_tools import generate_project_report
 
 
@@ -19,8 +20,31 @@ def test_generate_project_report_writes_english_markdown(tmp_path):
     assert result["asset_count"] == 5
     assert "# " in report
     assert "Project Summary" in report
+    assert "Imports" in report
     assert "SketchUp sync status: not_executed" in report
     assert "Effective Design Rules" in report
+    assert not re.search(r"[\u4e00-\u9fff]", report)
+
+
+def test_generate_project_report_includes_import_summary(tmp_path):
+    source = tmp_path / "floorplan.pdf"
+    source.write_bytes(b"floorplan fixture\n")
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        width=7200,
+        depth=5100,
+    )
+
+    result = generate_project_report(project)
+    report = (project / "reports" / "design_report.md").read_text(encoding="utf-8")
+
+    assert result["import_count"] == 1
+    assert "- Imports: 1" in report
+    assert "| import_001 | imported | pdf |" in report
     assert not re.search(r"[\u4e00-\u9fff]", report)
 
 

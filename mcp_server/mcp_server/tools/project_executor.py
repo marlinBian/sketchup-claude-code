@@ -201,10 +201,143 @@ def bridge_operations_for_space(
     ]
 
 
+def bridge_operations_for_wall(
+    wall_id: str,
+    wall: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Build wall operations from explicit design_model walls."""
+    path = wall.get("path")
+    if not isinstance(path, list) or len(path) < 2:
+        raise ValueError(f"{wall_id}.path must include at least two points.")
+    height = float(wall.get("height", 0))
+    thickness = float(wall.get("thickness", 0))
+    if height <= 0 or thickness <= 0:
+        raise ValueError(f"{wall_id}.height and thickness must be positive.")
+
+    operations: list[dict[str, Any]] = []
+    for index in range(len(path) - 1):
+        segment_id = wall_id if len(path) == 2 else f"{wall_id}_{index + 1:02d}"
+        operations.append(
+            {
+                "operation_id": f"wall_{segment_id}",
+                "operation_type": "create_wall",
+                "payload": {
+                    "wall_id": wall_id,
+                    "wall_segment_id": segment_id,
+                    "start": _xyz(path[index], f"{wall_id}.path[{index}]"),
+                    "end": _xyz(path[index + 1], f"{wall_id}.path[{index + 1}]"),
+                    "height": height,
+                    "thickness": thickness,
+                    "alignment": wall.get("alignment", "inner"),
+                    "layer": wall.get("layer", "Walls"),
+                },
+                "rollback_on_failure": True,
+            }
+        )
+    return operations
+
+
+def _opening_box_for_wall(
+    opening_id: str,
+    opening: dict[str, Any],
+    wall: dict[str, Any],
+) -> dict[str, Any]:
+    """Return an axis-aligned placeholder box payload for an opening."""
+    path = wall.get("path", [])
+    if not isinstance(path, list) or len(path) < 2:
+        raise ValueError(f"{opening_id}.host_wall path is missing.")
+    start = _xyz(path[0], f"{opening_id}.host_wall.path[0]")
+    end = _xyz(path[1], f"{opening_id}.host_wall.path[1]")
+    offset = float(opening.get("offset", 0))
+    width = float(opening.get("width", 0))
+    height = float(opening.get("height", 0))
+    thickness = max(float(wall.get("thickness", DEFAULT_WALL_THICKNESS)), 1.0)
+    sill_height = float(opening.get("sill_height", 0))
+    if width <= 0 or height <= 0:
+        raise ValueError(f"{opening_id}.width and height must be positive.")
+
+    dx = end[0] - start[0]
+    dy = end[1] - start[1]
+    horizontal = abs(dx) >= abs(dy)
+    if horizontal:
+        direction = 1.0 if dx >= 0 else -1.0
+        x = start[0] + direction * offset
+        if direction < 0:
+            x -= width
+        y = min(start[1], end[1])
+        return {
+            "corner": [x, y, sill_height],
+            "width": width,
+            "depth": thickness,
+            "height": height,
+        }
+
+    direction = 1.0 if dy >= 0 else -1.0
+    y = start[1] + direction * offset
+    if direction < 0:
+        y -= width
+    x = min(start[0], end[0])
+    return {
+        "corner": [x, y, sill_height],
+        "width": thickness,
+        "depth": width,
+        "height": height,
+    }
+
+
+def bridge_operation_for_opening(
+    opening_id: str,
+    opening: dict[str, Any],
+    walls: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a placeholder operation for an imported door or window opening."""
+    host_wall_id = opening.get("host_wall")
+    wall = walls.get(host_wall_id)
+    if wall is None:
+        raise ValueError(f"{opening_id}.host_wall not found: {host_wall_id}")
+    box = _opening_box_for_wall(opening_id, opening, wall)
+    layer = opening.get("layer")
+    if not layer:
+        layer = "Windows" if opening.get("type") == "window" else "Doors"
+    return {
+        "operation_id": f"opening_{opening_id}",
+        "operation_type": "create_box",
+        "payload": {
+            "opening_id": opening_id,
+            "host_wall": host_wall_id,
+            "opening_type": opening.get("type", "opening"),
+            "corner": box["corner"],
+            "width": box["width"],
+            "depth": box["depth"],
+            "height": box["height"],
+            "layer": layer,
+        },
+        "rollback_on_failure": True,
+    }
+
+
+def space_import_has_explicit_walls(
+    space: dict[str, Any],
+    walls: dict[str, Any],
+) -> bool:
+    """Return true when imported explicit walls should drive shell execution."""
+    source = space.get("source", {}) if isinstance(space, dict) else {}
+    import_id = source.get("import_id") if isinstance(source, dict) else None
+    if not import_id:
+        return False
+    for wall in walls.values():
+        wall_source = wall.get("source", {}) if isinstance(wall, dict) else {}
+        if isinstance(wall_source, dict) and wall_source.get("import_id") == import_id:
+            return True
+    return False
+
+
 def build_project_execution_plan(
     project_path: str | Path,
     *,
     include_spaces: bool = True,
+    include_walls: bool = True,
+    include_openings: bool = True,
     include_components: bool = True,
     include_lighting: bool = True,
     include_scene_info: bool = True,
@@ -225,10 +358,13 @@ def build_project_execution_plan(
     ceiling_height = float(metadata.get("ceiling_height", 2400))
     operations: list[dict[str, Any]] = []
     skipped_instances: list[dict[str, str]] = []
+    walls = design_model.get("walls", {})
 
     if include_spaces:
         for space_id in sorted(design_model.get("spaces", {})):
             space = design_model["spaces"][space_id]
+            if space_import_has_explicit_walls(space, walls):
+                continue
             try:
                 operations.extend(
                     bridge_operations_for_space(
@@ -242,6 +378,38 @@ def build_project_execution_plan(
                     {
                         "kind": "space",
                         "id": space_id,
+                        "reason": str(error),
+                    }
+                )
+
+    if include_walls:
+        for wall_id in sorted(walls):
+            try:
+                operations.extend(bridge_operations_for_wall(wall_id, walls[wall_id]))
+            except Exception as error:
+                skipped_instances.append(
+                    {
+                        "kind": "wall",
+                        "id": wall_id,
+                        "reason": str(error),
+                    }
+                )
+
+    if include_openings:
+        for opening_id in sorted(design_model.get("openings", {})):
+            try:
+                operations.append(
+                    bridge_operation_for_opening(
+                        opening_id,
+                        design_model["openings"][opening_id],
+                        walls,
+                    )
+                )
+            except Exception as error:
+                skipped_instances.append(
+                    {
+                        "kind": "opening",
+                        "id": opening_id,
                         "reason": str(error),
                     }
                 )
@@ -343,6 +511,8 @@ def execute_project_execution_plan(
     stop_on_error: bool = True,
     allow_partial: bool = False,
     include_spaces: bool = True,
+    include_walls: bool = True,
+    include_openings: bool = True,
     include_components: bool = True,
     include_lighting: bool = True,
     include_scene_info: bool = True,
@@ -352,6 +522,8 @@ def execute_project_execution_plan(
     plan = build_project_execution_plan(
         project_path,
         include_spaces=include_spaces,
+        include_walls=include_walls,
+        include_openings=include_openings,
         include_components=include_components,
         include_lighting=include_lighting,
         include_scene_info=include_scene_info,

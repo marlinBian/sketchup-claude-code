@@ -27,6 +27,14 @@ from mcp_server.tools.project_executor import (
     build_project_execution_plan,
     execute_project_execution_plan,
 )
+from mcp_server.tools.import_pipeline import (
+    get_import_summary,
+    import_floorplan_to_model,
+    list_import_sessions,
+    register_import_source,
+    repair_imported_region,
+    rescale_imported_model,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -104,6 +112,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Omit space wall operations",
     )
     plan_execution_parser.add_argument(
+        "--no-walls",
+        action="store_true",
+        help="Omit explicit wall operations",
+    )
+    plan_execution_parser.add_argument(
+        "--no-openings",
+        action="store_true",
+        help="Omit imported opening placeholder operations",
+    )
+    plan_execution_parser.add_argument(
         "--no-components",
         action="store_true",
         help="Omit component placement operations",
@@ -141,6 +159,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-spaces",
         action="store_true",
         help="Omit space wall operations",
+    )
+    execute_project_parser.add_argument(
+        "--no-walls",
+        action="store_true",
+        help="Omit explicit wall operations",
+    )
+    execute_project_parser.add_argument(
+        "--no-openings",
+        action="store_true",
+        help="Omit imported opening placeholder operations",
     )
     execute_project_parser.add_argument(
         "--no-components",
@@ -222,6 +250,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Omit assets.lock.json summary",
     )
     state_parser.add_argument(
+        "--no-imports",
+        action="store_true",
+        help="Omit imports/ summaries",
+    )
+    state_parser.add_argument(
         "--no-visual-feedback",
         action="store_true",
         help="Omit snapshots/manifest.json visual feedback summary",
@@ -246,6 +279,86 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-path",
         help="Report output path. Defaults to reports/design_report.md.",
     )
+
+    register_import_parser = subparsers.add_parser(
+        "register-import",
+        help="Register a DWG, DXF, PDF, image, or other source file",
+    )
+    register_import_parser.add_argument("project_path", help="Design project directory")
+    register_import_parser.add_argument("source_path", help="Source file to register")
+    register_import_parser.add_argument("--import-id", help="Optional import session ID")
+    register_import_parser.add_argument("--label", help="Optional human label")
+    register_import_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing import manifest with the same ID",
+    )
+
+    import_floorplan_parser = subparsers.add_parser(
+        "import-floorplan",
+        help="Import source material directly into editable design_model.json truth",
+    )
+    import_floorplan_parser.add_argument("project_path", help="Design project directory")
+    import_floorplan_parser.add_argument(
+        "source_path",
+        nargs="?",
+        help="Source file to register and import. Omit when --import-id already exists.",
+    )
+    import_floorplan_parser.add_argument("--import-id", help="Optional import session ID")
+    import_floorplan_parser.add_argument("--label", help="Optional human label")
+    import_floorplan_parser.add_argument("--width", type=float, help="Known plan width in mm")
+    import_floorplan_parser.add_argument("--depth", type=float, help="Known plan depth in mm")
+    import_floorplan_parser.add_argument(
+        "--wall-height",
+        type=float,
+        default=2800,
+        help="Assumed wall height in mm",
+    )
+    import_floorplan_parser.add_argument(
+        "--wall-thickness",
+        type=float,
+        default=120,
+        help="Assumed wall thickness in mm",
+    )
+    import_floorplan_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite the import session and regenerated entities",
+    )
+
+    import_summary_parser = subparsers.add_parser(
+        "import-summary",
+        help="Inspect import manifests and model import sessions",
+    )
+    import_summary_parser.add_argument("project_path", help="Design project directory")
+    import_summary_parser.add_argument("--import-id", help="Optional import session ID")
+
+    list_imports_parser = subparsers.add_parser(
+        "list-imports",
+        help="List import sessions registered in a design project",
+    )
+    list_imports_parser.add_argument("project_path", help="Design project directory")
+
+    rescale_import_parser = subparsers.add_parser(
+        "rescale-import",
+        help="Rescale imported model geometry after a better dimension is known",
+    )
+    rescale_import_parser.add_argument("project_path", help="Design project directory")
+    rescale_import_parser.add_argument("import_id", help="Import session ID")
+    rescale_import_parser.add_argument("--scale-factor", type=float)
+    rescale_import_parser.add_argument("--target-width", type=float)
+    rescale_import_parser.add_argument("--target-depth", type=float)
+
+    repair_import_parser = subparsers.add_parser(
+        "repair-import",
+        help="Patch imported working truth using source-backed repair inputs",
+    )
+    repair_import_parser.add_argument("project_path", help="Design project directory")
+    repair_import_parser.add_argument("import_id", help="Import session ID")
+    repair_import_parser.add_argument("--target-width", type=float)
+    repair_import_parser.add_argument("--target-depth", type=float)
+    repair_import_parser.add_argument("--wall-thickness", type=float)
+    repair_import_parser.add_argument("--notes", help="Repair notes")
 
     smoke_parser = subparsers.add_parser(
         "smoke",
@@ -472,6 +585,8 @@ def main(argv: list[str] | None = None) -> int:
             result = build_project_execution_plan(
                 args.project_path,
                 include_spaces=not args.no_spaces,
+                include_walls=not args.no_walls,
+                include_openings=not args.no_openings,
                 include_components=not args.no_components,
                 include_lighting=not args.no_lighting,
                 include_scene_info=not args.no_scene_info,
@@ -484,6 +599,8 @@ def main(argv: list[str] | None = None) -> int:
                 stop_on_error=not args.continue_on_error,
                 allow_partial=args.allow_partial,
                 include_spaces=not args.no_spaces,
+                include_walls=not args.no_walls,
+                include_openings=not args.no_openings,
                 include_components=not args.no_components,
                 include_lighting=not args.no_lighting,
                 include_scene_info=not args.no_scene_info,
@@ -524,6 +641,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.project_path,
                 include_rules=not args.no_rules,
                 include_assets=not args.no_assets,
+                include_imports=not args.no_imports,
                 include_visual_feedback=not args.no_visual_feedback,
                 include_versions=not args.no_versions,
                 include_execution=not args.no_execution,
@@ -534,6 +652,72 @@ def main(argv: list[str] | None = None) -> int:
             result = generate_project_report(
                 args.project_path,
                 output_path=args.output_path,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "register-import":
+            result = register_import_source(
+                args.project_path,
+                args.source_path,
+                import_id=args.import_id,
+                label=args.label,
+                overwrite=args.force,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "import-floorplan":
+            result = import_floorplan_to_model(
+                args.project_path,
+                source_path=args.source_path,
+                import_id=args.import_id,
+                label=args.label,
+                width=args.width,
+                depth=args.depth,
+                wall_height=args.wall_height,
+                wall_thickness=args.wall_thickness,
+                overwrite=args.force,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "import-summary":
+            result = get_import_summary(
+                args.project_path,
+                import_id=args.import_id,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "list-imports":
+            imports = list_import_sessions(args.project_path)
+            print(
+                json.dumps(
+                    {
+                        "project_path": args.project_path,
+                        "count": len(imports),
+                        "imports": imports,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return 0
+        if args.command == "rescale-import":
+            result = rescale_imported_model(
+                args.project_path,
+                args.import_id,
+                scale_factor=args.scale_factor,
+                target_width=args.target_width,
+                target_depth=args.target_depth,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "repair-import":
+            result = repair_imported_region(
+                args.project_path,
+                args.import_id,
+                target_width=args.target_width,
+                target_depth=args.target_depth,
+                wall_thickness=args.wall_thickness,
+                notes=args.notes,
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0

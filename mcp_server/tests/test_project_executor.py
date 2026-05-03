@@ -11,6 +11,7 @@ from mcp_server.tools.project_executor import (
     execute_project_execution_plan,
     resolve_project_skp_path,
 )
+from mcp_server.tools.import_pipeline import import_floorplan_to_model
 
 
 def test_build_project_execution_plan_from_bathroom_project(tmp_path):
@@ -62,6 +63,36 @@ def test_build_project_execution_plan_reports_missing_component_ref(tmp_path):
             "reason": "component not found: missing_component",
         }
     ]
+
+
+def test_build_project_execution_plan_from_imported_floorplan(tmp_path):
+    init_project(tmp_path, template="empty")
+    source = tmp_path / "floorplan.pdf"
+    source.write_bytes(b"floorplan")
+    import_floorplan_to_model(
+        tmp_path,
+        source_path=source,
+        import_id="import_001",
+        width=5000,
+        depth=3000,
+    )
+
+    plan = build_project_execution_plan(tmp_path)
+    operation_types = [operation["operation_type"] for operation in plan["bridge_operations"]]
+
+    assert plan["skipped_count"] == 0
+    assert plan["operation_count"] == 7
+    assert operation_types == [
+        "create_wall",
+        "create_wall",
+        "create_wall",
+        "create_wall",
+        "create_box",
+        "create_box",
+        "get_scene_info",
+    ]
+    assert plan["bridge_operations"][0]["payload"]["wall_id"] == "import_001_wall_east"
+    assert plan["bridge_operations"][4]["payload"]["opening_id"] == "import_001_door_001"
 
 
 def test_resolve_project_skp_path_makes_project_relative_paths_absolute(tmp_path):
@@ -116,6 +147,59 @@ def test_execute_project_execution_plan_accepts_injected_executor(tmp_path):
     assert design_model["components"]["toilet_001"]["entity_id"] == "su-place_toilet_001"
     assert design_model["metadata"]["execution_sync"]["status"] == "synced"
     assert design_model["metadata"]["execution_sync"]["operation_count"] == 10
+
+
+def test_execute_project_execution_plan_syncs_imported_walls_and_openings(tmp_path):
+    init_project(tmp_path, template="empty")
+    source = tmp_path / "floorplan.pdf"
+    source.write_bytes(b"floorplan")
+    import_floorplan_to_model(tmp_path, source_path=source, import_id="import_001")
+
+    def fake_execute(operations, stop_on_error=True):
+        results = []
+        for operation in operations:
+            payload = operation.get("payload", {})
+            results.append(
+                {
+                    "operation_id": operation["operation_id"],
+                    "operation_type": operation["operation_type"],
+                    "request": {"params": {"payload": payload}},
+                    "response": {
+                        "result": {
+                            "status": "success",
+                            "entity_ids": [f"su-{operation['operation_id']}"],
+                            "spatial_delta": {},
+                        },
+                    },
+                    "ok": True,
+                }
+            )
+        return {
+            "status": "success",
+            "executed_count": len(operations),
+            "requested_count": len(operations),
+            "results": results,
+        }
+
+    result = execute_project_execution_plan(tmp_path, execute_fn=fake_execute)
+    design_model = json.loads((tmp_path / "design_model.json").read_text(encoding="utf-8"))
+
+    assert result["execution_sync"]["updated_walls"] == [
+        "import_001_wall_east",
+        "import_001_wall_north",
+        "import_001_wall_south",
+        "import_001_wall_west",
+    ]
+    assert result["execution_sync"]["updated_openings"] == [
+        "import_001_door_001",
+        "import_001_window_001",
+    ]
+    assert design_model["walls"]["import_001_wall_south"]["execution"]["entity_ids"] == [
+        "su-wall_import_001_wall_south"
+    ]
+    assert design_model["openings"]["import_001_door_001"]["execution"]["entity_ids"] == [
+        "su-opening_import_001_door_001"
+    ]
 
 
 @pytest.mark.asyncio

@@ -160,6 +160,80 @@ class TestValidateDesignModel:
         assert is_valid is True
         assert errors == []
 
+    def test_valid_imported_floorplan_contract(self):
+        """Test validation accepts imported walls, openings, and sessions."""
+        data = {
+            "version": "1.0",
+            "project_name": "imported_project",
+            "components": {},
+            "spaces": {
+                "import_001_space_001": {
+                    "type": "other",
+                    "bounds": {"min": [0, 0, 0], "max": [6000, 4000, 2800]},
+                    "center": [3000, 2000, 1400],
+                    "footprint": [
+                        [0, 0, 0],
+                        [6000, 0, 0],
+                        [6000, 4000, 0],
+                        [0, 4000, 0],
+                    ],
+                    "source": {"kind": "import_floorplan", "import_id": "import_001"},
+                },
+            },
+            "walls": {
+                "import_001_wall_south": {
+                    "path": [[0, 0, 0], [6000, 0, 0]],
+                    "height": 2800,
+                    "thickness": 120,
+                    "alignment": "inner",
+                    "layer": "Walls",
+                    "source": {
+                        "kind": "import_floorplan",
+                        "import_id": "import_001",
+                        "confidence": 0.7,
+                    },
+                },
+            },
+            "openings": {
+                "import_001_door_001": {
+                    "type": "door",
+                    "host_wall": "import_001_wall_south",
+                    "offset": 2400,
+                    "width": 900,
+                    "height": 2100,
+                    "representation": "placeholder",
+                    "layer": "Doors",
+                },
+            },
+            "import_sessions": {
+                "import_001": {
+                    "source_file": "imports/import_001/source/floorplan.pdf",
+                    "source_type": "pdf",
+                    "status": "imported",
+                    "scale": {"units": "mm", "source": "estimated"},
+                    "quality_flags": ["scale_estimated"],
+                    "generated_model": {
+                        "space_ids": ["import_001_space_001"],
+                        "wall_ids": ["import_001_wall_south"],
+                        "opening_ids": ["import_001_door_001"],
+                    },
+                },
+            },
+            "quality_flags": [
+                {
+                    "code": "scale_estimated",
+                    "severity": "warning",
+                    "message": "scale estimated",
+                    "source": {"import_id": "import_001"},
+                },
+            ],
+        }
+
+        is_valid, errors = validate_design_model(data)
+
+        assert is_valid is True
+        assert errors == []
+
     def test_missing_required_fields(self):
         """Test validation fails when required fields are missing."""
         data = {

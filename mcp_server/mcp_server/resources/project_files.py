@@ -10,6 +10,8 @@ PROJECT_COMPONENT_LIBRARY_FILENAME = "component_library.json"
 ASSETS_CACHE_DIR = "assets/components"
 SNAPSHOTS_DIR = "snapshots"
 SNAPSHOT_MANIFEST_FILENAME = "manifest.json"
+IMPORTS_DIR = "imports"
+IMPORT_MANIFEST_FILENAME = "manifest.json"
 
 
 def find_design_model_path(project_path: str | Path) -> Path:
@@ -59,3 +61,18 @@ def snapshots_path(project_path: str | Path) -> Path:
 def snapshot_manifest_path(project_path: str | Path) -> Path:
     """Return the project-local snapshot manifest path."""
     return snapshots_path(project_path) / SNAPSHOT_MANIFEST_FILENAME
+
+
+def imports_path(project_path: str | Path) -> Path:
+    """Return the project-local imports directory path."""
+    return Path(project_path) / IMPORTS_DIR
+
+
+def import_session_path(project_path: str | Path, import_id: str) -> Path:
+    """Return one project-local import session directory path."""
+    return imports_path(project_path) / import_id
+
+
+def import_manifest_path(project_path: str | Path, import_id: str) -> Path:
+    """Return one project-local import session manifest path."""
+    return import_session_path(project_path, import_id) / IMPORT_MANIFEST_FILENAME

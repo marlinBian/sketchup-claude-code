@@ -227,17 +227,23 @@ Validation should check import quality without blocking momentum:
 
 Validation reports should separate hard schema errors from quality flags.
 
-## First Implementation Slice
+## Current Implementation Slice
 
-The first implementation should avoid heavy external dependencies:
+The current implementation avoids heavy external dependencies and establishes
+the import contract before adding real OCR, CAD parsing, or image
+interpretation:
 
-1. Add import project directories and manifest schema.
-2. Register image/PDF/DWG sources and hash them.
-3. Generate a reference overlay entry and import session summary.
-4. Add a simple manual-scale or detected-scale field.
-5. Create a deterministic sample imported room from a fixture.
-6. Write it into `design_model.json`.
-7. Produce a bridge trace that can render the imported room headlessly.
+1. Create `imports/<import_id>/` with `source/`, `previews/`, `evidence/`, and
+   `extracted/`.
+2. Register DWG, DXF, PDF, image, SketchUp, or unknown sources with hashes and
+   source type.
+3. Write a manifest and `extracted/interpretation.json` for retained evidence.
+4. Generate a deterministic editable rectangular shell as the first working
+   model when richer extraction is unavailable.
+5. Write imported `spaces`, `walls`, `openings`, `import_sessions`, and
+   `quality_flags` into `design_model.json`.
+6. Produce a headless bridge trace for imported walls and opening placeholders.
+7. Expose list, summary, rescale, review, and repair tools through MCP and CLI.
 
-This establishes the contract before adding real OCR, CAD parsing, or image
-interpretation.
+Richer extractors should replace only the interpretation stage. They must keep
+the same manifest, generated truth, quality flag, and repair contracts.

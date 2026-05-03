@@ -101,7 +101,28 @@ Use `validate_project_layout` after component placement or when the designer
 asks to check the layout. Treat failures as blockers for SketchUp execution
 unless the designer explicitly wants to keep a known conflict.
 
-### 4. Execute Only When the User Wants SketchUp Updated
+### 4. Import Existing Source Material
+
+When the designer provides a DWG, DXF, PDF, floor-plan image, scanned plan, or
+photo, use `import_floorplan_to_model` to generate editable working truth
+directly in `design_model.json`.
+
+Import is autonomous-first. Do not ask the designer to confirm every wall, door,
+window, or low-level numeric candidate before generating the first model. If the
+designer gives known dimensions, pass them as `width` and `depth` in
+millimeters. If dimensions are not available, let the tool estimate scale and
+report quality flags.
+
+After import, call `plan_project_execution` to verify that imported walls and
+opening placeholders can produce a SketchUp bridge trace. Use
+`execute_project_model` only when the designer wants SketchUp updated.
+
+When the designer later says the imported model differs from the source, call
+`review_model_against_import_source`, then `repair_imported_region` with the
+specific correction. Use `rescale_imported_model` when the correction is a
+better overall width, depth, or scale factor.
+
+### 5. Execute Only When the User Wants SketchUp Updated
 
 Use `execute_bathroom_plan` when the user wants the model updated in SketchUp and
 the Ruby bridge is running.
@@ -127,7 +148,7 @@ If execution fails because SketchUp is not running, retry the startup path once
 with `launch_sketchup_bridge`; then report any environment blockers and keep the
 structured plan available.
 
-### 5. Report Structured Results
+### 6. Report Structured Results
 
 After planning or execution, summarize:
 
@@ -141,11 +162,13 @@ After planning or execution, summarize:
   `validate_design_project` found containment, overlap, or front-clearance
   issues
 - execution sync details, if `execute_project_model` was used
+- import summary details, if `import_floorplan_to_model`,
+  `rescale_imported_model`, or `repair_imported_region` was used
 
 Do not replace structured output with only prose. The design model remains the
 canonical state.
 
-### 6. Save Reviewable Versions
+### 7. Save Reviewable Versions
 
 Use `save_project_version` when the designer asks to save a milestone, compare
 alternatives later, or preserve a rollback point. Use `list_project_versions`
@@ -155,7 +178,7 @@ from a saved milestone. Use `restore_project_version` only after the designer
 explicitly asks to restore a version, because it overwrites current project
 truth files.
 
-### 7. Capture Visual Review Artifacts
+### 8. Capture Visual Review Artifacts
 
 Use `capture_project_snapshot` when the user asks for a screenshot or visual
 review and a project path is available. Snapshot provenance is recorded in
@@ -211,6 +234,10 @@ Put the vanity against the north wall of bathroom_001.
 Put the mirror above vanity_001 with a 150 mm gap.
 ```
 
+```text
+Import this PDF floor plan and generate an editable model.
+```
+
 Chinese examples:
 
 ```text
@@ -231,6 +258,10 @@ Chinese examples:
 
 ```text
 把镜子放在 vanity_001 上方，留 150 mm 间距。
+```
+
+```text
+导入这张户型图，生成可编辑模型。
 ```
 
 ## Guardrails
