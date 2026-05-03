@@ -134,6 +134,132 @@ def _sync_wall_execution(
     }
 
 
+def _sync_opening_execution(
+    design_model: dict[str, Any],
+    sync: dict[str, Any],
+    *,
+    opening_id: str,
+    operation_id: str,
+    entity_ids: list[str],
+    spatial_delta: dict[str, Any],
+    status: str | None,
+) -> None:
+    """Record bridge execution feedback on a hosted opening."""
+    if opening_id not in design_model.get("openings", {}):
+        return
+
+    opening = design_model["openings"][opening_id]
+    opening["execution"] = {
+        "operation_id": operation_id,
+        "entity_ids": entity_ids,
+        "spatial_delta": spatial_delta,
+        "status": status,
+    }
+    if opening_id not in sync["updated_openings"]:
+        sync["updated_openings"].append(opening_id)
+
+
+def _successful_records(execution_report: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return successful bridge records with an operation id."""
+    return [
+        record
+        for record in execution_report.get("results", [])
+        if record.get("ok") and record.get("operation_id")
+    ]
+
+
+def _record_payload(record: dict[str, Any]) -> dict[str, Any]:
+    """Return the payload sent for an executed bridge record."""
+    payload = (
+        record.get("request", {})
+        .get("params", {})
+        .get("payload", {})
+    )
+    return payload if isinstance(payload, dict) else {}
+
+
+def _opening_ids_from_response(record: dict[str, Any]) -> list[str]:
+    """Return hosted opening ids included in a bridge response."""
+    response_result = record.get("response", {}).get("result", {})
+    opening_ids: list[str] = []
+    for opening_result in response_result.get("opening_results", []):
+        opening_id = opening_result.get("opening_id")
+        if opening_id:
+            opening_ids.append(str(opening_id))
+    return opening_ids
+
+
+def _prepare_current_sync_targets(
+    design_model: dict[str, Any],
+    execution_report: dict[str, Any],
+    sync: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Clear stale execution state before recording a new successful replay."""
+    execution = design_model.setdefault("execution", {})
+    previous_operations = execution.get("bridge_operations", {})
+    if not isinstance(previous_operations, dict):
+        previous_operations = {}
+
+    records = _successful_records(execution_report)
+    current_operation_ids = [
+        str(record["operation_id"])
+        for record in records
+    ]
+    sync["removed_operations"] = sorted(
+        set(previous_operations) - set(current_operation_ids)
+    )
+
+    operations: dict[str, Any] = {}
+    execution["bridge_operations"] = operations
+
+    walls = design_model.get("walls", {})
+    openings = design_model.get("openings", {})
+    components = design_model.get("components", {})
+    lighting = design_model.get("lighting", {})
+
+    cleared_walls: set[str] = set()
+    cleared_openings: set[str] = set()
+    cleared_components: set[str] = set()
+    cleared_lighting: set[str] = set()
+
+    for record in records:
+        payload = _record_payload(record)
+
+        wall_id = payload.get("wall_id")
+        if wall_id in walls and wall_id not in cleared_walls:
+            walls[wall_id].pop("execution", None)
+            cleared_walls.add(str(wall_id))
+
+        opening_id = payload.get("opening_id")
+        if opening_id in openings and opening_id not in cleared_openings:
+            openings[opening_id].pop("execution", None)
+            cleared_openings.add(str(opening_id))
+
+        for hosted_opening_id in _opening_ids_from_response(record):
+            if (
+                hosted_opening_id in openings
+                and hosted_opening_id not in cleared_openings
+            ):
+                openings[hosted_opening_id].pop("execution", None)
+                cleared_openings.add(hosted_opening_id)
+
+        instance_id = payload.get("instance_id")
+        if instance_id in components and instance_id not in cleared_components:
+            components[instance_id].pop("execution", None)
+            components[instance_id].pop("entity_id", None)
+            cleared_components.add(str(instance_id))
+        elif instance_id in lighting and instance_id not in cleared_lighting:
+            lighting[instance_id].pop("execution", None)
+            lighting[instance_id].pop("entity_id", None)
+            cleared_lighting.add(str(instance_id))
+
+    sync["cleared_walls"] = sorted(cleared_walls)
+    sync["cleared_openings"] = sorted(cleared_openings)
+    sync["cleared_components"] = sorted(cleared_components)
+    sync["cleared_lighting"] = sorted(cleared_lighting)
+    return operations
+
+
 def sync_execution_report_to_design_model(
     design_model: dict[str, Any],
     execution_report: dict[str, Any],
@@ -147,19 +273,23 @@ def sync_execution_report_to_design_model(
         "updated_space_walls": [],
         "updated_walls": [],
         "updated_openings": [],
+        "removed_operations": [],
+        "cleared_walls": [],
+        "cleared_openings": [],
+        "cleared_components": [],
+        "cleared_lighting": [],
     }
-    execution = design_model.setdefault("execution", {})
-    operations = execution.setdefault("bridge_operations", {})
+    operations = _prepare_current_sync_targets(
+        design_model,
+        execution_report,
+        sync,
+    )
 
-    for record in execution_report.get("results", []):
-        if not record.get("ok"):
-            continue
+    for record in _successful_records(execution_report):
 
         response_result = record.get("response", {}).get("result", {})
         entity_ids = [str(entity_id) for entity_id in response_result.get("entity_ids", [])]
         operation_id = record.get("operation_id")
-        if not operation_id:
-            continue
 
         operations[operation_id] = {
             "operation_type": record.get("operation_type"),
@@ -167,13 +297,13 @@ def sync_execution_report_to_design_model(
             "spatial_delta": response_result.get("spatial_delta", {}),
             "status": response_result.get("status"),
         }
+        if response_result.get("opening_results"):
+            operations[operation_id]["opening_results"] = response_result[
+                "opening_results"
+            ]
         sync["recorded_operations"].append(operation_id)
 
-        payload = (
-            record.get("request", {})
-            .get("params", {})
-            .get("payload", {})
-        )
+        payload = _record_payload(record)
         instance_id = payload.get("instance_id")
         if not instance_id or not entity_ids:
             wall_id = payload.get("wall_id")
@@ -189,18 +319,35 @@ def sync_execution_report_to_design_model(
                 )
                 if wall_id not in sync["updated_walls"]:
                     sync["updated_walls"].append(wall_id)
+                for opening_result in response_result.get("opening_results", []):
+                    opening_id = opening_result.get("opening_id")
+                    if not opening_id:
+                        continue
+                    _sync_opening_execution(
+                        design_model,
+                        sync,
+                        opening_id=opening_id,
+                        operation_id=operation_id,
+                        entity_ids=[
+                            str(entity_id)
+                            for entity_id in opening_result.get("entity_ids", [])
+                        ],
+                        spatial_delta=opening_result.get("spatial_delta", {}),
+                        status=opening_result.get("status"),
+                    )
                 continue
 
             opening_id = payload.get("opening_id")
             if opening_id and opening_id in design_model.get("openings", {}):
-                opening = design_model["openings"][opening_id]
-                opening["execution"] = {
-                    "operation_id": operation_id,
-                    "entity_ids": entity_ids,
-                    "spatial_delta": response_result.get("spatial_delta", {}),
-                    "status": response_result.get("status"),
-                }
-                sync["updated_openings"].append(opening_id)
+                _sync_opening_execution(
+                    design_model,
+                    sync,
+                    opening_id=opening_id,
+                    operation_id=operation_id,
+                    entity_ids=entity_ids,
+                    spatial_delta=response_result.get("spatial_delta", {}),
+                    status=response_result.get("status"),
+                )
                 continue
 
             space_id = payload.get("space_id")

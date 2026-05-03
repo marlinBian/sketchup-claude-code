@@ -318,7 +318,7 @@ def opening_payloads(
             "width": door_width,
             "height": 2100.0,
             "swing_direction": "left",
-            "representation": "placeholder",
+            "representation": "hosted",
             "layer": "Doors",
             "source": {
                 "kind": "import_floorplan",
@@ -334,7 +334,7 @@ def opening_payloads(
             "width": window_width,
             "height": 1200.0,
             "sill_height": 900.0,
-            "representation": "placeholder",
+            "representation": "hosted",
             "layer": "Windows",
             "source": {
                 "kind": "import_floorplan",

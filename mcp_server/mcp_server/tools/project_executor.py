@@ -51,22 +51,6 @@ def _segment_length(start: list[float], end: list[float]) -> float:
     return math.dist(start, end)
 
 
-def _point_at_segment_distance(
-    start: list[float],
-    end: list[float],
-    distance: float,
-) -> list[float]:
-    """Interpolate a point on a segment at a distance from its start."""
-    length = _segment_length(start, end)
-    if length <= 0:
-        raise ValueError("Cannot interpolate a zero-length segment.")
-    ratio = distance / length
-    return [
-        start[index] + (end[index] - start[index]) * ratio
-        for index in range(3)
-    ]
-
-
 def _wall_path_length(path: list[Any], wall_id: str) -> float:
     """Return total baseline length for a wall path."""
     length = 0.0
@@ -77,12 +61,12 @@ def _wall_path_length(path: list[Any], wall_id: str) -> float:
     return length
 
 
-def _opening_cut_intervals_for_wall(
+def _opening_intervals_for_wall(
     wall_id: str,
     wall: dict[str, Any],
     openings: dict[str, Any] | None,
 ) -> list[dict[str, Any]]:
-    """Return opening intervals that should cut a host wall's plan trace."""
+    """Return hosted opening intervals measured along the wall path."""
     if not openings:
         return []
 
@@ -107,37 +91,47 @@ def _opening_cut_intervals_for_wall(
         end = min(offset + width, wall_length)
         if end - start <= MIN_WALL_SEGMENT_LENGTH:
             continue
-        intervals.append(
-            {
-                "opening_id": opening_id,
-                "start": start,
-                "end": end,
-            }
-        )
+        interval = {
+            "opening_id": opening_id,
+            "start": start,
+            "end": end,
+            "opening": opening,
+        }
+        intervals.append(interval)
 
     intervals.sort(key=lambda interval: (interval["start"], interval["end"]))
     return intervals
 
 
-def _solid_intervals_for_wall_span(
+def _openings_for_wall_span(
     span_start: float,
     span_end: float,
-    cut_intervals: list[dict[str, Any]],
-) -> list[tuple[float, float]]:
-    """Return solid sub-intervals after subtracting openings from one wall span."""
-    cursor = span_start
-    solid_intervals: list[tuple[float, float]] = []
-    for interval in cut_intervals:
-        cut_start = max(float(interval["start"]), span_start)
-        cut_end = min(float(interval["end"]), span_end)
-        if cut_end <= span_start or cut_start >= span_end:
+    opening_intervals: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return hosted openings that overlap one wall segment span."""
+    span_openings: list[dict[str, Any]] = []
+    for interval in opening_intervals:
+        opening_start = max(float(interval["start"]), span_start)
+        opening_end = min(float(interval["end"]), span_end)
+        if opening_end <= span_start or opening_start >= span_end:
             continue
-        if cut_start - cursor > MIN_WALL_SEGMENT_LENGTH:
-            solid_intervals.append((cursor, cut_start))
-        cursor = max(cursor, cut_end)
-    if span_end - cursor > MIN_WALL_SEGMENT_LENGTH:
-        solid_intervals.append((cursor, span_end))
-    return solid_intervals
+        if opening_end - opening_start <= MIN_WALL_SEGMENT_LENGTH:
+            continue
+
+        opening = interval["opening"]
+        hosted_opening: dict[str, Any] = {
+            "opening_id": interval["opening_id"],
+            "type": opening.get("type", "opening"),
+            "offset": opening_start - span_start,
+            "width": opening_end - opening_start,
+            "height": float(opening.get("height", 0)),
+            "sill_height": float(opening.get("sill_height", 0)),
+            "layer": opening.get("layer"),
+        }
+        if opening.get("swing_direction"):
+            hosted_opening["swing_direction"] = opening["swing_direction"]
+        span_openings.append(hosted_opening)
+    return span_openings
 
 
 def _manifest_dimensions(component: dict[str, Any]) -> dict[str, float]:
@@ -313,9 +307,9 @@ def bridge_operations_for_wall(
 ) -> list[dict[str, Any]]:
     """Build wall operations from explicit design_model walls.
 
-    Hosted openings are compiled as gaps in the solid wall trace so imported
-    windows and doors do not appear as continuous full-height walls in plan
-    view. Opening marker operations are emitted separately.
+    Hosted openings are compiled into a single wall operation with opening
+    metadata so the SketchUp bridge can build side wall pieces, sill/header
+    pieces, and thin door/window markers without using solid placeholder boxes.
     """
     path = wall.get("path")
     if not isinstance(path, list) or len(path) < 2:
@@ -325,10 +319,9 @@ def bridge_operations_for_wall(
     if height <= 0 or thickness <= 0:
         raise ValueError(f"{wall_id}.height and thickness must be positive.")
 
-    cut_intervals = _opening_cut_intervals_for_wall(wall_id, wall, openings)
-    operation_segments: list[dict[str, Any]] = []
+    opening_intervals = _opening_intervals_for_wall(wall_id, wall, openings)
+    operations: list[dict[str, Any]] = []
     cumulative_distance = 0.0
-    solid_index = 1
     for index in range(len(path) - 1):
         segment_start = _xyz(path[index], f"{wall_id}.path[{index}]")
         segment_end = _xyz(path[index + 1], f"{wall_id}.path[{index + 1}]")
@@ -339,51 +332,44 @@ def bridge_operations_for_wall(
 
         span_start = cumulative_distance
         span_end = cumulative_distance + segment_length
-        solid_intervals = _solid_intervals_for_wall_span(
+        segment_openings = _openings_for_wall_span(
             span_start,
             span_end,
-            cut_intervals,
+            opening_intervals,
         )
-
-        for solid_start, solid_end in solid_intervals:
-            local_start = solid_start - span_start
-            local_end = solid_end - span_start
-            start = _point_at_segment_distance(segment_start, segment_end, local_start)
-            end = _point_at_segment_distance(segment_start, segment_end, local_end)
-            if cut_intervals:
-                segment_id = f"{wall_id}_solid_{solid_index:02d}"
-                solid_index += 1
-            else:
-                segment_id = wall_id if len(path) == 2 else f"{wall_id}_{index + 1:02d}"
-            operation_segments.append(
+        segment_id = wall_id if len(path) == 2 else f"{wall_id}_{index + 1:02d}"
+        payload = {
+            "wall_id": wall_id,
+            "wall_segment_id": segment_id,
+            "start": segment_start,
+            "end": segment_end,
+            "height": height,
+            "thickness": thickness,
+            "alignment": wall.get("alignment", "inner"),
+            "layer": wall.get("layer", "Walls"),
+        }
+        if segment_openings:
+            payload["openings"] = segment_openings
+            operations.append(
                 {
-                    "segment_id": segment_id,
-                    "start": start,
-                    "end": end,
+                    "operation_id": f"wall_{segment_id}_with_openings",
+                    "operation_type": "create_wall_with_openings",
+                    "payload": payload,
+                    "rollback_on_failure": True,
+                }
+            )
+        else:
+            operations.append(
+                {
+                    "operation_id": f"wall_{segment_id}",
+                    "operation_type": "create_wall",
+                    "payload": payload,
+                    "rollback_on_failure": True,
                 }
             )
         cumulative_distance = span_end
 
-    opening_ids = [interval["opening_id"] for interval in cut_intervals]
-    return [
-        {
-            "operation_id": f"wall_{segment['segment_id']}",
-            "operation_type": "create_wall",
-            "payload": {
-                "wall_id": wall_id,
-                "wall_segment_id": segment["segment_id"],
-                "start": segment["start"],
-                "end": segment["end"],
-                "height": height,
-                "thickness": thickness,
-                "alignment": wall.get("alignment", "inner"),
-                "layer": wall.get("layer", "Walls"),
-                **({"excluded_opening_ids": opening_ids} if opening_ids else {}),
-            },
-            "rollback_on_failure": True,
-        }
-        for segment in operation_segments
-    ]
+    return operations
 
 
 def _opening_box_for_wall(
@@ -553,6 +539,9 @@ def build_project_execution_plan(
 
     if include_openings:
         for opening_id in sorted(openings):
+            host_wall_id = openings[opening_id].get("host_wall")
+            if include_walls and host_wall_id in walls:
+                continue
             try:
                 operations.append(
                     bridge_operation_for_opening(

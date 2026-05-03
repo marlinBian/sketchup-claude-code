@@ -260,3 +260,136 @@ def test_sync_execution_report_aggregates_split_wall_segments():
         "max": [5120, 3000, 2800],
     }
     assert execution["spatial_delta"]["volume_mm3"] == 604800000
+
+
+def test_sync_execution_report_records_hosted_opening_results():
+    design_model = {
+        "execution": {
+            "bridge_operations": {
+                "opening_east_window": {
+                    "operation_type": "create_box",
+                    "entity_ids": ["stale-window-box"],
+                },
+                "wall_east_wall_solid_01": {
+                    "operation_type": "create_wall",
+                    "entity_ids": ["stale-wall-1"],
+                },
+                "wall_east_wall_solid_02": {
+                    "operation_type": "create_wall",
+                    "entity_ids": ["stale-wall-2"],
+                },
+            },
+        },
+        "walls": {
+            "east_wall": {
+                "path": [[5000, 0, 0], [5000, 3000, 0]],
+                "height": 2800,
+                "thickness": 120,
+                "execution": {
+                    "operation_ids": [
+                        "wall_east_wall_solid_01",
+                        "wall_east_wall_solid_02",
+                    ],
+                    "entity_ids": ["stale-wall-1", "stale-wall-2"],
+                    "segments": {
+                        "east_wall_solid_01": {
+                            "operation_id": "wall_east_wall_solid_01",
+                            "entity_ids": ["stale-wall-1"],
+                            "status": "success",
+                        },
+                        "east_wall_solid_02": {
+                            "operation_id": "wall_east_wall_solid_02",
+                            "entity_ids": ["stale-wall-2"],
+                            "status": "success",
+                        },
+                    },
+                },
+            },
+        },
+        "openings": {
+            "east_window": {
+                "type": "window",
+                "host_wall": "east_wall",
+                "offset": 900,
+                "width": 1200,
+                "height": 1200,
+                "execution": {
+                    "operation_id": "opening_east_window",
+                    "entity_ids": ["stale-window-box"],
+                    "status": "success",
+                },
+            },
+        },
+    }
+    execution_report = {
+        "results": [
+            {
+                "operation_id": "wall_east_wall_with_openings",
+                "operation_type": "create_wall_with_openings",
+                "request": {
+                    "params": {
+                        "payload": {
+                            "wall_id": "east_wall",
+                            "wall_segment_id": "east_wall",
+                            "openings": [{"opening_id": "east_window"}],
+                        },
+                    },
+                },
+                "response": {
+                    "result": {
+                        "status": "success",
+                        "entity_ids": ["su-wall-1", "su-wall-2"],
+                        "spatial_delta": {},
+                        "opening_results": [
+                            {
+                                "opening_id": "east_window",
+                                "entity_ids": ["su-window-marker"],
+                                "spatial_delta": {
+                                    "bounding_box": {
+                                        "min": [5000, 900, 900],
+                                        "max": [5120, 2100, 2100],
+                                    },
+                                },
+                                "status": "success",
+                            },
+                        ],
+                    },
+                },
+                "ok": True,
+            },
+        ],
+    }
+
+    sync = sync_execution_report_to_design_model(design_model, execution_report)
+
+    assert sync["updated_walls"] == ["east_wall"]
+    assert sync["updated_openings"] == ["east_window"]
+    assert sync["removed_operations"] == [
+        "opening_east_window",
+        "wall_east_wall_solid_01",
+        "wall_east_wall_solid_02",
+    ]
+    assert sync["cleared_walls"] == ["east_wall"]
+    assert sync["cleared_openings"] == ["east_window"]
+    assert design_model["walls"]["east_wall"]["execution"]["entity_ids"] == [
+        "su-wall-1",
+        "su-wall-2",
+    ]
+    assert design_model["walls"]["east_wall"]["execution"]["operation_ids"] == [
+        "wall_east_wall_with_openings"
+    ]
+    assert sorted(design_model["walls"]["east_wall"]["execution"]["segments"]) == [
+        "east_wall"
+    ]
+    assert design_model["openings"]["east_window"]["execution"]["entity_ids"] == [
+        "su-window-marker"
+    ]
+    assert set(design_model["execution"]["bridge_operations"]) == {
+        "wall_east_wall_with_openings"
+    }
+    assert (
+        design_model["execution"]["bridge_operations"][
+            "wall_east_wall_with_openings"
+        ]["opening_results"][0]["opening_id"]
+        == "east_window"
+    )

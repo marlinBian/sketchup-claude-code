@@ -11,6 +11,7 @@ module SuBridge
     # Operations that modify entity geometry and should trigger sync
     ENTITY_MODIFYING_OPERATIONS = Set.new(%w[
       create_face create_box create_wall create_group
+      create_wall_with_openings
       create_door create_window create_stairs
       move_entity rotate_entity scale_entity
       delete_entity
@@ -21,6 +22,7 @@ module SuBridge
       "create_face" => :handle_create_face,
       "create_box" => :handle_create_box,
       "create_wall" => :handle_create_wall,
+      "create_wall_with_openings" => :handle_create_wall_with_openings,
       "create_group" => :handle_create_group,
       "create_door" => :handle_create_door,
       "create_window" => :handle_create_window,
@@ -252,6 +254,31 @@ module SuBridge
         model_revision: 1,
         elapsed_ms: 0,
       }
+    end
+
+    def handle_create_wall_with_openings(payload)
+      start = payload["start"]
+      end_point = payload["end"]
+      height = payload["height"]
+      thickness = payload["thickness"]
+      alignment = payload.fetch("alignment", "center")
+      openings = payload["openings"]
+
+      raise ::SuBridge::UndoManager::ValidationError, "start required" unless start
+      raise ::SuBridge::UndoManager::ValidationError, "end required" unless end_point
+      raise ::SuBridge::UndoManager::ValidationError, "height required" unless height
+      raise ::SuBridge::UndoManager::ValidationError, "thickness required" unless thickness
+      raise ::SuBridge::UndoManager::ValidationError, "openings required" unless openings
+
+      SuBridge::Entities::WallBuilder.create_with_openings(
+        start: start,
+        end_point: end_point,
+        height: height,
+        thickness: thickness,
+        openings: openings,
+        alignment: alignment,
+        options: payload
+      )
     end
 
     def handle_get_scene_info(payload)

@@ -17,6 +17,7 @@ RSpec.describe SuBridge::CommandDispatcher do
         create_face
         create_box
         create_wall
+        create_wall_with_openings
         create_group
         create_door
         create_window
@@ -60,6 +61,71 @@ RSpec.describe SuBridge::CommandDispatcher do
       expect(result[:bridge_info][:supported_operations]).to include("get_bridge_info")
       expect(result[:bridge_info][:supported_operations]).to include("get_selection_info")
       expect(result[:bridge_info][:entity_modifying_operations]).to include("create_wall")
+      expect(result[:bridge_info][:entity_modifying_operations]).to include("create_wall_with_openings")
+    end
+  end
+
+  describe "#handle_create_wall_with_openings" do
+    it "delegates hosted openings to the wall builder" do
+      builder_result = {
+        entity_ids: ["101", "102"],
+        opening_results: [
+          {
+            opening_id: "window_001",
+            entity_ids: ["201"],
+            spatial_delta: {},
+            status: "success",
+          },
+        ],
+        spatial_delta: {},
+        wall_piece_count: 4,
+        opening_count: 1,
+      }
+      allow(SuBridge::Entities::WallBuilder).to receive(:create_with_openings)
+        .and_return(builder_result)
+
+      result = dispatcher.send(
+        :handle_create_wall_with_openings,
+        {
+          "wall_id" => "east_wall",
+          "start" => [5000, 0, 0],
+          "end" => [5000, 3000, 0],
+          "height" => 2800,
+          "thickness" => 120,
+          "alignment" => "inner",
+          "openings" => [
+            {
+              "opening_id" => "window_001",
+              "type" => "window",
+              "offset" => 900,
+              "width" => 1200,
+              "height" => 1200,
+              "sill_height" => 900,
+            },
+          ],
+        }
+      )
+
+      expect(result).to eq(builder_result)
+      expect(SuBridge::Entities::WallBuilder).to have_received(:create_with_openings)
+        .with(
+          start: [5000, 0, 0],
+          end_point: [5000, 3000, 0],
+          height: 2800,
+          thickness: 120,
+          openings: [
+            {
+              "opening_id" => "window_001",
+              "type" => "window",
+              "offset" => 900,
+              "width" => 1200,
+              "height" => 1200,
+              "sill_height" => 900,
+            },
+          ],
+          alignment: "inner",
+          options: hash_including("wall_id" => "east_wall")
+        )
     end
   end
 
@@ -505,6 +571,55 @@ RSpec.describe SuBridge::Entities::WallBuilder do
   describe ".apply_material" do
     it "is a defined method" do
       expect(described_class).to respond_to(:apply_material)
+    end
+  end
+
+  describe ".create_with_openings" do
+    it "is a defined method" do
+      expect(described_class).to respond_to(:create_with_openings)
+    end
+
+    it "builds wall pieces around a hosted window instead of a solid placeholder" do
+      groups = (1..5).map do |id|
+        Class.new do
+          define_method(:entityID) { id }
+        end.new
+      end
+      create_calls = []
+      allow(described_class).to receive(:create) do |kwargs|
+        create_calls << kwargs
+        groups.shift
+      end
+      allow(described_class).to receive(:spatial_delta).and_return(
+        bounding_box: { min: [0, 0, 0], max: [1, 1, 1] },
+        volume_mm3: 1
+      )
+
+      result = described_class.create_with_openings(
+        start: [5000, 0, 0],
+        end_point: [5000, 3000, 0],
+        height: 2800,
+        thickness: 120,
+        alignment: "inner",
+        openings: [
+          {
+            "opening_id" => "window_001",
+            "type" => "window",
+            "offset" => 900,
+            "width" => 1200,
+            "height" => 1200,
+            "sill_height" => 900,
+            "layer" => "Windows",
+          },
+        ],
+        options: { "wall_id" => "east_wall", "wall_segment_id" => "east_wall" }
+      )
+
+      expect(result[:entity_ids]).to eq(%w[1 2 3 5])
+      expect(result[:opening_results][0][:entity_ids]).to eq(["4"])
+      expect(create_calls.map { |call| call[:height] }).to eq([2800, 900.0, 700.0, 1200.0, 2800])
+      expect(create_calls[3][:options]["layer"]).to eq("Windows")
+      expect(create_calls[3][:thickness]).to eq(20.0)
     end
   end
 

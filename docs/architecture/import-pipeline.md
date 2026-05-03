@@ -78,9 +78,10 @@ like any other project truth.
 Build a bridge trace from the imported model:
 
 - draw reference overlays when available
-- create wall geometry from wall paths, splitting hosted wall segments around
-  doors, windows, and other openings for plan-view correctness
-- represent hosted openings with separate door/window marker geometry
+- create wall geometry from wall paths, using hosted opening operations for
+  doors, windows, and other openings
+- build sill/header wall pieces plus thin door/window marker geometry for
+  hosted openings
 - create floor faces from room footprints when practical
 - tag imported entities separately from generated design additions
 
@@ -214,6 +215,10 @@ SketchUp execution after import should use clean replay. The agent should call
 successful `plan_project_execution` when the designer wants the import reflected
 in SketchUp. This removes stale managed geometry, raw source overlays, and
 template entities before the current `design_model.json` truth is replayed.
+After replay, execution metadata should also represent only the current trace:
+hosted openings should point at their `create_wall_with_openings` operation,
+and old `opening_*` placeholder operations or split-wall `*_solid_*` operation
+records should not remain in `execution.bridge_operations`.
 
 ## Runtime Skill Direction
 
@@ -299,8 +304,9 @@ interpretation:
    model when richer extraction is unavailable.
 5. Write imported `spaces`, `walls`, `openings`, `import_sessions`, and
    `quality_flags` into `design_model.json`.
-6. Produce a headless bridge trace for imported walls, opening-aware solid wall
-   segments, and door/window marker geometry.
+6. Produce a headless bridge trace for imported walls and hosted opening
+   operations that create wall pieces, sills, headers, and thin door/window
+   markers.
 7. Expose list, summary, rescale, wall-alignment normalization, corner-notch
    repair, boundary coverage review/repair, review, and repair tools through MCP
    and CLI.

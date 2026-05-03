@@ -17,6 +17,8 @@ module SuBridge
       end
 
       ALIGNMENT_MODES = ["center", "inner", "outer"].freeze
+      MIN_PIECE_LENGTH = 1.0
+      DEFAULT_MARKER_THICKNESS = 20.0
 
       def self.create(start:, end_point:, height:, thickness:, alignment: "center", options: {})
         validate_params!(start, end_point, height, thickness, alignment)
@@ -27,6 +29,115 @@ module SuBridge
         wall_group = create_wall_group(vertices, options)
 
         wall_group
+      end
+
+      def self.create_with_openings(start:, end_point:, height:, thickness:, openings:, alignment: "center", options: {})
+        validate_params!(start, end_point, height, thickness, alignment)
+        raise ::SuBridge::UndoManager::ValidationError, "openings required" unless openings.is_a?(Array)
+
+        p1 = Vector3d.new(*start)
+        p2 = Vector3d.new(*end_point)
+        direction = p2 - p1
+        length = direction.r
+        raise ::SuBridge::UndoManager::ValidationError, "Wall length must be > 0" if length < MIN_PIECE_LENGTH
+
+        direction = direction / length
+        normalized_openings = normalize_openings(openings, length, height)
+
+        wall_groups = []
+        opening_results = []
+        cursor = 0.0
+
+        normalized_openings.each_with_index do |opening, index|
+          opening_start = opening[:offset]
+          opening_end = opening[:offset] + opening[:width]
+
+          before_group = create_wall_piece(
+            p1,
+            direction,
+            cursor,
+            opening_start,
+            0.0,
+            height,
+            thickness,
+            alignment,
+            options,
+            "#{options['wall_segment_id'] || options['wall_id']}_solid_#{index + 1}_before"
+          )
+          wall_groups << before_group if before_group
+
+          sill_group = create_wall_piece(
+            p1,
+            direction,
+            opening_start,
+            opening_end,
+            0.0,
+            opening[:sill_height],
+            thickness,
+            alignment,
+            options,
+            "#{opening[:opening_id]}_sill"
+          )
+          wall_groups << sill_group if sill_group
+
+          header_base = opening[:sill_height] + opening[:height]
+          header_group = create_wall_piece(
+            p1,
+            direction,
+            opening_start,
+            opening_end,
+            header_base,
+            height - header_base,
+            thickness,
+            alignment,
+            options,
+            "#{opening[:opening_id]}_header"
+          )
+          wall_groups << header_group if header_group
+
+          marker_group = create_opening_marker(
+            p1,
+            direction,
+            opening,
+            thickness,
+            alignment,
+            options
+          )
+
+          opening_results << {
+            opening_id: opening[:opening_id],
+            entity_ids: marker_group ? [marker_group.entityID.to_s] : [],
+            spatial_delta: marker_group ? spatial_delta(marker_group) : {},
+            status: "success",
+          }
+
+          cursor = opening_end
+        end
+
+        after_group = create_wall_piece(
+          p1,
+          direction,
+          cursor,
+          length,
+          0.0,
+          height,
+          thickness,
+          alignment,
+          options,
+          "#{options['wall_segment_id'] || options['wall_id']}_solid_after"
+        )
+        wall_groups << after_group if after_group
+
+        {
+          entity_ids: wall_groups.map { |group| group.entityID.to_s },
+          wall_entity_ids: wall_groups.map { |group| group.entityID.to_s },
+          opening_results: opening_results,
+          spatial_delta: merged_spatial_delta(wall_groups),
+          model_revision: 1,
+          elapsed_ms: 0,
+          wall_piece_count: wall_groups.length,
+          opening_count: normalized_openings.length,
+        }
       end
 
       def self.calculate_vertices(start, end_point, height, thickness, alignment)
@@ -137,6 +248,137 @@ module SuBridge
       end
 
       private
+
+      def self.normalize_openings(openings, wall_length, wall_height)
+        cursor = 0.0
+        openings.sort_by { |opening| numeric_opening_value(opening, "offset") }.map do |opening|
+          opening_id = opening["opening_id"] || opening[:opening_id]
+          raise ::SuBridge::UndoManager::ValidationError, "opening_id required" unless opening_id
+
+          offset = numeric_opening_value(opening, "offset")
+          width = numeric_opening_value(opening, "width")
+          opening_height = numeric_opening_value(opening, "height")
+          sill_height = numeric_opening_value(opening, "sill_height", default: 0.0)
+          opening_type = opening["type"] || opening[:type] || "opening"
+          sill_height = 0.0 if opening_type == "door"
+
+          if offset < cursor
+            raise ::SuBridge::UndoManager::ValidationError, "openings must not overlap"
+          end
+          if width <= 0 || opening_height <= 0
+            raise ::SuBridge::UndoManager::ValidationError, "opening dimensions must be positive"
+          end
+          if offset + width > wall_length + MIN_PIECE_LENGTH
+            raise ::SuBridge::UndoManager::ValidationError, "opening exceeds wall length"
+          end
+          if sill_height < 0 || sill_height >= wall_height
+            raise ::SuBridge::UndoManager::ValidationError, "opening sill_height out of range"
+          end
+
+          effective_height = [opening_height, wall_height - sill_height].min
+          if effective_height <= 0
+            raise ::SuBridge::UndoManager::ValidationError, "opening height out of range"
+          end
+
+          cursor = offset + width
+          {
+            opening_id: opening_id,
+            type: opening_type,
+            offset: offset,
+            width: width,
+            height: effective_height,
+            sill_height: sill_height,
+            layer: opening["layer"] || opening[:layer],
+          }
+        end.sort_by { |opening| opening[:offset] }
+      end
+
+      def self.numeric_opening_value(opening, key, default: nil)
+        value = opening[key] || opening[key.to_sym]
+        value = default if value.nil?
+        raise ::SuBridge::UndoManager::ValidationError, "#{key} required" if value.nil?
+
+        value.to_f
+      end
+
+      def self.create_wall_piece(
+        origin,
+        direction,
+        start_distance,
+        end_distance,
+        base_z,
+        piece_height,
+        thickness,
+        alignment,
+        options,
+        segment_id
+      )
+        return nil if end_distance - start_distance <= MIN_PIECE_LENGTH
+        return nil if piece_height <= MIN_PIECE_LENGTH
+
+        start = point_at(origin, direction, start_distance, base_z)
+        end_point = point_at(origin, direction, end_distance, base_z)
+        create(
+          start: start,
+          end_point: end_point,
+          height: piece_height,
+          thickness: thickness,
+          alignment: alignment,
+          options: options.merge("wall_segment_id" => segment_id, "layer" => options["layer"] || "Walls")
+        )
+      end
+
+      def self.create_opening_marker(origin, direction, opening, thickness, alignment, options)
+        marker_thickness = [DEFAULT_MARKER_THICKNESS, thickness / 4.0].min
+        return nil if marker_thickness <= 0
+
+        normal = Vector3d.new(-direction[1], direction[0], 0)
+        center_offset = case alignment
+                        when "inner" then thickness / 2.0
+                        when "outer" then -thickness / 2.0
+                        else 0.0
+                        end
+        offset_vec = normal * center_offset
+        start = Vector3d.new(*point_at(origin, direction, opening[:offset], opening[:sill_height])) + offset_vec
+        end_point = Vector3d.new(*point_at(origin, direction, opening[:offset] + opening[:width], opening[:sill_height])) + offset_vec
+        layer = opening[:layer] || (opening[:type] == "window" ? "Windows" : "Doors")
+
+        create(
+          start: start.to_a,
+          end_point: end_point.to_a,
+          height: opening[:height],
+          thickness: marker_thickness,
+          alignment: "center",
+          options: {
+            "layer" => layer,
+            "wall_id" => options["wall_id"],
+            "opening_id" => opening[:opening_id],
+            "opening_type" => opening[:type],
+          }
+        )
+      end
+
+      def self.point_at(origin, direction, distance, z_offset)
+        [
+          origin.x + direction.x * distance,
+          origin.y + direction.y * distance,
+          origin.z + z_offset,
+        ]
+      end
+
+      def self.merged_spatial_delta(groups)
+        return {} if groups.empty?
+
+        deltas = groups.map { |group| spatial_delta(group) }
+        bounds = deltas.map { |delta| delta[:bounding_box] }
+        {
+          bounding_box: {
+            min: [0, 1, 2].map { |index| bounds.map { |box| box[:min][index] }.min },
+            max: [0, 1, 2].map { |index| bounds.map { |box| box[:max][index] }.max },
+          },
+          volume_mm3: deltas.map { |delta| delta[:volume_mm3].to_f }.sum,
+        }
+      end
 
       def self.validate_params!(start, end_point, height, thickness, alignment)
         raise ::SuBridge::UndoManager::ValidationError, "start point required" unless start

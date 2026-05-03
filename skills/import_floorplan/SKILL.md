@@ -39,7 +39,8 @@ Import this floor plan and generate an editable model.
    known dimensions, pass `width` and `depth` in millimeters. If not, let the
    tool estimate scale and write quality flags.
 3. Call `plan_project_execution` to verify the imported walls can be compiled
-   into opening-aware wall segments plus door/window marker geometry.
+   into hosted opening operations with sill/header wall pieces and thin
+   door/window marker geometry.
 4. If the designer wants SketchUp updated and the bridge is available, call
    `execute_project_model` with `clean_before_execute=true` and
    `clean_scope="all"`. Import replay should remove stale generated walls,
@@ -122,9 +123,9 @@ whole import by default.
    If a designer reports that an imported window or door appears as a solid
    wall, first check `design_model.json` for an `openings.<id>` entry on that
    host wall. If the opening exists, the likely fault is the execution trace
-   rather than the import classifier: `plan_project_execution` should split the
-   host wall into solid wall segments around the opening and emit the opening
-   marker separately.
+   rather than the import classifier: `plan_project_execution` should emit
+   `create_wall_with_openings`, not a continuous wall and not a `create_box`
+   placeholder for the opening.
 7. Call `plan_project_execution` again.
 8. Execute the project with `clean_before_execute=true` and `clean_scope="all"`
    when the designer wants SketchUp updated, so stale geometry does not remain

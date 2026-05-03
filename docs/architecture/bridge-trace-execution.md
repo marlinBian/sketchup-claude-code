@@ -10,9 +10,10 @@ For project-backed work, `plan_project_execution` reads the current
 `design_model.json` and derives a bridge trace for the full project truth:
 
 - rectangular space bounds become wall operations
-- explicit `walls` with hosted `openings` become opening-aware solid wall
-  segment operations, so imported windows and doors do not replay as continuous
-  walls in plan view
+- explicit `walls` with hosted `openings` become `create_wall_with_openings`
+  operations, so imported windows and doors replay as wall systems with
+  left/right wall pieces, sill/header pieces, and thin opening markers instead
+  of continuous walls or solid placeholder boxes
 - component instances become `place_component` operations
 - lighting with `component_ref` becomes `place_component` on the Lighting layer
 - lighting without `component_ref` falls back to `place_lighting`
@@ -87,13 +88,19 @@ When project-backed execution succeeds, the harness syncs bridge feedback back
 into `design_model.json`:
 
 - `execution.bridge_operations` records each successful operation, returned
-  `entity_ids`, status, and spatial delta.
+  `entity_ids`, status, and spatial delta for the current successful replay.
+  It is replaced on replay so obsolete operations from older compilation
+  strategies do not remain in project truth.
 - generated space walls receive wall-side execution feedback under
   `spaces.<space_id>.execution.walls.<side>`, including returned `entity_ids`.
-- explicit walls receive aggregated execution feedback. If a wall is split
-  around doors or windows, `walls.<wall_id>.execution.segments` records each
-  `wall_segment_id`, while `entity_ids` and `operation_ids` aggregate all solid
-  segment entities for that wall.
+- explicit walls receive aggregated execution feedback. A hosted opening wall
+  operation may create multiple SketchUp wall-piece entities; those are
+  aggregated under `walls.<wall_id>.execution.entity_ids`, while each hosted
+  opening receives its own `openings.<opening_id>.execution` feedback from the
+  same bridge operation.
+- targeted walls and hosted openings clear their previous execution metadata
+  before new feedback is recorded. This prevents stale split-wall segments or
+  old placeholder opening boxes from surviving after a clean import replay.
 - component and lighting instances receive the first returned SketchUp
   `entity_id`.
 - instance `execution.operation_id` records the bridge operation that created or

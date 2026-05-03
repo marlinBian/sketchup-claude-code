@@ -81,24 +81,30 @@ def test_build_project_execution_plan_from_imported_floorplan(tmp_path):
     operation_types = [operation["operation_type"] for operation in plan["bridge_operations"]]
 
     assert plan["skipped_count"] == 0
-    assert plan["operation_count"] == 9
-    assert operation_types.count("create_wall") == 6
-    assert operation_types.count("create_box") == 2
+    assert plan["operation_count"] == 5
+    assert operation_types.count("create_wall") == 2
+    assert operation_types.count("create_wall_with_openings") == 2
+    assert operation_types.count("create_box") == 0
     assert operation_types[-1] == "get_scene_info"
     assert plan["bridge_operations"][0]["payload"]["wall_id"] == "import_001_wall_east"
-    south_segments = [
-        operation["payload"]
+    south_wall = next(
+        operation
         for operation in plan["bridge_operations"]
         if operation["payload"].get("wall_id") == "import_001_wall_south"
+    )
+    assert south_wall["operation_type"] == "create_wall_with_openings"
+    assert south_wall["payload"]["openings"] == [
+        {
+            "opening_id": "import_001_door_001",
+            "type": "door",
+            "offset": 2050.0,
+            "width": 900.0,
+            "height": 2100.0,
+            "sill_height": 0.0,
+            "layer": "Doors",
+            "swing_direction": "left",
+        }
     ]
-    assert [segment["wall_segment_id"] for segment in south_segments] == [
-        "import_001_wall_south_solid_01",
-        "import_001_wall_south_solid_02",
-    ]
-    assert south_segments[0]["end"] == [2050.0, 0.0, 0.0]
-    assert south_segments[1]["start"] == [2950.0, 0.0, 0.0]
-    assert south_segments[0]["excluded_opening_ids"] == ["import_001_door_001"]
-    assert plan["bridge_operations"][6]["payload"]["opening_id"] == "import_001_door_001"
 
 
 def test_resolve_project_skp_path_makes_project_relative_paths_absolute(tmp_path):
@@ -114,18 +120,31 @@ def test_execute_project_execution_plan_accepts_injected_executor(tmp_path):
         results = []
         for operation in operations:
             payload = operation.get("payload", {})
+            result = {
+                "status": "success",
+                "entity_ids": [f"su-{operation['operation_id']}"],
+                "spatial_delta": {},
+            }
+            if operation["operation_type"] == "create_wall_with_openings":
+                result["entity_ids"] = [
+                    f"su-{operation['operation_id']}-wall-1",
+                    f"su-{operation['operation_id']}-wall-2",
+                ]
+                result["opening_results"] = [
+                    {
+                        "opening_id": opening["opening_id"],
+                        "entity_ids": [f"su-opening_{opening['opening_id']}"],
+                        "spatial_delta": {},
+                        "status": "success",
+                    }
+                    for opening in payload.get("openings", [])
+                ]
             results.append(
                 {
                     "operation_id": operation["operation_id"],
                     "operation_type": operation["operation_type"],
                     "request": {"params": {"payload": payload}},
-                    "response": {
-                        "result": {
-                            "status": "success",
-                            "entity_ids": [f"su-{operation['operation_id']}"],
-                            "spatial_delta": {},
-                        },
-                    },
+                    "response": {"result": result},
                     "ok": True,
                 }
             )
@@ -165,18 +184,31 @@ def test_execute_project_execution_plan_syncs_imported_walls_and_openings(tmp_pa
         results = []
         for operation in operations:
             payload = operation.get("payload", {})
+            result = {
+                "status": "success",
+                "entity_ids": [f"su-{operation['operation_id']}"],
+                "spatial_delta": {},
+            }
+            if operation["operation_type"] == "create_wall_with_openings":
+                result["entity_ids"] = [
+                    f"su-{operation['operation_id']}-wall-1",
+                    f"su-{operation['operation_id']}-wall-2",
+                ]
+                result["opening_results"] = [
+                    {
+                        "opening_id": opening["opening_id"],
+                        "entity_ids": [f"su-opening_{opening['opening_id']}"],
+                        "spatial_delta": {},
+                        "status": "success",
+                    }
+                    for opening in payload.get("openings", [])
+                ]
             results.append(
                 {
                     "operation_id": operation["operation_id"],
                     "operation_type": operation["operation_type"],
                     "request": {"params": {"payload": payload}},
-                    "response": {
-                        "result": {
-                            "status": "success",
-                            "entity_ids": [f"su-{operation['operation_id']}"],
-                            "spatial_delta": {},
-                        },
-                    },
+                    "response": {"result": result},
                     "ok": True,
                 }
             )
@@ -196,23 +228,21 @@ def test_execute_project_execution_plan_syncs_imported_walls_and_openings(tmp_pa
         "import_001_wall_south",
         "import_001_wall_west",
     ]
-    assert result["execution_sync"]["updated_openings"] == [
+    assert sorted(result["execution_sync"]["updated_openings"]) == [
         "import_001_door_001",
         "import_001_window_001",
     ]
     assert design_model["walls"]["import_001_wall_south"]["execution"]["entity_ids"] == [
-        "su-wall_import_001_wall_south_solid_01",
-        "su-wall_import_001_wall_south_solid_02",
+        "su-wall_import_001_wall_south_with_openings-wall-1",
+        "su-wall_import_001_wall_south_with_openings-wall-2",
     ]
     assert sorted(
         design_model["walls"]["import_001_wall_south"]["execution"]["segments"]
     ) == [
-        "import_001_wall_south_solid_01",
-        "import_001_wall_south_solid_02",
+        "import_001_wall_south",
     ]
     assert design_model["walls"]["import_001_wall_south"]["execution"]["operation_ids"] == [
-        "wall_import_001_wall_south_solid_01",
-        "wall_import_001_wall_south_solid_02",
+        "wall_import_001_wall_south_with_openings",
     ]
     assert design_model["openings"]["import_001_door_001"]["execution"]["entity_ids"] == [
         "su-opening_import_001_door_001"
