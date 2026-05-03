@@ -63,6 +63,44 @@ RSpec.describe SuBridge::CommandDispatcher do
     end
   end
 
+  describe "#handle_cleanup_model" do
+    it "uses the bridge entity manager for layer cleanup" do
+      allow(SuBridge::EntityManager).to receive(:delete_all)
+        .with(layer_names: ["Walls", "Doors"])
+        .and_return(
+          {
+            deleted_count: 2,
+            deleted_ids: ["101", "102"],
+            layers_cleaned: ["Walls", "Doors"],
+          }
+        )
+
+      result = dispatcher.send(
+        :handle_cleanup_model,
+        { "layer_names" => ["Walls", "Doors"] }
+      )
+
+      expect(result[:entity_ids]).to eq(["101", "102"])
+      expect(result[:cleanup_info][:deleted_count]).to eq(2)
+      expect(result[:cleanup_info][:layers_cleaned]).to eq(["Walls", "Doors"])
+    end
+  end
+
+  describe "#handle_delete_entity" do
+    it "uses the bridge entity manager for explicit entity deletion" do
+      allow(SuBridge::EntityManager).to receive(:delete)
+        .with(["101", "102"])
+        .and_return(["101", "102"])
+
+      result = dispatcher.send(
+        :handle_delete_entity,
+        { "entity_ids" => ["101", "102"] }
+      )
+
+      expect(result[:entity_ids]).to eq(["101", "102"])
+    end
+  end
+
   describe "#handle_save_selected_component" do
     class FakeComponentDefinition
       attr_accessor :name

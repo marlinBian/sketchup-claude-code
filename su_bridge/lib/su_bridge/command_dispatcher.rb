@@ -3,6 +3,7 @@
 require "fileutils"
 require "securerandom"
 require "set"
+require "su_bridge/entity_manager"
 
 module SuBridge
   # Routes JSON-RPC requests to appropriate Ruby API handlers.
@@ -519,9 +520,9 @@ module SuBridge
       tag = payload["tag"]
 
       if tag
-        result = EntityManager.cleanup_by_tag(tag)
+        result = SuBridge::EntityManager.cleanup_by_tag(tag)
       else
-        result = EntityManager.delete_all(layer_names: layer_names)
+        result = SuBridge::EntityManager.delete_all(layer_names: layer_names)
       end
 
       {
@@ -647,7 +648,7 @@ module SuBridge
       entity_ids = payload["entity_ids"]
       raise ::SuBridge::UndoManager::ValidationError, "entity_ids required" unless entity_ids
 
-      deleted = EntityManager.delete(entity_ids)
+      deleted = SuBridge::EntityManager.delete(entity_ids)
       {
         entity_ids: deleted,
         spatial_delta: {},

@@ -12,6 +12,7 @@ require "su_bridge/entities/wall_builder"
 require "su_bridge/entities/component_manager"
 require "su_bridge/entities/group_builder"
 require "su_bridge/entities/material_applier"
+require "su_bridge/entity_manager"
 require "su_bridge/protocol/json_rpc_handler"
 require "su_bridge/design_model_sync"
 
