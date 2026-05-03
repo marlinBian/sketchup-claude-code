@@ -80,6 +80,7 @@ runpy.run_module("mcp_server.server", run_name="__main__")
         "list_project_versions",
         "plan_project_execution",
         "prepare_render_brief",
+        "normalize_imported_wall_alignment",
         "record_render_artifact",
         "record_visual_feedback",
         "register_import_source",

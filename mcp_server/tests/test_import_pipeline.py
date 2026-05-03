@@ -9,6 +9,7 @@ from mcp_server.smoke import validate_project
 from mcp_server.tools.import_pipeline import (
     get_import_summary,
     import_floorplan_to_model,
+    normalize_imported_wall_alignment,
     register_import_source,
     repair_imported_region,
     rescale_imported_model,
@@ -22,6 +23,54 @@ def make_source(tmp_path, name="floorplan.pdf"):
     source = tmp_path / name
     source.write_bytes(b"%PDF-1.4\n% floorplan fixture\n")
     return source
+
+
+def create_offset_right_boundary(project):
+    """Create a near-boundary imported wall offset like a mixed dimension chain."""
+    design_model_path = project / "design_model.json"
+    design_model = json.loads(design_model_path.read_text(encoding="utf-8"))
+    walls = design_model["walls"]
+    east_wall = walls["import_001_wall_east"]
+    east_wall["path"] = [[6000.0, 4000.0, 0], [6000.0, 2200.0, 0]]
+    walls["import_001_wall_east_step"] = {
+        **east_wall,
+        "path": [[6000.0, 2200.0, 0], [5880.0, 2200.0, 0]],
+    }
+    walls["import_001_wall_east_lower"] = {
+        **east_wall,
+        "path": [[5880.0, 2200.0, 0], [5880.0, 0.0, 0]],
+    }
+
+    space = design_model["spaces"]["import_001_space_001"]
+    space["footprint"] = [
+        [0, 0, 0],
+        [5880.0, 0, 0],
+        [5880.0, 2200.0, 0],
+        [6000.0, 2200.0, 0],
+        [6000.0, 4000.0, 0],
+        [0, 4000.0, 0],
+    ]
+
+    generated = design_model["import_sessions"]["import_001"]["generated_model"]
+    generated["wall_ids"] = [
+        wall_id
+        for wall_id in generated["wall_ids"]
+        if wall_id != "import_001_wall_east"
+    ]
+    generated["wall_ids"].extend(
+        [
+            "import_001_wall_east",
+            "import_001_wall_east_step",
+            "import_001_wall_east_lower",
+        ]
+    )
+    generated["changed_model_ids"].extend(
+        ["import_001_wall_east_step", "import_001_wall_east_lower"]
+    )
+    design_model_path.write_text(
+        json.dumps(design_model, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 def test_register_import_source_creates_manifest_and_source_copy(tmp_path):
@@ -205,6 +254,62 @@ def test_rescale_imported_model_updates_geometry_and_records_history(tmp_path):
         "target_dimensions"
     )
     assert design_model["import_sessions"]["import_001"]["scale"]["history"]
+
+
+def test_normalize_imported_wall_alignment_snaps_boundary_offsets(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path)
+    import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        width=6000,
+        depth=4000,
+    )
+    create_offset_right_boundary(project)
+
+    result = normalize_imported_wall_alignment(
+        project,
+        "import_001",
+        tolerance=160,
+        coordinate_match_tolerance=1,
+        notes="Straightened an exterior right wall offset.",
+    )
+    design_model = json.loads((project / "design_model.json").read_text(encoding="utf-8"))
+    manifest = json.loads(
+        (project / "imports" / "import_001" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert result["status"] == "normalized"
+    assert result["snap_maps"]["x"]["5880.0"] == 6000.0
+    assert "import_001_wall_east_step" in result["removed_walls"]
+    assert design_model["walls"]["import_001_wall_east_lower"]["path"] == [
+        [6000.0, 2200.0, 0.0],
+        [6000.0, 0.0, 0.0],
+    ]
+    assert "import_001_wall_east_step" not in design_model["walls"]
+    assert "import_001_wall_east_step" not in (
+        design_model["import_sessions"]["import_001"]["generated_model"]["wall_ids"]
+    )
+    assert "import_001_wall_east_step" not in (
+        design_model["import_sessions"]["import_001"]["generated_model"][
+            "changed_model_ids"
+        ]
+    )
+    assert design_model["spaces"]["import_001_space_001"]["footprint"][1] == [
+        6000.0,
+        0.0,
+        0.0,
+    ]
+    assert "exterior_wall_alignment_normalized" in (
+        design_model["import_sessions"]["import_001"]["quality_flags"]
+    )
+    assert design_model["metadata"]["execution_sync"]["status"] == "dirty"
+    assert manifest["status"] == "repaired"
+    assert manifest["repair_history"][-1]["action"] == "normalize_imported_wall_alignment"
 
 
 def test_review_and_repair_imported_region_update_source_backed_truth(tmp_path):

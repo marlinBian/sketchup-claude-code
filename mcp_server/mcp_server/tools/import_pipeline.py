@@ -28,6 +28,9 @@ DEFAULT_IMPORTED_WIDTH = 6000.0
 DEFAULT_IMPORTED_DEPTH = 4000.0
 DEFAULT_WALL_HEIGHT = 2800.0
 DEFAULT_WALL_THICKNESS = 120.0
+DEFAULT_ALIGNMENT_TOLERANCE = 250.0
+DEFAULT_COORDINATE_MATCH_TOLERANCE = 1.0
+DEFAULT_MIN_WALL_LENGTH = 20.0
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".heic"}
 CAD_EXTENSIONS = {".dwg", ".dxf"}
@@ -684,6 +687,382 @@ def imported_ids_in_model(design_model: dict[str, Any], import_id: str) -> dict[
 def scale_point_xy(point: list[Any], scale_x: float, scale_y: float) -> list[float]:
     """Scale a 3D point in plan while preserving height."""
     return [float(point[0]) * scale_x, float(point[1]) * scale_y, float(point[2])]
+
+
+def point_axis_value(point: list[Any], axis: str) -> float:
+    """Return a point coordinate for the requested plan axis."""
+    return float(point[0] if axis == "x" else point[1])
+
+
+def wall_axis(path: list[Any], tolerance: float = 1e-6) -> str | None:
+    """Return x for vertical walls, y for horizontal walls, else None."""
+    if not isinstance(path, list) or len(path) < 2:
+        return None
+    start = path[0]
+    end = path[-1]
+    dx = abs(float(start[0]) - float(end[0]))
+    dy = abs(float(start[1]) - float(end[1]))
+    if dx <= tolerance and dy > tolerance:
+        return "x"
+    if dy <= tolerance and dx > tolerance:
+        return "y"
+    return None
+
+
+def wall_length(path: list[Any]) -> float:
+    """Return the plan length of an axis-aligned wall path."""
+    if not isinstance(path, list) or len(path) < 2:
+        return 0.0
+    start = path[0]
+    end = path[-1]
+    dx = float(end[0]) - float(start[0])
+    dy = float(end[1]) - float(start[1])
+    return (dx * dx + dy * dy) ** 0.5
+
+
+def imported_axis_bounds(
+    design_model: dict[str, Any],
+    import_id: str,
+    axis: str,
+) -> tuple[float, float] | None:
+    """Return min/max coordinate bounds for imported walls and spaces."""
+    values: list[float] = []
+    for collection_name in ("walls", "spaces"):
+        for entity in design_model.get(collection_name, {}).values():
+            source = entity.get("source", {}) if isinstance(entity, dict) else {}
+            if not isinstance(source, dict) or source.get("import_id") != import_id:
+                continue
+            if collection_name == "walls":
+                for point in entity.get("path", []):
+                    values.append(point_axis_value(point, axis))
+            else:
+                footprint = entity.get("footprint")
+                if isinstance(footprint, list):
+                    values.extend(point_axis_value(point, axis) for point in footprint)
+                bounds = entity.get("bounds", {})
+                for key in ("min", "max"):
+                    if key in bounds:
+                        values.append(point_axis_value(bounds[key], axis))
+    if not values:
+        return None
+    return min(values), max(values)
+
+
+def boundary_snap_map_for_axis(
+    design_model: dict[str, Any],
+    import_id: str,
+    axis: str,
+    *,
+    tolerance: float,
+) -> dict[float, float]:
+    """Return coordinate snaps for near-boundary imported wall segments."""
+    bounds = imported_axis_bounds(design_model, import_id, axis)
+    if bounds is None:
+        return {}
+    min_coord, max_coord = bounds
+    coordinates: set[float] = set()
+    for wall in design_model.get("walls", {}).values():
+        source = wall.get("source", {}) if isinstance(wall, dict) else {}
+        if not isinstance(source, dict) or source.get("import_id") != import_id:
+            continue
+        path = wall.get("path", [])
+        if wall_axis(path) == axis:
+            coordinates.add(point_axis_value(path[0], axis))
+
+    snap_map: dict[float, float] = {}
+    for coord in sorted(coordinates):
+        if 0 < abs(coord - min_coord) <= tolerance:
+            snap_map[coord] = min_coord
+        elif 0 < abs(max_coord - coord) <= tolerance:
+            snap_map[coord] = max_coord
+    return snap_map
+
+
+def snap_point(
+    point: list[Any],
+    snap_maps: dict[str, dict[float, float]],
+    *,
+    coordinate_match_tolerance: float,
+) -> tuple[list[float], bool]:
+    """Snap a point against axis coordinate maps."""
+    result = [float(point[0]), float(point[1]), float(point[2])]
+    changed = False
+    for axis in ("x", "y"):
+        index = 0 if axis == "x" else 1
+        for source_coord, target_coord in snap_maps.get(axis, {}).items():
+            if abs(result[index] - source_coord) <= coordinate_match_tolerance:
+                result[index] = float(target_coord)
+                changed = True
+                break
+    return result, changed
+
+
+def add_import_quality_flag(
+    design_model: dict[str, Any],
+    import_id: str,
+    code: str,
+    *,
+    severity: str = "info",
+    message: str | None = None,
+) -> None:
+    """Add a deduped quality flag to model and import session summaries."""
+    session = design_model.setdefault("import_sessions", {}).setdefault(import_id, {})
+    session_flags = session.setdefault("quality_flags", [])
+    if code not in session_flags:
+        session_flags.append(code)
+
+    quality_flags = design_model.setdefault("quality_flags", [])
+    for flag in quality_flags:
+        source = flag.get("source", {}) if isinstance(flag, dict) else {}
+        if (
+            isinstance(flag, dict)
+            and flag.get("code") == code
+            and isinstance(source, dict)
+            and source.get("import_id") == import_id
+        ):
+            return
+    quality_flags.append(
+        {
+            "code": code,
+            "severity": severity,
+            "message": message or code.replace("_", " "),
+            "source": {"kind": "import_floorplan", "import_id": import_id},
+        }
+    )
+
+
+def normalize_imported_wall_alignment(
+    project_path: str | Path,
+    import_id: str,
+    *,
+    tolerance: float = DEFAULT_ALIGNMENT_TOLERANCE,
+    coordinate_match_tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
+    min_wall_length: float = DEFAULT_MIN_WALL_LENGTH,
+    notes: str | None = None,
+) -> dict[str, Any]:
+    """Snap near-boundary imported wall segments onto shared exterior lines."""
+    if tolerance <= 0:
+        raise ValueError("tolerance must be positive.")
+    if coordinate_match_tolerance <= 0:
+        raise ValueError("coordinate_match_tolerance must be positive.")
+    if min_wall_length < 0:
+        raise ValueError("min_wall_length must be non-negative.")
+
+    root = Path(project_path).expanduser().resolve()
+    chosen_id = import_safe_id(import_id)
+    design_model_path = find_design_model_path(root)
+    design_model, errors = load_design_model(str(design_model_path))
+    if errors or design_model is None:
+        raise ValueError("; ".join(errors))
+    session = design_model.get("import_sessions", {}).get(chosen_id)
+    if not isinstance(session, dict):
+        raise ValueError(f"import session not found in design_model.json: {chosen_id}")
+
+    snap_maps = {
+        axis: boundary_snap_map_for_axis(
+            design_model,
+            chosen_id,
+            axis,
+            tolerance=tolerance,
+        )
+        for axis in ("x", "y")
+    }
+    snap_maps = {axis: mapping for axis, mapping in snap_maps.items() if mapping}
+    changed_walls: list[str] = []
+    removed_walls: list[str] = []
+    changed_spaces: list[str] = []
+    changed_openings: list[str] = []
+
+    if snap_maps:
+        for wall_id, wall in list(design_model.get("walls", {}).items()):
+            source = wall.get("source", {}) if isinstance(wall, dict) else {}
+            if not isinstance(source, dict) or source.get("import_id") != chosen_id:
+                continue
+            snapped_path: list[list[float]] = []
+            changed = False
+            for point in wall.get("path", []):
+                snapped_point, point_changed = snap_point(
+                    point,
+                    snap_maps,
+                    coordinate_match_tolerance=coordinate_match_tolerance,
+                )
+                snapped_path.append(snapped_point)
+                changed = changed or point_changed
+            if changed:
+                wall["path"] = snapped_path
+                wall.pop("execution", None)
+                changed_walls.append(wall_id)
+            if wall_length(wall.get("path", [])) <= min_wall_length:
+                removed_walls.append(wall_id)
+                del design_model["walls"][wall_id]
+
+        for space_id, space in design_model.get("spaces", {}).items():
+            source = space.get("source", {}) if isinstance(space, dict) else {}
+            if not isinstance(source, dict) or source.get("import_id") != chosen_id:
+                continue
+            changed = False
+            if isinstance(space.get("footprint"), list):
+                footprint = []
+                for point in space["footprint"]:
+                    snapped_point, point_changed = snap_point(
+                        point,
+                        snap_maps,
+                        coordinate_match_tolerance=coordinate_match_tolerance,
+                    )
+                    footprint.append(snapped_point)
+                    changed = changed or point_changed
+                space["footprint"] = footprint
+            bounds = space.get("bounds")
+            if isinstance(bounds, dict):
+                for key in ("min", "max"):
+                    if key in bounds:
+                        snapped_point, point_changed = snap_point(
+                            bounds[key],
+                            snap_maps,
+                            coordinate_match_tolerance=coordinate_match_tolerance,
+                        )
+                        bounds[key] = snapped_point
+                        changed = changed or point_changed
+                if "min" in bounds and "max" in bounds:
+                    space["center"] = [
+                        (float(bounds["min"][0]) + float(bounds["max"][0])) / 2,
+                        (float(bounds["min"][1]) + float(bounds["max"][1])) / 2,
+                        (float(bounds["min"][2]) + float(bounds["max"][2])) / 2,
+                    ]
+            if changed:
+                space.pop("execution", None)
+                changed_spaces.append(space_id)
+
+    if changed_walls or removed_walls or changed_spaces:
+        for opening_id in imported_ids_in_model(design_model, chosen_id)["openings"]:
+            opening = design_model.get("openings", {}).get(opening_id)
+            if isinstance(opening, dict):
+                opening.pop("execution", None)
+                changed_openings.append(opening_id)
+
+    changed_model_ids = [
+        *changed_spaces,
+        *changed_walls,
+        *removed_walls,
+        *changed_openings,
+    ]
+    changed_model_ids = list(dict.fromkeys(changed_model_ids))
+    active_changed_model_ids = [
+        entity_id for entity_id in changed_model_ids if entity_id not in removed_walls
+    ]
+
+    generated_model = session.setdefault("generated_model", {})
+    if removed_walls and isinstance(generated_model.get("wall_ids"), list):
+        generated_model["wall_ids"] = [
+            wall_id for wall_id in generated_model["wall_ids"] if wall_id not in removed_walls
+        ]
+    if isinstance(generated_model.get("changed_model_ids"), list):
+        generated_model["changed_model_ids"] = [
+            entity_id
+            for entity_id in generated_model["changed_model_ids"]
+            if entity_id not in removed_walls
+        ]
+        for entity_id in active_changed_model_ids:
+            if entity_id not in generated_model["changed_model_ids"]:
+                generated_model["changed_model_ids"].append(entity_id)
+
+    action = {
+        "created_at": utc_now(),
+        "action": "normalize_imported_wall_alignment",
+        "tolerance": tolerance,
+        "coordinate_match_tolerance": coordinate_match_tolerance,
+        "min_wall_length": min_wall_length,
+        "snap_maps": {
+            axis: {str(source): target for source, target in mapping.items()}
+            for axis, mapping in snap_maps.items()
+        },
+        "changed_walls": changed_walls,
+        "removed_walls": removed_walls,
+        "changed_spaces": changed_spaces,
+        "changed_openings": changed_openings,
+        "notes": notes,
+    }
+    if changed_model_ids:
+        add_import_quality_flag(
+            design_model,
+            chosen_id,
+            "exterior_wall_alignment_normalized",
+            message="Imported exterior wall segments were snapped to shared boundary lines.",
+        )
+        add_import_quality_flag(
+            design_model,
+            chosen_id,
+            "dimension_chain_conflict_resolved",
+            severity="warning",
+            message="Near-boundary dimension-chain conflict was resolved by exterior wall snapping.",
+        )
+        design_model["updated_at"] = utc_now()
+        mark_execution_dirty(
+            design_model,
+            reason="import_wall_alignment_normalized",
+            source="normalize_imported_wall_alignment",
+            details={"import_id": chosen_id, "changed_model_ids": changed_model_ids},
+        )
+
+    saved, save_errors = save_design_model(str(design_model_path), design_model)
+    if not saved:
+        raise ValueError("; ".join(save_errors))
+
+    manifest, manifest_file = load_project_import_manifest(root, chosen_id)
+    manifest["status"] = "repaired" if changed_model_ids else manifest.get("status", "imported")
+    manifest["quality_flags"] = dedupe_quality_flags(
+        [
+            *manifest.get("quality_flags", []),
+            *(
+                [
+                    "exterior_wall_alignment_normalized",
+                    "dimension_chain_conflict_resolved",
+                ]
+                if changed_model_ids
+                else []
+            ),
+        ]
+    )
+    append_processing_step(
+        manifest,
+        "normalize_imported_wall_alignment",
+        details=action,
+    )
+    manifest.setdefault("repair_history", []).append(action)
+    saved_manifest, manifest_errors = save_import_manifest(manifest_file, manifest)
+    if not saved_manifest:
+        raise ValueError("; ".join(manifest_errors))
+
+    interpretation_path = import_session_path(root, chosen_id) / "extracted" / "interpretation.json"
+    if interpretation_path.exists():
+        try:
+            interpretation = json.loads(interpretation_path.read_text(encoding="utf-8"))
+            interpretation.setdefault("processing_notes", []).append(
+                "Normalized near-boundary exterior wall alignment."
+            )
+            interpretation.setdefault("repairs", []).append(action)
+            interpretation_path.write_text(
+                json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        except json.JSONDecodeError:
+            pass
+
+    return {
+        "project_path": str(root),
+        "design_model_path": str(design_model_path),
+        "import_id": chosen_id,
+        "status": "normalized" if changed_model_ids else "unchanged",
+        "snap_maps": action["snap_maps"],
+        "coordinate_match_tolerance": coordinate_match_tolerance,
+        "changed_walls": changed_walls,
+        "removed_walls": removed_walls,
+        "changed_spaces": changed_spaces,
+        "changed_openings": changed_openings,
+        "changed_model_ids": changed_model_ids,
+        "active_changed_model_ids": active_changed_model_ids,
+        "quality_flags": session.get("quality_flags", []),
+    }
 
 
 def rescale_imported_model(

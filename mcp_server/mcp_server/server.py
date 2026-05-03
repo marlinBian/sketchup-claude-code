@@ -81,6 +81,7 @@ from mcp_server.tools.import_pipeline import (
     get_import_summary as get_import_summary_file,
     import_floorplan_to_model as import_floorplan_to_model_file,
     list_import_sessions as list_import_sessions_file,
+    normalize_imported_wall_alignment as normalize_imported_wall_alignment_file,
     register_import_source as register_import_source_file,
     repair_imported_region as repair_imported_region_file,
     rescale_imported_model as rescale_imported_model_file,
@@ -1863,6 +1864,36 @@ async def rescale_imported_model(
         )
     except Exception as e:
         return TextContent(type="text", text=f"Import rescale failed: {str(e)}")
+
+
+@mcp.tool()
+async def normalize_imported_wall_alignment(
+    project_path: str,
+    import_id: str,
+    tolerance: float = 250,
+    coordinate_match_tolerance: float = 1,
+    min_wall_length: float = 20,
+    notes: str | None = None,
+) -> TextContent:
+    """Snap near-boundary imported wall segments onto shared exterior lines."""
+    try:
+        result = normalize_imported_wall_alignment_file(
+            project_path,
+            import_id,
+            tolerance=tolerance,
+            coordinate_match_tolerance=coordinate_match_tolerance,
+            min_wall_length=min_wall_length,
+            notes=notes,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(
+            type="text",
+            text=f"Import alignment normalization failed: {str(e)}",
+        )
 
 
 @mcp.tool()

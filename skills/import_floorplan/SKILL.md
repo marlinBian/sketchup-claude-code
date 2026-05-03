@@ -89,10 +89,16 @@ whole import by default.
 
 1. Call `review_model_against_import_source` with the import ID and target ID
    when available.
-2. Call `repair_imported_region` with the specific correction, such as target
-   dimensions or wall thickness.
-3. Call `plan_project_execution` again.
-4. Execute the project with `clean_before_execute=true` and `clean_scope="all"`
+2. If the mismatch is a near-straight exterior wall that appears offset by a
+   wall-thickness-sized step, call `normalize_imported_wall_alignment` with the
+   import ID before using a broader repair. This snaps near-boundary wall
+   segments onto shared exterior lines, removes zero-length connector walls, and
+   marks the project for clean replay.
+3. Call `repair_imported_region` with the specific correction, such as target
+   dimensions or wall thickness, when the issue is not an exterior alignment
+   normalization case.
+4. Call `plan_project_execution` again.
+5. Execute the project with `clean_before_execute=true` and `clean_scope="all"`
    when the designer wants SketchUp updated, so stale geometry does not remain
    beside the repaired truth.
 

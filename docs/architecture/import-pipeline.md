@@ -195,6 +195,7 @@ The first tool set should be small and structured:
 - `import_floorplan_to_model`
 - `get_import_summary`
 - `rescale_imported_model`
+- `normalize_imported_wall_alignment`
 - `review_model_against_import_source`
 - `repair_imported_region`
 - `list_import_sessions`
@@ -223,6 +224,12 @@ They should also treat raster/CAD/PDF source material as evidence, not as the
 final SketchUp scene object. Unless the designer explicitly requests an overlay
 review, source images and previous import geometry should not remain in
 SketchUp after normal import execution.
+
+When a source dimension chain mixes outside and inside wall references, imported
+outer walls can land on two nearly parallel boundary lines. The repair path for
+that case is `normalize_imported_wall_alignment`: it snaps near-boundary imported
+wall segments onto shared exterior lines, removes zero-length connector walls,
+records the repair in the manifest, and marks project truth for clean replay.
 
 ## Validation Direction
 
@@ -254,7 +261,8 @@ interpretation:
 5. Write imported `spaces`, `walls`, `openings`, `import_sessions`, and
    `quality_flags` into `design_model.json`.
 6. Produce a headless bridge trace for imported walls and opening placeholders.
-7. Expose list, summary, rescale, review, and repair tools through MCP and CLI.
+7. Expose list, summary, rescale, wall-alignment normalization, review, and
+   repair tools through MCP and CLI.
 
 Richer extractors should replace only the interpretation stage. They must keep
 the same manifest, generated truth, quality flag, and repair contracts.

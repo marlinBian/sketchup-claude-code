@@ -43,6 +43,10 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
 - Repair imported mismatch: "this door differs from the source",
   "这个门和原图不一致". Use `review_model_against_import_source`, then
   `repair_imported_region` with the specific correction.
+- Normalize imported exterior wall alignment: "this straight exterior wall is
+  offset", "这条外墙应该是直的". Use
+  `normalize_imported_wall_alignment` when imported near-boundary wall segments
+  are offset by a small wall-thickness-sized step.
 - Search components: "find a sofa", "找一个马桶".
   Use `search_components` for machine-readable registry data. Use
   `search_local_library` only for a short display summary.

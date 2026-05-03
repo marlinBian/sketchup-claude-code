@@ -121,9 +121,11 @@ raw source images, template entities, or stale imported geometry in the SketchUp
 scene.
 
 When the designer later says the imported model differs from the source, call
-`review_model_against_import_source`, then `repair_imported_region` with the
-specific correction. Use `rescale_imported_model` when the correction is a
-better overall width, depth, or scale factor.
+`review_model_against_import_source`, then choose the narrowest repair tool. Use
+`normalize_imported_wall_alignment` when a near-straight exterior wall is offset
+by a wall-thickness-sized step. Use `rescale_imported_model` when the correction
+is a better overall width, depth, or scale factor. Use `repair_imported_region`
+for other specific corrections.
 
 ### 5. Execute Only When the User Wants SketchUp Updated
 

@@ -98,9 +98,10 @@ Agents can inspect project state through MCP tools:
   a registered or provided source without routine preflight confirmation
 - `list_import_sessions` and `get_import_summary` inspect retained import
   manifests, generated model IDs, quality flags, scale, and assumptions
-- `rescale_imported_model`, `review_model_against_import_source`, and
-  `repair_imported_region` patch imported working truth when a designer later
-  points out a scale or source mismatch
+- `rescale_imported_model`, `normalize_imported_wall_alignment`,
+  `review_model_against_import_source`, and `repair_imported_region` patch
+  imported working truth when a designer later points out a scale, exterior wall
+  alignment, or source mismatch
 
 `snapshots/` stores captures used for review, regression checks, and visual
 handoff. `snapshots/manifest.json` records provenance for each artifact and

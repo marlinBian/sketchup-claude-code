@@ -15,6 +15,33 @@ def make_source(tmp_path, name="floorplan.pdf"):
     return source
 
 
+def create_offset_right_boundary(project):
+    """Create a near-boundary imported wall offset fixture."""
+    design_model_path = project / "design_model.json"
+    design_model = json.loads(design_model_path.read_text(encoding="utf-8"))
+    east_wall = design_model["walls"]["import_001_wall_east"]
+    east_wall["path"] = [[6000.0, 4000.0, 0], [6000.0, 2200.0, 0]]
+    design_model["walls"]["import_001_wall_east_step"] = {
+        **east_wall,
+        "path": [[6000.0, 2200.0, 0], [5880.0, 2200.0, 0]],
+    }
+    design_model["walls"]["import_001_wall_east_lower"] = {
+        **east_wall,
+        "path": [[5880.0, 2200.0, 0], [5880.0, 0.0, 0]],
+    }
+    generated = design_model["import_sessions"]["import_001"]["generated_model"]
+    generated["wall_ids"].extend(
+        ["import_001_wall_east_step", "import_001_wall_east_lower"]
+    )
+    generated["changed_model_ids"].extend(
+        ["import_001_wall_east_step", "import_001_wall_east_lower"]
+    )
+    design_model_path.write_text(
+        json.dumps(design_model, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 @pytest.mark.asyncio
 async def test_import_floorplan_to_model_tool_writes_project_truth(tmp_path):
     from mcp_server import server
@@ -80,6 +107,34 @@ async def test_rescale_and_repair_tools_patch_imported_truth(tmp_path):
     ]["walls"]
 
 
+@pytest.mark.asyncio
+async def test_normalize_imported_wall_alignment_tool_repairs_offset(tmp_path):
+    from mcp_server import server
+
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path)
+    await server.import_floorplan_to_model(
+        project_path=str(project),
+        source_path=str(source),
+        import_id="import_001",
+        width=6000,
+        depth=4000,
+    )
+    create_offset_right_boundary(project)
+
+    response = await server.normalize_imported_wall_alignment(
+        project_path=str(project),
+        import_id="import_001",
+        tolerance=160,
+    )
+    data = json.loads(response.text)
+
+    assert data["status"] == "normalized"
+    assert data["snap_maps"]["x"]["5880.0"] == 6000.0
+    assert "import_001_wall_east_step" in data["removed_walls"]
+
+
 def test_cli_import_floorplan_summary_and_rescale(tmp_path, capsys):
     project = tmp_path / "project"
     init_project(project, template="empty")
@@ -100,6 +155,17 @@ def test_cli_import_floorplan_summary_and_rescale(tmp_path, capsys):
         ]
     )
     import_output = json.loads(capsys.readouterr().out)
+    create_offset_right_boundary(project)
+    normalize_code = main(
+        [
+            "normalize-import-alignment",
+            str(project),
+            "import_001",
+            "--tolerance",
+            "160",
+        ]
+    )
+    normalize_output = json.loads(capsys.readouterr().out)
     summary_code = main(["import-summary", str(project), "--import-id", "import_001"])
     summary_output = json.loads(capsys.readouterr().out)
     list_code = main(["list-imports", str(project)])
@@ -116,10 +182,12 @@ def test_cli_import_floorplan_summary_and_rescale(tmp_path, capsys):
     rescale_output = json.loads(capsys.readouterr().out)
 
     assert exit_code == 0
+    assert normalize_code == 0
     assert summary_code == 0
     assert list_code == 0
     assert rescale_code == 0
     assert import_output["status"] == "imported"
+    assert normalize_output["status"] == "normalized"
     assert summary_output["count"] == 1
     assert list_output["imports"][0]["import_id"] == "import_001"
     assert rescale_output["scale_x"] == 1.5
