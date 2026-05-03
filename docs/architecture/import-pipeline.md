@@ -202,6 +202,12 @@ The first tool set should be small and structured:
 Mutating tools must return changed model IDs, warnings, and state feedback that
 can be written into `design_model.json`.
 
+SketchUp execution after import should use clean replay. The agent should call
+`execute_project_model(clean_before_execute=True, clean_scope="all")` after a
+successful `plan_project_execution` when the designer wants the import reflected
+in SketchUp. This removes stale managed geometry, raw source overlays, and
+template entities before the current `design_model.json` truth is replayed.
+
 ## Runtime Skill Direction
 
 Runtime skills should guide direct import and repair:
@@ -212,6 +218,11 @@ Runtime skills should guide direct import and repair:
 
 They should not instruct the agent to ask for routine confirmation before
 generating the first model.
+
+They should also treat raster/CAD/PDF source material as evidence, not as the
+final SketchUp scene object. Unless the designer explicitly requests an overlay
+review, source images and previous import geometry should not remain in
+SketchUp after normal import execution.
 
 ## Validation Direction
 

@@ -25,6 +25,8 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
 - Execute current project truth: "sync the current design model", "同步当前模型".
   Use `plan_project_execution` first, then `execute_project_model` when the
   trace has no skipped instances and the bridge is running.
+  Use `clean_before_execute=True` when the user expects SketchUp to match the
+  current project truth exactly rather than append another copy.
 - Start SketchUp bridge: "open SketchUp", "启动 SketchUp", "连接 SketchUp".
   Use `launch_sketchup_bridge` and report `possible_blockers` if
   `socket_ready` is false.
@@ -32,7 +34,9 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
   Use `import_floorplan_to_model` to register the source and write an editable
   working model directly into `design_model.json`. Do not ask the designer to
   confirm routine wall, door, window, or numeric candidates before generating
-  the first model.
+  the first model. When updating SketchUp from the import, call
+  `execute_project_model(clean_before_execute=True, clean_scope="all")` so old
+  source images, template entities, and stale generated geometry are removed.
 - Rescale imported source: "this plan should be 8200 mm wide",
   "这个户型整体宽度应该是 8200 毫米". Use `rescale_imported_model` or
   `repair_imported_region` rather than asking the designer to edit JSON.

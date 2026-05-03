@@ -21,6 +21,15 @@ from mcp_server.tools.trace_executor import (
 
 
 DEFAULT_WALL_THICKNESS = 100.0
+DEFAULT_CLEAN_LAYERS = [
+    "Walls",
+    "Doors",
+    "Windows",
+    "Fixtures",
+    "Furniture",
+    "Lighting",
+    "Materials",
+]
 
 
 def utc_now() -> str:
@@ -505,11 +514,59 @@ def build_project_execution_plan(
     }
 
 
+def cleanup_operation(
+    *,
+    layer_names: list[str] | None = None,
+    tag: str | None = None,
+    clean_scope: str = "managed",
+) -> dict[str, Any]:
+    """Build a bridge cleanup operation for managed SketchUp entities."""
+    if clean_scope not in {"managed", "all"}:
+        raise ValueError("clean_scope must be 'managed' or 'all'.")
+    return {
+        "operation_id": "cleanup_before_project_execution",
+        "operation_type": "cleanup_model",
+        "payload": {
+            "layer_names": (
+                None if clean_scope == "all" else (layer_names or DEFAULT_CLEAN_LAYERS)
+            ),
+            "tag": tag,
+            "all_entities": clean_scope == "all",
+        },
+        "rollback_on_failure": True,
+    }
+
+
+def execute_project_cleanup(
+    *,
+    layer_names: list[str] | None = None,
+    tag: str | None = None,
+    clean_scope: str = "managed",
+    stop_on_error: bool = True,
+    execute_fn: Callable[..., dict[str, Any]] = execute_bridge_operations,
+) -> dict[str, Any]:
+    """Clean managed SketchUp entities before replaying project truth."""
+    return execute_fn(
+        [
+            cleanup_operation(
+                layer_names=layer_names,
+                tag=tag,
+                clean_scope=clean_scope,
+            )
+        ],
+        stop_on_error=stop_on_error,
+    )
+
+
 def execute_project_execution_plan(
     project_path: str | Path,
     *,
     stop_on_error: bool = True,
     allow_partial: bool = False,
+    clean_before_execute: bool = False,
+    clean_layer_names: list[str] | None = None,
+    clean_tag: str | None = None,
+    clean_scope: str = "managed",
     include_spaces: bool = True,
     include_walls: bool = True,
     include_openings: bool = True,
@@ -537,6 +594,22 @@ def execute_project_execution_plan(
                 "allow_partial=True to execute only planned operations."
             ),
         }
+
+    if clean_before_execute:
+        cleanup_report = execute_project_cleanup(
+            layer_names=clean_layer_names,
+            tag=clean_tag,
+            clean_scope=clean_scope,
+            stop_on_error=True,
+            execute_fn=execute_fn,
+        )
+        plan["pre_execution_cleanup"] = cleanup_report
+        if cleanup_report.get("status") != "success":
+            return {
+                **plan,
+                "status": "cleanup_failed",
+                "reason": "Pre-execution cleanup failed; project truth was not replayed.",
+            }
 
     execution_report = execute_fn(
         plan["bridge_operations"],

@@ -78,9 +78,13 @@ about 7200 mm wide and 5100 mm deep.
 
 The agent should call `import_floorplan_to_model`, then inspect or plan the
 result with `get_import_summary`, `list_import_sessions`,
-`plan_project_execution`, or `validate_design_project`. Imported walls,
-openings, footprints, assumptions, scale, and quality flags are written into
-`design_model.json`; retained source evidence lives under `imports/<import_id>/`.
+`plan_project_execution`, or `validate_design_project`. When SketchUp is
+updated from an imported plan, the agent should use full-scene clean replay so
+old source images, previous imported walls, and template objects do not remain
+in the scene.
+Imported walls, openings, footprints, assumptions, scale, and quality flags are
+written into `design_model.json`; retained source evidence lives under
+`imports/<import_id>/`.
 
 If you later notice a mismatch, describe the correction in normal language:
 

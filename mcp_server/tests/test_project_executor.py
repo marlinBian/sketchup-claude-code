@@ -202,6 +202,143 @@ def test_execute_project_execution_plan_syncs_imported_walls_and_openings(tmp_pa
     ]
 
 
+def test_execute_project_execution_plan_can_clean_before_replay(tmp_path):
+    init_project(tmp_path, template="bathroom")
+    calls = []
+
+    def fake_execute(operations, stop_on_error=True):
+        calls.append([operation["operation_type"] for operation in operations])
+        results = []
+        for operation in operations:
+            payload = operation.get("payload", {})
+            results.append(
+                {
+                    "operation_id": operation["operation_id"],
+                    "operation_type": operation["operation_type"],
+                    "request": {"params": {"payload": payload}},
+                    "response": {
+                        "result": {
+                            "status": "success",
+                            "entity_ids": [f"su-{operation['operation_id']}"],
+                            "spatial_delta": {},
+                        },
+                    },
+                    "ok": True,
+                }
+            )
+        return {
+            "status": "success",
+            "executed_count": len(operations),
+            "requested_count": len(operations),
+            "results": results,
+        }
+
+    result = execute_project_execution_plan(
+        tmp_path,
+        clean_before_execute=True,
+        execute_fn=fake_execute,
+    )
+
+    assert result["status"] == "success"
+    assert calls[0] == ["cleanup_model"]
+    assert calls[1][0] == "create_wall"
+    assert result["pre_execution_cleanup"]["status"] == "success"
+    cleanup_payload = result["pre_execution_cleanup"]["results"][0]["request"]["params"][
+        "payload"
+    ]
+    assert cleanup_payload["layer_names"] == [
+        "Walls",
+        "Doors",
+        "Windows",
+        "Fixtures",
+        "Furniture",
+        "Lighting",
+        "Materials",
+    ]
+    assert cleanup_payload["all_entities"] is False
+
+
+def test_execute_project_execution_plan_can_clean_all_before_replay(tmp_path):
+    init_project(tmp_path, template="bathroom")
+    cleanup_payloads = []
+
+    def fake_execute(operations, stop_on_error=True):
+        if operations[0]["operation_type"] == "cleanup_model":
+            cleanup_payloads.append(operations[0]["payload"])
+        results = []
+        for operation in operations:
+            payload = operation.get("payload", {})
+            results.append(
+                {
+                    "operation_id": operation["operation_id"],
+                    "operation_type": operation["operation_type"],
+                    "request": {"params": {"payload": payload}},
+                    "response": {
+                        "result": {
+                            "status": "success",
+                            "entity_ids": [f"su-{operation['operation_id']}"],
+                            "spatial_delta": {},
+                        },
+                    },
+                    "ok": True,
+                }
+            )
+        return {
+            "status": "success",
+            "executed_count": len(operations),
+            "requested_count": len(operations),
+            "results": results,
+        }
+
+    result = execute_project_execution_plan(
+        tmp_path,
+        clean_before_execute=True,
+        clean_scope="all",
+        execute_fn=fake_execute,
+    )
+
+    assert result["status"] == "success"
+    assert cleanup_payloads == [
+        {
+            "layer_names": None,
+            "tag": None,
+            "all_entities": True,
+        }
+    ]
+
+
+def test_execute_project_execution_plan_stops_when_cleanup_fails(tmp_path):
+    init_project(tmp_path, template="bathroom")
+    calls = []
+
+    def fake_execute(operations, stop_on_error=True):
+        calls.append([operation["operation_type"] for operation in operations])
+        return {
+            "status": "failed",
+            "executed_count": 1,
+            "requested_count": 1,
+            "results": [
+                {
+                    "operation_id": operations[0]["operation_id"],
+                    "operation_type": operations[0]["operation_type"],
+                    "request": {"params": {"payload": operations[0].get("payload", {})}},
+                    "response": {"error": {"message": "cleanup failed"}},
+                    "ok": False,
+                }
+            ],
+        }
+
+    result = execute_project_execution_plan(
+        tmp_path,
+        clean_before_execute=True,
+        execute_fn=fake_execute,
+    )
+
+    assert result["status"] == "cleanup_failed"
+    assert calls == [["cleanup_model"]]
+    assert "execution_report" not in result
+
+
 @pytest.mark.asyncio
 async def test_plan_project_execution_tool_returns_bridge_trace(tmp_path):
     from mcp_server.server import plan_project_execution
@@ -268,6 +405,54 @@ async def test_execute_project_model_syncs_entity_ids_to_project(monkeypatch, tm
     ] == ["su-wall_bathroom_001_west"]
     assert "wall_bathroom_001_south" in design_model["execution"]["bridge_operations"]
     assert design_model["metadata"]["execution_sync"]["status"] == "synced"
+
+
+@pytest.mark.asyncio
+async def test_execute_project_model_clean_before_execute(monkeypatch, tmp_path):
+    from mcp_server import server
+
+    init_project(tmp_path, template="bathroom")
+    calls = []
+
+    def fake_execute(operations, stop_on_error=True):
+        calls.append([operation["operation_type"] for operation in operations])
+        results = []
+        for operation in operations:
+            payload = operation.get("payload", {})
+            results.append(
+                {
+                    "operation_id": operation["operation_id"],
+                    "operation_type": operation["operation_type"],
+                    "request": {"params": {"payload": payload}},
+                    "response": {
+                        "result": {
+                            "status": "success",
+                            "entity_ids": [f"su-{operation['operation_id']}"],
+                            "spatial_delta": {},
+                        },
+                    },
+                    "ok": True,
+                }
+            )
+        return {
+            "status": "success",
+            "executed_count": len(operations),
+            "requested_count": len(operations),
+            "results": results,
+        }
+
+    monkeypatch.setattr(server, "execute_bridge_operations", fake_execute)
+
+    response = await server.execute_project_model(
+        str(tmp_path),
+        clean_before_execute=True,
+    )
+    data = json.loads(response.text)
+
+    assert data["status"] == "success"
+    assert calls[0] == ["cleanup_model"]
+    assert calls[1][0] == "create_wall"
+    assert data["pre_execution_cleanup"]["status"] == "success"
 
 
 @pytest.mark.asyncio

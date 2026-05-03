@@ -63,10 +63,74 @@ RSpec.describe SuBridge::CommandDispatcher do
     end
   end
 
+  describe "#handle_set_camera_view" do
+    class FakeCameraForDispatcher
+      attr_reader :eye, :target, :up
+      attr_accessor :perspective
+
+      def set(eye, target, up)
+        @eye = eye
+        @target = target
+        @up = up
+      end
+    end
+
+    class FakeViewForDispatcher
+      attr_reader :camera
+
+      def initialize
+        @camera = FakeCameraForDispatcher.new
+        @zoomed_extents = false
+      end
+
+      def zoom_extents
+        @zoomed_extents = true
+      end
+
+      def zoomed_extents?
+        @zoomed_extents
+      end
+    end
+
+    class FakeBoundsForDispatcher
+      attr_reader :min, :max
+
+      def initialize(min, max)
+        @min = min
+        @max = max
+      end
+    end
+
+    class FakeCameraModelForDispatcher
+      attr_reader :active_view, :bounds
+
+      def initialize
+        @active_view = FakeViewForDispatcher.new
+        @bounds = FakeBoundsForDispatcher.new(
+          Geom::Point3d.new(0, 0, 0),
+          Geom::Point3d.new(100, 200, 30)
+        )
+      end
+    end
+
+    it "supports a top preset with positive Y as screen up" do
+      model = FakeCameraModelForDispatcher.new
+      allow(Sketchup).to receive(:active_model).and_return(model)
+
+      result = dispatcher.send(:handle_set_camera_view, { "view_preset" => "top" })
+
+      expect(result[:view_info][:preset]).to eq("top")
+      expect(model.active_view.camera.target.to_a).to eq([50.0, 100.0, 0.0])
+      expect(model.active_view.camera.up.to_a).to eq([0.0, 1.0, 0.0])
+      expect(model.active_view.camera.perspective).to be(false)
+      expect(model.active_view).to be_zoomed_extents
+    end
+  end
+
   describe "#handle_cleanup_model" do
     it "uses the bridge entity manager for layer cleanup" do
       allow(SuBridge::EntityManager).to receive(:delete_all)
-        .with(layer_names: ["Walls", "Doors"])
+        .with(layer_names: ["Walls", "Doors"], all_entities: false)
         .and_return(
           {
             deleted_count: 2,
@@ -83,6 +147,29 @@ RSpec.describe SuBridge::CommandDispatcher do
       expect(result[:entity_ids]).to eq(["101", "102"])
       expect(result[:cleanup_info][:deleted_count]).to eq(2)
       expect(result[:cleanup_info][:layers_cleaned]).to eq(["Walls", "Doors"])
+    end
+
+    it "supports full-scene cleanup for clean replay" do
+      allow(SuBridge::EntityManager).to receive(:delete_all)
+        .with(layer_names: nil, all_entities: true)
+        .and_return(
+          {
+            deleted_count: 3,
+            deleted_ids: ["101", "102", "103"],
+            layers_cleaned: ["*"],
+            all_entities: true,
+          }
+        )
+
+      result = dispatcher.send(
+        :handle_cleanup_model,
+        { "all_entities" => true }
+      )
+
+      expect(result[:entity_ids]).to eq(["101", "102", "103"])
+      expect(result[:cleanup_info][:deleted_count]).to eq(3)
+      expect(result[:cleanup_info][:layers_cleaned]).to eq(["*"])
+      expect(result[:cleanup_info][:all_entities]).to be(true)
     end
   end
 

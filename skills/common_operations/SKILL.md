@@ -235,6 +235,20 @@ returned SketchUp entity IDs and operation metadata back into
 `design_model.json` when execution succeeds, including generated space walls
 under `spaces.<space_id>.execution.walls.<side>`.
 
+When replaying a full imported model, repairing import geometry, or re-running a
+whole-project sync that should match current truth exactly, pass
+`clean_before_execute=True` so managed SketchUp layers are cleaned before the new
+trace is written. For import/re-import workflows where raw source images or
+SketchUp template entities may be present, also pass `clean_scope="all"`:
+
+```python
+execute_project_model(
+    project_path="<project-path>",
+    clean_before_execute=True,
+    clean_scope="all"
+)
+```
+
 ### Create Simple Geometry
 
 ```python

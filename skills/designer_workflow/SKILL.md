@@ -115,7 +115,10 @@ report quality flags.
 
 After import, call `plan_project_execution` to verify that imported walls and
 opening placeholders can produce a SketchUp bridge trace. Use
-`execute_project_model` only when the designer wants SketchUp updated.
+`execute_project_model(clean_before_execute=True, clean_scope="all")` only when
+the designer wants SketchUp updated. Normal import execution should not leave
+raw source images, template entities, or stale imported geometry in the SketchUp
+scene.
 
 When the designer later says the imported model differs from the source, call
 `review_model_against_import_source`, then `repair_imported_region` with the
@@ -142,6 +145,13 @@ Use `execute_project_model` when the designer wants the current project truth
 sent to SketchUp. On success, use `execution_sync` to report which generated
 space walls, component instances, and lighting instances received SketchUp
 `entity_id` values.
+
+Use `clean_before_execute=True` when the intended result is a clean replay of
+current project truth, especially after import, re-import, repair, or rescale.
+Use `clean_scope="all"` for import clean replay when raw source images or
+SketchUp template entities may be present.
+Do not use clean replay when the designer is intentionally preserving unrelated
+manual SketchUp geometry on managed layers.
 
 Before calling it, confirm the bridge is available at `/tmp/su_bridge.sock`.
 If execution fails because SketchUp is not running, retry the startup path once

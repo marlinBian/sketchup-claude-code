@@ -156,6 +156,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Continue bridge execution after a failed operation",
     )
     execute_project_parser.add_argument(
+        "--clean-before-execute",
+        action="store_true",
+        help="Clean managed SketchUp layers before replaying current project truth",
+    )
+    execute_project_parser.add_argument(
+        "--clean-scope",
+        choices=["managed", "all"],
+        default="managed",
+        help="Cleanup scope used with --clean-before-execute",
+    )
+    execute_project_parser.add_argument(
         "--no-spaces",
         action="store_true",
         help="Omit space wall operations",
@@ -598,6 +609,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.project_path,
                 stop_on_error=not args.continue_on_error,
                 allow_partial=args.allow_partial,
+                clean_before_execute=args.clean_before_execute,
+                clean_scope=args.clean_scope,
                 include_spaces=not args.no_spaces,
                 include_walls=not args.no_walls,
                 include_openings=not args.no_openings,

@@ -2379,14 +2379,21 @@ async def set_camera_view(
     target_x: float | None = None,
     target_y: float | None = None,
     target_z: float | None = None,
+    up_x: float | None = None,
+    up_y: float | None = None,
+    up_z: float | None = None,
+    coordinate_units: str = "mm",
 ) -> TextContent:
     """Set the camera view position.
 
     Args:
-        view_preset: Preset name - "panoramic", "living_room_birdseye",
+        view_preset: Preset name - "top", "panoramic", "living_room_birdseye",
                      "master_bedroom", "dining_area", "front_entrance"
-        eye_x/y/z: Custom camera eye position (required for custom view)
-        target_x/y/z: Custom camera target position
+        eye_x/y/z: Custom camera eye position in coordinate_units
+        target_x/y/z: Custom camera target position in coordinate_units
+        up_x/y/z: Optional camera up vector
+        coordinate_units: "mm" by default. Use "sketchup_internal" or "inches"
+                          only when sending raw SketchUp internal coordinates.
     """
     bridge = SocketBridge()
     try:
@@ -2395,8 +2402,27 @@ async def set_camera_view(
         payload = {"view_preset": view_preset}
 
         if view_preset is None and eye_x is not None:
-            payload["eye"] = [eye_x, eye_y or 0, eye_z or 0]
-            payload["target"] = [target_x or 0, target_y or 0, target_z or 0]
+            if coordinate_units not in {"mm", "sketchup_internal", "inches"}:
+                return TextContent(
+                    type="text",
+                    text=(
+                        "Error: coordinate_units must be 'mm', "
+                        "'sketchup_internal', or 'inches'."
+                    ),
+                )
+            scale = 1 / 25.4 if coordinate_units == "mm" else 1
+            payload["eye"] = [
+                eye_x * scale,
+                (eye_y or 0) * scale,
+                (eye_z or 0) * scale,
+            ]
+            payload["target"] = [
+                (target_x or 0) * scale,
+                (target_y or 0) * scale,
+                (target_z or 0) * scale,
+            ]
+            if up_x is not None or up_y is not None or up_z is not None:
+                payload["up"] = [up_x or 0, up_y or 0, up_z or 0]
 
         request = JsonRpcRequest(
             method="execute_operation",
@@ -2938,13 +2964,16 @@ async def apply_visual_feedback_action(
 async def cleanup_model(
     layer_names: list[str] | None = None,
     tag: str | None = None,
+    all_entities: bool = False,
 ) -> TextContent:
     """Clean up AI-generated content from the model.
 
     Args:
         layer_names: Specific layer names to clean. If None, cleans all AI layers.
-                     Options: "Walls", "Furniture", "Fixtures", "Lighting", "Materials"
+                     Options include "Walls", "Doors", "Windows", "Fixtures",
+                     "Furniture", "Lighting", and "Materials".
         tag: Alternative cleanup by component definition name containing tag.
+        all_entities: If true, clean the whole current SketchUp scene.
 
     Returns:
         Cleanup summary with deleted count and entity IDs.
@@ -2961,6 +2990,7 @@ async def cleanup_model(
                 "payload": {
                     "layer_names": layer_names,
                     "tag": tag,
+                    "all_entities": all_entities,
                 },
                 "rollback_on_failure": True,
             }
@@ -3988,6 +4018,8 @@ async def execute_project_model(
     project_path: str,
     stop_on_error: bool = True,
     allow_partial: bool = False,
+    clean_before_execute: bool = False,
+    clean_scope: str = "managed",
     include_spaces: bool = True,
     include_walls: bool = True,
     include_openings: bool = True,
@@ -4001,6 +4033,8 @@ async def execute_project_model(
             project_path,
             stop_on_error=stop_on_error,
             allow_partial=allow_partial,
+            clean_before_execute=clean_before_execute,
+            clean_scope=clean_scope,
             include_spaces=include_spaces,
             include_walls=include_walls,
             include_openings=include_openings,

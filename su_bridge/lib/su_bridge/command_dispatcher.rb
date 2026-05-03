@@ -457,6 +457,8 @@ module SuBridge
       view = sketchup.active_model.active_view
 
       case view_preset
+      when "top", "floor_plan_top"
+        set_top_camera(view)
       when "panoramic"
         set_camera_position(view, [0, 0, 1500], [5000, 0, 1000], [0, 0, 1])
       when "living_room_birdseye"
@@ -486,6 +488,26 @@ module SuBridge
 
     def set_camera_position(view, eye, target, up)
       view.camera.set(Geom::Point3d.new(*eye), Geom::Point3d.new(*target), Geom::Vector3d.new(*up))
+    end
+
+    def set_top_camera(view)
+      bounds = sketchup.active_model.bounds
+      min = bounds.min
+      max = bounds.max
+      center = [
+        (min.x + max.x) / 2.0,
+        (min.y + max.y) / 2.0,
+        (min.z + max.z) / 2.0,
+      ]
+      span = [
+        (max.x - min.x).abs,
+        (max.y - min.y).abs,
+        (max.z - min.z).abs,
+      ].max
+      eye_z = max.z + [span * 1.5, 1000.0].max
+      set_camera_position(view, [center[0], center[1], eye_z], [center[0], center[1], 0], [0, 1, 0])
+      view.camera.perspective = false if view.camera.respond_to?(:perspective=)
+      view.zoom_extents if view.respond_to?(:zoom_extents)
     end
 
     def handle_capture_design(payload)
@@ -518,11 +540,15 @@ module SuBridge
     def handle_cleanup_model(payload)
       layer_names = payload["layer_names"]
       tag = payload["tag"]
+      all_entities = payload["all_entities"] == true
 
       if tag
         result = SuBridge::EntityManager.cleanup_by_tag(tag)
       else
-        result = SuBridge::EntityManager.delete_all(layer_names: layer_names)
+        result = SuBridge::EntityManager.delete_all(
+          layer_names: layer_names,
+          all_entities: all_entities
+        )
       end
 
       {
@@ -534,6 +560,7 @@ module SuBridge
           deleted_count: result[:deleted_count],
           layers_cleaned: result[:layers_cleaned] || [],
           tag: result[:tag],
+          all_entities: result[:all_entities] || false,
         },
       }
     end

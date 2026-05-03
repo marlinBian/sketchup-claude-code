@@ -26,14 +26,21 @@ RSpec.describe SuBridge::EntityManager do
   end
 
   class EntityManagerSpecEntity
-    attr_reader :entityID, :layer, :definition
+    attr_reader :layer, :definition
 
-    def initialize(entity_id:, layer:, definition_name: nil, valid: true)
+    def initialize(entity_id:, layer:, definition_name: nil, valid: true, raise_after_erase: false)
       @entityID = entity_id
       @layer = layer
       @definition = definition_name ? Struct.new(:name).new(definition_name) : nil
       @valid = valid
       @erased = false
+      @raise_after_erase = raise_after_erase
+    end
+
+    def entityID
+      raise "reference to deleted Entity" if @raise_after_erase && @erased
+
+      @entityID
     end
 
     def valid?
@@ -110,6 +117,37 @@ RSpec.describe SuBridge::EntityManager do
       expect(wall).to be_erased
       expect(door).to be_erased
       expect(furniture).not_to be_erased
+    end
+
+    it "records entity ids before erasing SketchUp entities" do
+      wall = EntityManagerSpecEntity.new(
+        entity_id: 101,
+        layer: walls_layer,
+        raise_after_erase: true
+      )
+      use_fake_model([wall])
+
+      result = described_class.delete_all(layer_names: ["Walls"])
+
+      expect(result[:deleted_count]).to eq(1)
+      expect(result[:deleted_ids]).to eq(["101"])
+      expect(wall).to be_erased
+    end
+
+    it "can erase every valid entity for full-scene clean replay" do
+      layer0 = EntityManagerSpecLayer.new("Layer0")
+      template_person = EntityManagerSpecEntity.new(entity_id: 201, layer: layer0)
+      wall = EntityManagerSpecEntity.new(entity_id: 202, layer: walls_layer)
+      use_fake_model([template_person, wall], [layer0, walls_layer])
+
+      result = described_class.delete_all(all_entities: true)
+
+      expect(result[:deleted_count]).to eq(2)
+      expect(result[:deleted_ids]).to eq(["201", "202"])
+      expect(result[:layers_cleaned]).to eq(["*"])
+      expect(result[:all_entities]).to be(true)
+      expect(template_person).to be_erased
+      expect(wall).to be_erased
     end
   end
 

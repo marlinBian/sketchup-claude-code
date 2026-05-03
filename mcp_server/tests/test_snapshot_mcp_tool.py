@@ -22,6 +22,16 @@ class FakeBridge:
 
     def send(self, request):
         self.request = request
+        if request["params"]["operation_type"] == "set_camera_view":
+            return {
+                "result": {
+                    "view_info": {
+                        "preset": request["params"]["payload"].get("view_preset"),
+                        "camera_eye": request["params"]["payload"].get("eye"),
+                        "camera_target": request["params"]["payload"].get("target"),
+                    }
+                }
+            }
         return {
             "result": {
                 "capture_info": {
@@ -32,6 +42,32 @@ class FakeBridge:
                 }
             }
         }
+
+
+@pytest.mark.asyncio
+async def test_set_camera_view_converts_custom_mm_coordinates(monkeypatch):
+    from mcp_server import server
+
+    bridge = FakeBridge()
+    monkeypatch.setattr(server, "SocketBridge", lambda: bridge)
+
+    await server.set_camera_view(
+        eye_x=2540,
+        eye_y=5080,
+        eye_z=7620,
+        target_x=254,
+        target_y=508,
+        target_z=0,
+        up_x=0,
+        up_y=1,
+        up_z=0,
+    )
+    payload = bridge.request["params"]["payload"]
+
+    assert bridge.request["params"]["operation_type"] == "set_camera_view"
+    assert payload["eye"] == [100.0, 200.0, 300.0]
+    assert payload["target"] == [10.0, 20.0, 0.0]
+    assert payload["up"] == [0, 1, 0]
 
 
 @pytest.mark.asyncio

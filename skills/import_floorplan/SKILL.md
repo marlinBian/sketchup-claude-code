@@ -41,12 +41,22 @@ Import this floor plan and generate an editable model.
 3. Call `plan_project_execution` to verify the imported walls and opening
    placeholders can produce a bridge trace.
 4. If the designer wants SketchUp updated and the bridge is available, call
-   `execute_project_model`.
+   `execute_project_model` with `clean_before_execute=true` and
+   `clean_scope="all"`. Import replay should remove stale generated walls,
+   openings, old source overlays, and template entities before writing the
+   current truth into SketchUp.
 5. Summarize the generated model IDs, wall/opening counts, scale source,
    quality flags, and assumptions.
 
 Do not ask the designer to confirm every detected wall, door, window, or numeric
 dimension before writing the first working model.
+
+For floor-plan images, treat the source image as an extraction aid, not as the
+final SketchUp object. Unless the designer explicitly asks for an overlay review,
+do not leave the original image in the SketchUp scene after import execution.
+Normal top-view model truth uses positive Y upward on screen; if a raster source
+was interpreted with image-space Y downward, repair the imported coordinates and
+record that orientation repair in the import session.
 
 ## Source Registration
 
@@ -82,7 +92,9 @@ whole import by default.
 2. Call `repair_imported_region` with the specific correction, such as target
    dimensions or wall thickness.
 3. Call `plan_project_execution` again.
-4. Execute the project only when the designer wants SketchUp updated.
+4. Execute the project with `clean_before_execute=true` and `clean_scope="all"`
+   when the designer wants SketchUp updated, so stale geometry does not remain
+   beside the repaired truth.
 
 Example prompts:
 
@@ -104,6 +116,7 @@ After import or repair, report:
 - scale source and whether it was estimated
 - non-blocking quality flags
 - whether the project execution trace is ready
+- whether SketchUp was refreshed with clean replay
 
 Keep the response short. The source material and extracted evidence are retained
 under `imports/<import_id>/`; `design_model.json` remains the editable working
@@ -117,3 +130,5 @@ truth.
 - Do not block initial import on routine confirmation prompts.
 - Ask before destructive overwrite of unrelated existing project truth.
 - Use millimeters for all dimensions.
+- Do not leave duplicate old import geometry or raw source images in SketchUp
+  after a normal import/re-import.

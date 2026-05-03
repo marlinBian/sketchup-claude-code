@@ -21,6 +21,17 @@ be converted into an operation, execution is refused by default so missing
 project truth is not silently skipped. Agents may pass `allow_partial=True` only
 after making the omitted instances explicit to the designer.
 
+Agents may pass `clean_before_execute=True` when the intended result is a clean
+replay of current project truth. This sends a `cleanup_model` operation for
+managed layers before replaying the trace, which prevents duplicated walls,
+doors, windows, component placeholders, or stale import overlays after repeated
+syncs.
+
+For import replay, agents may also pass `clean_scope="all"` to remove source
+overlays, SketchUp template entities, and other scene objects before replaying
+project truth. Use the default managed scope when unrelated manual SketchUp
+geometry should be preserved.
+
 ## Operation Shape
 
 Each operation contains:
