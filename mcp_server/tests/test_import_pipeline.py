@@ -139,6 +139,87 @@ def make_area_guard_interpretation(tmp_path):
     return path
 
 
+def make_ambiguous_balcony_interpretation(tmp_path):
+    """Create a fixture where label-area evidence should beat a wrong blank region."""
+    interpretation = {
+        "version": "1.0",
+        "scale": {
+            "units": "mm",
+            "source": "visible_dimension_annotations",
+            "confidence": 0.74,
+            "width": 7095,
+            "depth": 7880,
+        },
+        "negative_regions": [
+            {
+                "id": "ambiguous_lower_middle_blank",
+                "kind": "outside_plan_blank",
+                "footprint": [
+                    [4465, 1785, 0],
+                    [5915, 1785, 0],
+                    [5915, 0, 0],
+                    [4465, 0, 0],
+                ],
+            }
+        ],
+        "space_candidates": [
+            {
+                "id": "balcony_b_right_strip_candidate",
+                "space_id": "balcony_b_001",
+                "type": "balcony",
+                "name": "Balcony B",
+                "label_area_m2": 2.3,
+                "confidence": 0.9,
+                "dimension_constraints": [
+                    {"axis": "x", "length": 1180, "tolerance": 80, "source": "bottom_width_chain"},
+                    {"axis": "y", "length": 1785, "tolerance": 80, "source": "right_depth_chain"},
+                ],
+                "footprint": [
+                    [5915, 1785, 0],
+                    [7095, 1785, 0],
+                    [7095, 0, 0],
+                    [5915, 0, 0],
+                ],
+            },
+            {
+                "id": "balcony_b_area_and_dimension_candidate",
+                "space_id": "balcony_b_001",
+                "type": "balcony",
+                "name": "Balcony B",
+                "label_area_m2": 2.3,
+                "confidence": 0.72,
+                "dimension_constraints": [
+                    {"axis": "x", "length": 1315, "tolerance": 80, "source": "area_backsolve"},
+                    {"axis": "y", "length": 1785, "tolerance": 80, "source": "right_depth_chain"},
+                ],
+                "footprint": [
+                    [4465, 1785, 0],
+                    [5780, 1785, 0],
+                    [5780, 0, 0],
+                    [4465, 0, 0],
+                ],
+            },
+        ],
+        "walls": [
+            {
+                "wall_id": "w_ext_bottom",
+                "path": [[1335, 0, 0], [7095, 0, 0]],
+                "confidence": 0.66,
+            },
+            {
+                "wall_id": "w_balcony_b_east",
+                "path": [[5780, 0, 0], [5780, 1785, 0]],
+                "space_refs": ["balcony_b_001"],
+                "confidence": 0.7,
+            },
+        ],
+        "openings": [],
+    }
+    path = tmp_path / "ambiguous_source_interpretation.json"
+    path.write_text(json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
 def create_offset_right_boundary(project):
     """Create a near-boundary imported wall offset like a mixed dimension chain."""
     design_model_path = project / "design_model.json"
@@ -397,6 +478,57 @@ def test_interpreted_import_rejects_overwide_space_and_trims_shell(tmp_path):
     }
     assert extracted["shell_trim"]["trimmed_walls"] == ["w_ext_bottom"]
     assert validation["ok"] is True
+
+
+def test_interpreted_import_prefers_label_area_over_ambiguous_blank_region(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "plan.png")
+    interpretation = make_ambiguous_balcony_interpretation(tmp_path)
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation,
+    )
+    design_model = json.loads((project / "design_model.json").read_text(encoding="utf-8"))
+    extracted = json.loads(
+        (
+            project
+            / "imports"
+            / "import_001"
+            / "extracted"
+            / "interpretation.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert result["source_interpretation_used"] is True
+    assert "source_negative_region_conflict_overridden" in result["quality_flags"]
+    assert design_model["spaces"]["balcony_b_001"]["source"]["candidate_id"] == (
+        "balcony_b_area_and_dimension_candidate"
+    )
+    assert design_model["spaces"]["balcony_b_001"]["footprint"] == [
+        [4465.0, 1785.0, 0.0],
+        [5780.0, 1785.0, 0.0],
+        [5780.0, 0.0, 0.0],
+        [4465.0, 0.0, 0.0],
+    ]
+    reviews = {
+        review["candidate_id"]: review
+        for review in extracted["candidate_reviews"]
+    }
+    assert reviews["balcony_b_right_strip_candidate"]["status"] == "accepted"
+    assert reviews["balcony_b_area_and_dimension_candidate"]["status"] == "accepted"
+    assert (
+        reviews["balcony_b_area_and_dimension_candidate"]["selection_score"]
+        < reviews["balcony_b_right_strip_candidate"]["selection_score"]
+    )
+    assert {
+        issue["code"]
+        for issue in reviews["balcony_b_area_and_dimension_candidate"]["issues"]
+    } == {"negative_space_conflict_overridden"}
+    assert validate_project(project)["ok"] is True
 
 
 def test_import_floorplan_requires_explicit_overwrite_for_existing_session(tmp_path):

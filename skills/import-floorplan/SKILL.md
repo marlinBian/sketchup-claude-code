@@ -43,6 +43,13 @@ Import this floor plan and generate an editable model.
    `import_floorplan_to_model` with `source_interpretation_path`. If the user
    gives known dimensions, pass `width` and `depth` in millimeters. If not, let
    the tool estimate scale and write quality flags.
+   When a room label includes an area, use it as positive evidence to test
+   adjacent dimension-chain segments before marking any unlabeled strip as
+   outside. For example, a `2.3m2` balcony beside a `1785mm` depth implies a
+   width near `1289mm`, so a neighboring `1315mm` chain segment is a stronger
+   balcony candidate than a visually adjacent `1180mm` strip. In ambiguous
+   cases, emit competing `space_candidates` and avoid hard negative regions
+   over any candidate that fits both the room label area and dimension chain.
 3. Call `plan_project_execution` to verify the imported walls can be compiled
    into hosted opening operations with sill/header wall pieces and thin
    door/window marker geometry.

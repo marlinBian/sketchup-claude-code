@@ -38,6 +38,8 @@ DEFAULT_MAX_SEMANTIC_SHORT_GAP_LENGTH = 900.0
 DEFAULT_LABEL_AREA_TOLERANCE_RATIO = 0.35
 DEFAULT_NEGATIVE_SPACE_OVERLAP_TOLERANCE_M2 = 0.05
 DEFAULT_DIMENSION_CONSTRAINT_TOLERANCE = 120.0
+DEFAULT_STRONG_LABEL_AREA_TOLERANCE_RATIO = 0.08
+DEFAULT_STRONG_DIMENSION_TOLERANCE = 80.0
 VALID_CORNER_NOTCHES = {"top_left", "top_right", "bottom_left", "bottom_right"}
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".heic"}
@@ -482,6 +484,7 @@ def interpretation_negative_regions(
             {
                 "id": str(region.get("id") or f"negative_region_{index + 1}"),
                 "kind": str(region.get("kind") or "outside_plan"),
+                "enforcement": str(region.get("enforcement") or "auto"),
                 "footprint": footprint,
                 "bounds": polygon_bounds(footprint),
                 "area_m2": polygon_area_mm2(footprint) / 1_000_000,
@@ -535,8 +538,27 @@ def dimension_constraints_for_candidate(
                 ),
                 "source": "expected_depth",
             }
-        )
+            )
     return constraints
+
+
+def candidate_selection_score(
+    *,
+    area_delta_ratio: float | None,
+    dimension_deltas: list[dict[str, Any]],
+    confidence: float,
+) -> float:
+    """Return a lower-is-better score for competing candidates of one space."""
+    area_score = area_delta_ratio if area_delta_ratio is not None else 0.25
+    if dimension_deltas:
+        dimension_score = max(
+            float(item["delta"]) / max(float(item["tolerance"]), 1.0)
+            for item in dimension_deltas
+        )
+    else:
+        dimension_score = 0.25
+    confidence_bonus = max(0.0, min(1.0, confidence)) * 0.05
+    return round(area_score + dimension_score - confidence_bonus, 6)
 
 
 def review_space_candidate(
@@ -560,6 +582,8 @@ def review_space_candidate(
     area_m2 = polygon_area_mm2(footprint) / 1_000_000
     bounds = polygon_bounds(footprint)
     issues: list[dict[str, Any]] = []
+    area_delta_ratio: float | None = None
+    dimension_deltas: list[dict[str, Any]] = []
 
     label_area_m2 = (
         candidate.get("label_area_m2")
@@ -588,6 +612,16 @@ def review_space_candidate(
     for constraint in dimension_constraints_for_candidate(candidate):
         actual = bounds[1] - bounds[0] if constraint["axis"] == "x" else bounds[3] - bounds[2]
         delta = abs(actual - constraint["length"])
+        dimension_deltas.append(
+            {
+                "axis": constraint["axis"],
+                "expected_length": constraint["length"],
+                "actual_length": actual,
+                "delta": delta,
+                "tolerance": constraint["tolerance"],
+                "source": constraint.get("source"),
+            }
+        )
         if delta > constraint["tolerance"]:
             issues.append(
                 {
@@ -602,9 +636,30 @@ def review_space_candidate(
                 }
             )
 
+    strong_positive_evidence = (
+        area_delta_ratio is not None
+        and area_delta_ratio <= DEFAULT_STRONG_LABEL_AREA_TOLERANCE_RATIO
+        and bool(dimension_deltas)
+        and all(
+            float(item["delta"]) <= min(float(item["tolerance"]), DEFAULT_STRONG_DIMENSION_TOLERANCE)
+            for item in dimension_deltas
+        )
+    )
     for region in negative_regions:
         overlap_m2 = bounds_overlap_area_mm2(bounds, region["bounds"]) / 1_000_000
         if overlap_m2 > negative_space_overlap_tolerance_m2:
+            if strong_positive_evidence and region.get("enforcement") != "hard":
+                issues.append(
+                    {
+                        "code": "negative_space_conflict_overridden",
+                        "severity": "warning",
+                        "negative_region_id": region["id"],
+                        "negative_region_kind": region["kind"],
+                        "overlap_area_m2": overlap_m2,
+                        "reason": "room label area and dimension constraints are stronger",
+                    }
+                )
+                continue
             issues.append(
                 {
                     "code": "negative_space_overlap",
@@ -626,6 +681,13 @@ def review_space_candidate(
         "confidence": float(candidate.get("confidence", 0.5)),
         "computed_area_m2": area_m2,
         "label_area_m2": label_area_m2,
+        "area_delta_ratio": area_delta_ratio,
+        "dimension_deltas": dimension_deltas,
+        "selection_score": candidate_selection_score(
+            area_delta_ratio=area_delta_ratio,
+            dimension_deltas=dimension_deltas,
+            confidence=float(candidate.get("confidence", 0.5)),
+        ),
         "footprint": footprint,
         "bounds": bounds,
         "issues": issues,
@@ -919,7 +981,11 @@ def build_interpreted_import_payloads(
     rejected_candidates: list[dict[str, Any]] = []
     for review in sorted(
         candidate_reviews,
-        key=lambda item: (str(item["space_id"]), -float(item["confidence"])),
+        key=lambda item: (
+            str(item["space_id"]),
+            float(item["selection_score"]),
+            -float(item["confidence"]),
+        ),
     ):
         if review["status"] != "accepted":
             rejected_candidates.append(review)
@@ -931,6 +997,12 @@ def build_interpreted_import_payloads(
 
     if rejected_candidates:
         flags.append("source_space_candidate_rejected")
+    if any(
+        issue["code"] == "negative_space_conflict_overridden"
+        for review in candidate_reviews
+        for issue in review["issues"]
+    ):
+        flags.append("source_negative_region_conflict_overridden")
 
     spaces = {
         space_id: space_payload_from_candidate(
