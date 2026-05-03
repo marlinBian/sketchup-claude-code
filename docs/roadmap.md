@@ -231,3 +231,123 @@ Goal: make CLI agents inspect project truth without parsing files manually.
 - compare saved structured truth versions against each other or current project
   truth
 - restore structured truth versions with explicit overwrite intent
+
+## P11: Import Pipeline Foundation
+
+Goal: make existing design materials first-class project inputs without making
+the designer review raw candidates before a useful model exists.
+
+- add `imports/<import_id>/` project workspace shape
+- define import manifest and extracted-evidence files
+- register source files with hashes, detected type, and provenance
+- keep import evidence separate from canonical project truth
+- add import summaries to project state inspection
+- preserve the autonomous-first rule from ADR 0003
+
+Acceptance:
+
+```bash
+cd mcp_server && uv run --extra dev pytest \
+  tests/test_import_manifest_schema.py \
+  tests/test_import_project_files.py -q
+```
+
+## P12: Direct Import To Working Truth
+
+Goal: convert an imported source into editable `design_model.json` truth by
+default, then let designers repair it through normal iteration.
+
+- expose `register_import_source`
+- expose `import_floorplan_to_model`
+- write generated spaces, walls, openings, and provenance into
+  `design_model.json`
+- return model IDs, assumptions, quality flags, and import summary
+- avoid routine confirmation prompts before writing the first working model
+- add fixtures for a simple imported floor plan
+
+Acceptance:
+
+```bash
+cd mcp_server && uv run --extra dev pytest \
+  tests/test_import_floorplan_to_model.py \
+  tests/test_design_model_schema.py -q
+```
+
+## P13: Imported Building Shell Execution
+
+Goal: execute imported walls, openings, space footprints, and reference overlays
+in SketchUp.
+
+- add bridge trace operations for wall paths and hosted openings
+- create reference overlays from source previews when available
+- tag imported reference geometry separately from generated design geometry
+- write SketchUp entity IDs and operation metadata back to `design_model.json`
+- keep headless trace planning available without SketchUp
+
+Acceptance:
+
+```bash
+cd mcp_server && uv run --extra dev pytest \
+  tests/test_import_trace_executor.py \
+  tests/test_project_executor.py -q
+cd su_bridge && bundle exec rspec spec/ --format progress
+```
+
+## P14: Scale And Rescale
+
+Goal: make imported models useful even when the source scale is missing,
+estimated, or corrected after import.
+
+- infer scale from known dimensions when available
+- support explicit user scale instructions after import
+- expose `rescale_imported_model`
+- update imported wall, opening, space, and component positions consistently
+- record scale source, confidence, and rescale history
+
+Acceptance:
+
+```bash
+cd mcp_server && uv run --extra dev pytest \
+  tests/test_import_scale.py \
+  tests/test_import_repair.py -q
+```
+
+## P15: Source-Backed Repair
+
+Goal: when a designer notices a mismatch, repair the affected model region from
+source evidence without restarting the whole import.
+
+- expose `review_model_against_import_source`
+- expose `repair_imported_region`
+- find related source evidence through model provenance
+- patch affected `design_model.json` entities
+- re-execute only the affected bridge trace when possible
+- report changed model IDs and reasoning
+
+Acceptance:
+
+```bash
+cd mcp_server && uv run --extra dev pytest \
+  tests/test_import_source_review.py \
+  tests/test_import_repair.py -q
+```
+
+## P16: Rich Floorplan Interpretation
+
+Goal: improve extraction quality for real DWG, DXF, PDF, raster plans, and
+photos while preserving the same import contract.
+
+- support CAD/vector extraction where available
+- support PDF page preview and raster fallback
+- support image normalization for scanned plans and photos
+- detect candidate walls, openings, labels, and room footprints
+- keep interpretation evidence under `imports/<import_id>/extracted/`
+- keep generated model truth editable and source-backed
+
+Acceptance:
+
+```bash
+cd mcp_server && uv run --extra dev pytest \
+  tests/test_import_extractors.py \
+  tests/test_import_floorplan_to_model.py -q
+```

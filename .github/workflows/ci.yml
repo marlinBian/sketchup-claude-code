@@ -115,4 +115,5 @@ jobs:
             skills/*.md
             skills/**/*.md
             docs/roadmap.md
+            docs/adr/*.md
             docs/architecture/*.md

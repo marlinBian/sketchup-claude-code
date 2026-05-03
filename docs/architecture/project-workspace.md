@@ -12,6 +12,13 @@ my-design-project/
   assets.lock.json
   assets/
     components/
+  imports/
+    import_001/
+      manifest.json
+      source/
+      previews/
+      evidence/
+      extracted/
   model.skp
   snapshots/
     manifest.json
@@ -46,6 +53,13 @@ license metadata, and procedural fallback information.
 initial implementation creates this directory and records target cache paths.
 External downloads are still explicit actions, not automatic background work.
 
+`imports/` stores source material and evidence for imported projects. Import is
+autonomous-first: a source file should generate a best-effort editable working
+model in `design_model.json` without requiring the designer to approve every
+intermediate candidate. Import manifests, previews, extracted evidence, quality
+flags, and assumptions are retained so the harness can repair specific
+mismatches later when the designer points them out.
+
 `model.skp` is the SketchUp model generated or synchronized by the bridge.
 
 Agents can inspect project state through MCP tools:
@@ -78,6 +92,9 @@ Agents can inspect project state through MCP tools:
   current `design_model.json` without requiring SketchUp
 - `execute_project_model` runs that project trace against the bridge and records
   returned entity IDs and operation metadata back into `design_model.json`
+- future import tools should register source material, generate working truth
+  from that material, summarize assumptions, and repair source-backed mismatches
+  without treating import evidence as the canonical model
 
 `snapshots/` stores captures used for review, regression checks, and visual
 handoff. `snapshots/manifest.json` records provenance for each artifact and
