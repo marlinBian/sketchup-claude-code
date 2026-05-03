@@ -272,6 +272,24 @@ class TestJsonRpcRequest:
         assert data["params"]["operation_type"] == "export_ifc"
         assert data["params"]["payload"]["output_path"] == "/tmp/model.ifc"
 
+    def test_save_model_request(self):
+        """Test save_model request format."""
+        request = JsonRpcRequest(
+            method="execute_operation",
+            params={
+                "operation_id": "test_014",
+                "operation_type": "save_model",
+                "payload": {
+                    "output_path": "/tmp/model.skp",
+                },
+                "rollback_on_failure": False,
+            }
+        )
+        data = request.to_dict()
+
+        assert data["params"]["operation_type"] == "save_model"
+        assert data["params"]["payload"]["output_path"] == "/tmp/model.skp"
+
 
 class TestOperationTypes:
     """Test that all operation types are properly formatted."""
@@ -300,6 +318,7 @@ class TestOperationTypes:
         "rotate_entity",
         "scale_entity",
         "copy_entity",
+        "save_model",
         "export_gltf",
         "export_ifc",
     ]

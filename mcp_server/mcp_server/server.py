@@ -93,6 +93,7 @@ from mcp_server.tools.import_pipeline import (
     review_model_against_import_source as review_model_against_import_source_file,
 )
 from mcp_server.tools.render_brief import build_render_brief
+from mcp_server.tools.export_tools import save_skp_model as save_skp_model_file
 from mcp_server.tools.trace_executor import (
     execute_bridge_operations,
     sync_execution_report_to_design_model,
@@ -4259,6 +4260,19 @@ async def execute_project_model(
         )
     except Exception as e:
         return TextContent(type="text", text=f"Project execution failed: {str(e)}")
+
+
+@mcp.tool()
+async def save_sketchup_model(output_path: str) -> TextContent:
+    """Save the active live SketchUp model as a .skp file."""
+    try:
+        result = await save_skp_model_file(output_path)
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"SketchUp model save failed: {str(e)}")
 
 
 @mcp.tool()

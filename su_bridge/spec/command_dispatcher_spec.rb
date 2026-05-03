@@ -31,6 +31,7 @@ RSpec.describe SuBridge::CommandDispatcher do
         get_bridge_info
         get_scene_info
         get_selection_info
+        save_model
         save_selected_component
         place_component
         place_lighting
@@ -322,6 +323,44 @@ RSpec.describe SuBridge::CommandDispatcher do
         expect(result[:asset_info][:definition_name]).to eq("Selected Definition")
         expect(result[:selected_entity][:type]).to eq("component")
       end
+    end
+  end
+
+  describe "#handle_save_model" do
+    class FakeSaveModelForDispatcher
+      attr_reader :saved_path
+
+      def save_copy(path)
+        @saved_path = path
+        File.write(path, "skp")
+        true
+      end
+    end
+
+    it "saves the active model as a skp copy" do
+      model = FakeSaveModelForDispatcher.new
+      allow(Sketchup).to receive(:active_model).and_return(model)
+
+      Dir.mktmpdir do |dir|
+        output_path = File.join(dir, "exports", "fresh_import")
+        result = dispatcher.send(
+          :handle_save_model,
+          { "output_path" => output_path }
+        )
+
+        expected_path = "#{output_path}.skp"
+        expect(File).to exist(expected_path)
+        expect(model.saved_path).to eq(expected_path)
+        expect(result[:save_info][:format]).to eq("skp")
+        expect(result[:save_info][:output_path]).to eq(expected_path)
+        expect(result[:save_info][:bytes]).to eq(3)
+      end
+    end
+
+    it "requires an output path" do
+      expect {
+        dispatcher.send(:handle_save_model, {})
+      }.to raise_error(SuBridge::UndoManager::ValidationError, "output_path required")
     end
   end
 

@@ -43,6 +43,42 @@ async def export_gltf(output_path: str, include_textures: bool = True) -> dict[s
         bridge.disconnect()
 
 
+async def save_skp_model(output_path: str) -> dict[str, Any]:
+    """Save the active SketchUp model to a .skp file.
+
+    Args:
+        output_path: Destination file path. The Ruby bridge appends .skp when omitted.
+
+    Returns:
+        Dict with save status, file path, and model_revision.
+    """
+    bridge = SocketBridge()
+    try:
+        bridge.connect()
+
+        request = JsonRpcRequest(
+            method="execute_operation",
+            params={
+                "operation_id": f"save_model_{id(save_skp_model)}",
+                "operation_type": "save_model",
+                "payload": {
+                    "output_path": output_path,
+                },
+                "rollback_on_failure": False,
+            }
+        )
+
+        response = bridge.send(request.to_dict())
+
+        if "error" in response:
+            raise RuntimeError(f"Save failed: {response['error']['message']}")
+
+        return response.get("result", {})
+
+    finally:
+        bridge.disconnect()
+
+
 async def export_ifc(output_path: str) -> dict[str, Any]:
     """Export model to IFC format.
 

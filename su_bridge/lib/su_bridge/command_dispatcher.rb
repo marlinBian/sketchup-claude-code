@@ -36,6 +36,7 @@ module SuBridge
       "get_bridge_info" => :handle_get_bridge_info,
       "get_scene_info" => :handle_get_scene_info,
       "get_selection_info" => :handle_get_selection_info,
+      "save_model" => :handle_save_model,
       "save_selected_component" => :handle_save_selected_component,
       "move_entity" => :handle_move_entity,
       "rotate_entity" => :handle_rotate_entity,
@@ -865,6 +866,37 @@ module SuBridge
           bytes: ::File.exist?(output_path) ? ::File.size(output_path) : nil,
         },
         selected_entity: summary,
+      }
+    end
+
+    def handle_save_model(payload)
+      output_path = payload["output_path"]
+      raise ::SuBridge::UndoManager::ValidationError, "output_path required" unless output_path
+
+      output_path = ::File.expand_path(output_path)
+      output_path = "#{output_path}.skp" unless output_path.downcase.end_with?(".skp")
+
+      model = sketchup.active_model
+      raise ::SuBridge::UndoManager::ValidationError, "active SketchUp model not available" unless model
+
+      ::FileUtils.mkdir_p(::File.dirname(output_path))
+      saved = if model.respond_to?(:save_copy)
+                model.save_copy(output_path)
+              else
+                model.save(output_path)
+              end
+      raise ::SuBridge::UndoManager::ValidationError, "Model save failed: #{output_path}" unless saved
+
+      {
+        entity_ids: [],
+        spatial_delta: {},
+        model_revision: 1,
+        elapsed_ms: 0,
+        save_info: {
+          format: "skp",
+          output_path: output_path,
+          bytes: ::File.exist?(output_path) ? ::File.size(output_path) : nil,
+        },
       }
     end
 

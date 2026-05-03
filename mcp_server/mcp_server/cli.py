@@ -1,6 +1,7 @@
 """Command line entry point for SketchUp Agent Harness."""
 
 import argparse
+import asyncio
 import json
 import sys
 
@@ -23,6 +24,7 @@ from mcp_server.release_check import run_release_check
 from mcp_server.runtime_skills import install_runtime_skills
 from mcp_server.smoke import DEFAULT_SMOKE_PROJECT, run_smoke, validate_project
 from mcp_server.tools.report_tools import generate_project_report
+from mcp_server.tools.export_tools import save_skp_model
 from mcp_server.tools.project_executor import (
     build_project_execution_plan,
     execute_project_execution_plan,
@@ -201,6 +203,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-scene-info",
         action="store_true",
         help="Omit final scene info operation",
+    )
+
+    save_skp_parser = subparsers.add_parser(
+        "save-skp",
+        help="Save the active SketchUp model from the live bridge as a .skp file",
+    )
+    save_skp_parser.add_argument(
+        "output_path",
+        help="Destination .skp path. The bridge appends .skp when omitted.",
     )
 
     save_version_parser = subparsers.add_parser(
@@ -859,6 +870,10 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result.get("status") == "success" else 1
+        if args.command == "save-skp":
+            result = asyncio.run(save_skp_model(args.output_path))
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
         if args.command == "save-version":
             result = save_project_version(
                 args.project_path,
