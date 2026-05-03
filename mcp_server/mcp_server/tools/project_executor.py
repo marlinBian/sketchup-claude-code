@@ -130,6 +130,10 @@ def _openings_for_wall_span(
         }
         if opening.get("swing_direction"):
             hosted_opening["swing_direction"] = opening["swing_direction"]
+        if opening.get("open_side"):
+            hosted_opening["open_side"] = opening["open_side"]
+        if opening.get("open_to_space"):
+            hosted_opening["open_to_space"] = opening["open_to_space"]
         span_openings.append(hosted_opening)
     return span_openings
 

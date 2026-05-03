@@ -282,6 +282,79 @@ def make_blocked_passage_interpretation(tmp_path):
     return path
 
 
+def make_wrong_bedroom_door_host_interpretation(tmp_path):
+    """Create a fixture where a bedroom door is attached to the wrong wall."""
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "living_candidate",
+                "space_id": "living_001",
+                "type": "living_room",
+                "name": "Living Room",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [6500, 0, 0], [6500, 3000, 0], [0, 3000, 0]],
+            },
+            {
+                "id": "passage_candidate",
+                "space_id": "passage_001",
+                "type": "hallway",
+                "name": "Passage",
+                "confidence": 0.7,
+                "footprint": [
+                    [1200, 3000, 0],
+                    [2500, 3000, 0],
+                    [2500, 4200, 0],
+                    [1200, 4200, 0],
+                ],
+            },
+            {
+                "id": "bedroom_candidate",
+                "space_id": "bedroom_001",
+                "type": "bedroom",
+                "name": "Bedroom",
+                "confidence": 0.8,
+                "footprint": [
+                    [2500, 3000, 0],
+                    [6500, 3000, 0],
+                    [6500, 6000, 0],
+                    [2500, 6000, 0],
+                ],
+            },
+        ],
+        "walls": [
+            {
+                "wall_id": "w_bedroom_west",
+                "path": [[2500, 3000, 0], [2500, 6000, 0]],
+                "space_refs": ["bedroom_001", "passage_001"],
+                "confidence": 0.68,
+            },
+            {
+                "wall_id": "w_bedroom_south",
+                "path": [[2500, 3000, 0], [6500, 3000, 0]],
+                "space_refs": ["bedroom_001", "living_001"],
+                "confidence": 0.68,
+            },
+        ],
+        "openings": [
+            {
+                "id": "bedroom_door_001",
+                "type": "door",
+                "host_wall": "w_bedroom_south",
+                "offset": 120,
+                "width": 900,
+                "height": 2100,
+                "sill_height": 0,
+                "swing_direction": "left",
+            }
+        ],
+    }
+    path = tmp_path / "wrong_bedroom_door_host_interpretation.json"
+    path.write_text(json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
 def create_offset_right_boundary(project):
     """Create a near-boundary imported wall offset like a mixed dimension chain."""
     design_model_path = project / "design_model.json"
@@ -586,6 +659,75 @@ def test_interpreted_import_infers_doorless_circulation_opening(tmp_path):
     assert opening["layer"] == "Other"
     assert service_operation["operation_type"] == "create_wall_with_openings"
     assert service_operation["payload"]["openings"][0]["type"] == "opening"
+
+
+def test_interpreted_import_repairs_private_room_door_host_wall(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "plan.png")
+    interpretation = make_wrong_bedroom_door_host_interpretation(tmp_path)
+    stale_model = json.loads((project / "design_model.json").read_text(encoding="utf-8"))
+    stale_model["execution"] = {
+        "bridge_operations": {
+            "wall_w_bedroom_south_with_openings": {
+                "operation_type": "create_wall_with_openings",
+                "entity_ids": ["old-wall-entity"],
+                "opening_results": [
+                    {
+                        "opening_id": "bedroom_door_001",
+                        "entity_ids": ["old-door-entity"],
+                        "status": "success",
+                    }
+                ],
+                "status": "success",
+            }
+        }
+    }
+    (project / "design_model.json").write_text(
+        json.dumps(stale_model, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation,
+    )
+    design_model = json.loads((project / "design_model.json").read_text(encoding="utf-8"))
+    extracted = json.loads(
+        (
+            project
+            / "imports"
+            / "import_001"
+            / "extracted"
+            / "interpretation.json"
+        ).read_text(encoding="utf-8")
+    )
+    plan = build_project_execution_plan(project)
+
+    door = design_model["openings"]["bedroom_door_001"]
+    west_wall_operation = next(
+        operation
+        for operation in plan["bridge_operations"]
+        if operation["payload"].get("wall_id") == "w_bedroom_west"
+    )
+
+    assert "source_door_host_repaired_during_generation" in result["quality_flags"]
+    assert extracted["door_host_repair"]["status"] == "repaired"
+    assert door["host_wall"] == "w_bedroom_west"
+    assert door["offset"] == 120.0
+    assert door["open_to_space"] == "bedroom_001"
+    assert door["open_side"] == "opposite"
+    assert door["source"]["repairs"][0]["from_host_wall"] == "w_bedroom_south"
+    assert west_wall_operation["operation_type"] == "create_wall_with_openings"
+    assert west_wall_operation["payload"]["openings"][0]["open_side"] == "opposite"
+    assert west_wall_operation["payload"]["openings"][0]["open_to_space"] == "bedroom_001"
+    assert design_model["execution"]["bridge_operations"] == {}
+    assert design_model["metadata"]["execution_sync"]["status"] == "dirty"
+    assert design_model["metadata"]["execution_sync"]["details"][
+        "stale_execution_feedback"
+    ]["removed_bridge_operations"] == ["wall_w_bedroom_south_with_openings"]
 
 
 def test_interpreted_import_prefers_label_area_over_ambiguous_blank_region(tmp_path):

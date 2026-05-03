@@ -800,6 +800,10 @@ def opening_payload_from_interpretation(
     }
     if opening.get("swing_direction"):
         payload["swing_direction"] = opening["swing_direction"]
+    if opening.get("open_to_space"):
+        payload["open_to_space"] = opening["open_to_space"]
+    if opening.get("open_side"):
+        payload["open_side"] = opening["open_side"]
     return opening_id, payload
 
 
@@ -1027,6 +1031,315 @@ def infer_generation_circulation_openings(
         "status": "inferred" if added_openings else "unchanged",
         "added_openings": added_openings,
         "inspected_pairs": inspected_pairs,
+    }
+
+
+def normalized_label_token(value: Any) -> str:
+    """Return a coarse lowercase token for matching opening names to spaces."""
+    return "".join(character for character in str(value).lower() if character.isalnum())
+
+
+def space_match_tokens(space_id: str, space: dict[str, Any]) -> set[str]:
+    """Return normalized tokens that may identify one imported space."""
+    tokens = {normalized_label_token(space_id)}
+    if "_" in space_id:
+        tokens.add(normalized_label_token(space_id.rsplit("_", 1)[0]))
+    for key in ("type", "label", "name"):
+        if space.get(key):
+            tokens.add(normalized_label_token(space[key]))
+    return {token for token in tokens if token}
+
+
+def infer_opening_target_space_id(
+    opening_id: str,
+    opening: dict[str, Any],
+    spaces: dict[str, dict[str, Any]],
+) -> str | None:
+    """Infer the room a door belongs to from explicit fields or stable IDs."""
+    explicit = opening.get("open_to_space") or opening.get("target_space")
+    if explicit and explicit in spaces:
+        return str(explicit)
+
+    opening_token = normalized_label_token(opening_id)
+    if opening.get("name"):
+        opening_token += normalized_label_token(opening["name"])
+    matches: list[tuple[int, str]] = []
+    for space_id, space in spaces.items():
+        for token in space_match_tokens(space_id, space):
+            if token and token in opening_token:
+                matches.append((len(token), space_id))
+                break
+    if not matches:
+        return None
+    matches.sort(reverse=True)
+    return matches[0][1]
+
+
+def wall_space_refs(wall: dict[str, Any]) -> list[str]:
+    """Return semantic space references attached to an imported wall."""
+    source = wall.get("source", {}) if isinstance(wall, dict) else {}
+    refs = source.get("space_refs") if isinstance(source, dict) else None
+    if not isinstance(refs, list):
+        return []
+    return [str(ref) for ref in refs]
+
+
+def door_host_wall_score(
+    wall: dict[str, Any],
+    *,
+    wall_id: str,
+    current_host_wall: str,
+    target_space_id: str,
+    spaces: dict[str, dict[str, Any]],
+) -> float:
+    """Return a semantic score for hosting a target-space door on one wall."""
+    refs = wall_space_refs(wall)
+    if target_space_id not in refs:
+        return -1.0
+
+    target_type = str(spaces.get(target_space_id, {}).get("type", "other"))
+    other_types = {
+        str(spaces.get(ref, {}).get("type", "other"))
+        for ref in refs
+        if ref != target_space_id
+    }
+    score = 1000.0
+    if "hallway" in other_types:
+        score += 150.0 if target_type in {"bedroom", "bathroom", "storage"} else 90.0
+    if other_types & {"living_room", "dining_room", "kitchen", "office"}:
+        score += 45.0
+    if other_types & {"bedroom", "bathroom", "storage"}:
+        score += 10.0
+    if target_type == "balcony":
+        score += 25.0 if "living_room" in other_types else 0.0
+    if wall_id == current_host_wall:
+        score += 5.0
+    return score
+
+
+def point_on_wall_at_distance(path: list[Any], distance: float) -> list[float]:
+    """Return a point along a wall path at a distance from the path start."""
+    start = normalize_3d_point(path[0], label="wall path start")
+    end = normalize_3d_point(path[-1], label="wall path end")
+    length = wall_length([start, end])
+    if length <= 0:
+        return start
+    ratio = max(0.0, min(1.0, distance / length))
+    return [
+        start[0] + (end[0] - start[0]) * ratio,
+        start[1] + (end[1] - start[1]) * ratio,
+        start[2] + (end[2] - start[2]) * ratio,
+    ]
+
+
+def walls_share_endpoint(
+    first: dict[str, Any],
+    second: dict[str, Any],
+    *,
+    tolerance: float,
+) -> bool:
+    """Return whether two walls meet at an endpoint."""
+    first_path = first.get("path", [])
+    second_path = second.get("path", [])
+    if not isinstance(first_path, list) or not isinstance(second_path, list):
+        return False
+    if len(first_path) < 2 or len(second_path) < 2:
+        return False
+    return any(
+        point_matches(first_point, second_point, tolerance=tolerance)
+        for first_point in (first_path[0], first_path[-1])
+        for second_point in (second_path[0], second_path[-1])
+    )
+
+
+def relocated_opening_offset(
+    opening: dict[str, Any],
+    current_wall: dict[str, Any] | None,
+    target_wall: dict[str, Any],
+    *,
+    coordinate_match_tolerance: float,
+) -> float:
+    """Return an opening offset after moving it to a better host wall."""
+    width = float(opening.get("width", 0))
+    old_offset = float(opening.get("offset", 0))
+    target_path = target_wall.get("path", [])
+    target_axis = wall_axis(target_path, tolerance=coordinate_match_tolerance)
+    if target_axis is None:
+        return max(0.0, old_offset)
+
+    target_length = wall_length(target_path)
+    if target_length <= width:
+        return 0.0
+
+    if current_wall is None:
+        return min(max(0.0, old_offset), target_length - width)
+
+    current_path = current_wall.get("path", [])
+    if not isinstance(current_path, list) or len(current_path) < 2:
+        return min(max(0.0, old_offset), target_length - width)
+
+    reference_center = point_on_wall_at_distance(current_path, old_offset + width / 2)
+    variable_axis = wall_variable_axis(target_axis)
+    center_value = point_axis_value(reference_center, variable_axis)
+    interval_start, interval_end = segment_interval(target_path, target_axis)
+    min_center = interval_start + width / 2
+    max_center = interval_end - width / 2
+    clamped_center = min(max(center_value, min_center), max_center)
+
+    if (
+        abs(center_value - clamped_center) > coordinate_match_tolerance
+        and old_offset > 0
+        and walls_share_endpoint(
+            current_wall,
+            target_wall,
+            tolerance=coordinate_match_tolerance,
+        )
+    ):
+        return min(max(0.0, old_offset), target_length - width)
+
+    interval = (clamped_center - width / 2, clamped_center + width / 2)
+    return min(
+        max(0.0, interval_offset_from_wall_start(target_path, target_axis, interval)),
+        target_length - width,
+    )
+
+
+def door_open_side_for_space(
+    wall: dict[str, Any],
+    space: dict[str, Any],
+    *,
+    coordinate_match_tolerance: float,
+) -> str | None:
+    """Return normal/opposite for the side of a wall containing a space center."""
+    path = wall.get("path", [])
+    if wall_axis(path, tolerance=coordinate_match_tolerance) is None:
+        return None
+    if not isinstance(path, list) or len(path) < 2:
+        return None
+    center = space.get("center")
+    if not isinstance(center, list) or len(center) < 2:
+        return None
+    start = normalize_3d_point(path[0], label="wall path start")
+    end = normalize_3d_point(path[-1], label="wall path end")
+    dx = end[0] - start[0]
+    dy = end[1] - start[1]
+    length = (dx * dx + dy * dy) ** 0.5
+    if length <= 0:
+        return None
+    normal = (-dy / length, dx / length)
+    vector = (float(center[0]) - start[0], float(center[1]) - start[1])
+    return "normal" if normal[0] * vector[0] + normal[1] * vector[1] >= 0 else "opposite"
+
+
+def normalize_generation_door_hosts(
+    design_model: dict[str, Any],
+    import_id: str,
+    *,
+    coordinate_match_tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
+    min_score_delta: float = 25.0,
+) -> dict[str, Any]:
+    """Repair semantically wrong door host walls before truth is written."""
+    spaces = design_model.get("spaces", {})
+    walls = design_model.get("walls", {})
+    openings = design_model.get("openings", {})
+    repaired_openings: list[dict[str, Any]] = []
+
+    for opening_id, opening in openings.items():
+        if not isinstance(opening, dict) or opening.get("type") != "door":
+            continue
+        source = opening.get("source", {}) if isinstance(opening, dict) else {}
+        if not isinstance(source, dict) or source.get("import_id") != import_id:
+            continue
+        target_space_id = infer_opening_target_space_id(opening_id, opening, spaces)
+        if target_space_id is None:
+            continue
+
+        current_host_wall = str(opening.get("host_wall", ""))
+        current_wall = walls.get(current_host_wall)
+        current_score = (
+            door_host_wall_score(
+                current_wall,
+                wall_id=current_host_wall,
+                current_host_wall=current_host_wall,
+                target_space_id=target_space_id,
+                spaces=spaces,
+            )
+            if isinstance(current_wall, dict)
+            else -1.0
+        )
+        scored_candidates = [
+            (
+                door_host_wall_score(
+                    wall,
+                    wall_id=wall_id,
+                    current_host_wall=current_host_wall,
+                    target_space_id=target_space_id,
+                    spaces=spaces,
+                ),
+                wall_id,
+                wall,
+            )
+            for wall_id, wall in walls.items()
+            if isinstance(wall, dict)
+        ]
+        scored_candidates = [
+            candidate for candidate in scored_candidates if candidate[0] >= 0
+        ]
+        if not scored_candidates:
+            continue
+        scored_candidates.sort(reverse=True, key=lambda item: item[0])
+        best_score, best_wall_id, best_wall = scored_candidates[0]
+        if best_wall_id == current_host_wall or best_score < current_score + min_score_delta:
+            opening["open_to_space"] = target_space_id
+            open_side = door_open_side_for_space(
+                best_wall,
+                spaces[target_space_id],
+                coordinate_match_tolerance=coordinate_match_tolerance,
+            )
+            if open_side:
+                opening["open_side"] = open_side
+            continue
+
+        previous_host = current_host_wall
+        opening["host_wall"] = best_wall_id
+        opening["offset"] = relocated_opening_offset(
+            opening,
+            current_wall if isinstance(current_wall, dict) else None,
+            best_wall,
+            coordinate_match_tolerance=coordinate_match_tolerance,
+        )
+        opening["open_to_space"] = target_space_id
+        open_side = door_open_side_for_space(
+            best_wall,
+            spaces[target_space_id],
+            coordinate_match_tolerance=coordinate_match_tolerance,
+        )
+        if open_side:
+            opening["open_side"] = open_side
+        opening.setdefault("source", {}).setdefault("repairs", []).append(
+            {
+                "code": "door_host_wall_repaired",
+                "from_host_wall": previous_host,
+                "to_host_wall": best_wall_id,
+                "target_space_id": target_space_id,
+                "reason": "door host wall matched target room and circulation adjacency",
+            }
+        )
+        repaired_openings.append(
+            {
+                "opening_id": opening_id,
+                "from_host_wall": previous_host,
+                "to_host_wall": best_wall_id,
+                "target_space_id": target_space_id,
+                "offset": opening["offset"],
+                "open_side": opening.get("open_side"),
+                "score_delta": best_score - current_score,
+            }
+        )
+
+    return {
+        "status": "repaired" if repaired_openings else "unchanged",
+        "repaired_openings": repaired_openings,
     }
 
 
@@ -1280,6 +1593,10 @@ def build_interpreted_import_payloads(
         "import_sessions": {import_id: {"quality_flags": flags}},
         "quality_flags": [],
     }
+    door_host_repair = normalize_generation_door_hosts(scratch_model, import_id)
+    if door_host_repair["status"] == "repaired":
+        flags.append("source_door_host_repaired_during_generation")
+        openings = scratch_model["openings"]
     circulation_openings = infer_generation_circulation_openings(
         scratch_model,
         import_id,
@@ -1338,6 +1655,7 @@ def build_interpreted_import_payloads(
             ],
             "selected_space_ids": sorted(spaces),
             "rejected_candidate_count": len(rejected_candidates),
+            "door_host_repair": door_host_repair,
             "circulation_openings": circulation_openings,
             "shell_trim": shell_trim,
             "assumptions": assumptions,
@@ -1371,13 +1689,73 @@ def mark_execution_dirty(
     details: dict[str, Any],
 ) -> None:
     """Mark live SketchUp execution feedback stale after import mutation."""
+    stale_feedback = clear_execution_feedback(design_model)
     design_model.setdefault("metadata", {})
     design_model["metadata"]["execution_sync"] = {
         "status": "dirty",
         "reason": reason,
         "source": source,
         "updated_at": utc_now(),
-        "details": details,
+        "details": {
+            **details,
+            "stale_execution_feedback": stale_feedback,
+        },
+    }
+
+
+def clear_execution_feedback(design_model: dict[str, Any]) -> dict[str, Any]:
+    """Remove stale live SketchUp execution feedback after truth changes."""
+    removed_operations: list[str] = []
+    execution = design_model.get("execution")
+    if not isinstance(execution, dict):
+        execution = {}
+        design_model["execution"] = execution
+    bridge_operations = execution.get("bridge_operations")
+    if isinstance(bridge_operations, dict):
+        removed_operations = sorted(str(key) for key in bridge_operations)
+    execution["bridge_operations"] = {}
+
+    cleared_entities: dict[str, list[str]] = {
+        "spaces": [],
+        "walls": [],
+        "openings": [],
+        "components": [],
+        "lighting": [],
+    }
+    for collection_name in ("spaces", "walls", "openings"):
+        collection = design_model.get(collection_name, {})
+        if not isinstance(collection, dict):
+            continue
+        for entity_id, entity in collection.items():
+            if not isinstance(entity, dict) or "execution" not in entity:
+                continue
+            entity.pop("execution", None)
+            cleared_entities[collection_name].append(str(entity_id))
+
+    for collection_name in ("components", "lighting"):
+        collection = design_model.get(collection_name, {})
+        if not isinstance(collection, dict):
+            continue
+        for entity_id, entity in collection.items():
+            if not isinstance(entity, dict):
+                continue
+            cleared = False
+            if "execution" in entity:
+                entity.pop("execution", None)
+                cleared = True
+            if "entity_id" in entity:
+                entity.pop("entity_id", None)
+                cleared = True
+            if cleared:
+                cleared_entities[collection_name].append(str(entity_id))
+
+    return {
+        "removed_bridge_operations": removed_operations,
+        "cleared_entities": {
+            key: sorted(value)
+            for key, value in cleared_entities.items()
+            if value
+        },
     }
 
 

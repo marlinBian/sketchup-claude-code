@@ -55,7 +55,10 @@ Import this floor plan and generate an editable model.
    arc, emit a hosted `opening` or let the import tool infer one from adjacent
    accepted space footprints. Use `door` only when the source shows a door leaf
    or swing arc, and set `swing_direction` from the hinge side along the host
-   wall path.
+   wall path. For private room doors, bind the door to the wall shared by the
+   target room and hallway/passage when such an edge exists; include
+   `open_to_space` so the door leaf opens toward the room rather than whichever
+   side the wall path normal happens to face.
 3. Call `plan_project_execution` to verify the imported walls can be compiled
    into hosted opening operations with sill/header wall pieces and thin
    door/window marker geometry.
@@ -154,7 +157,10 @@ whole import by default.
    generated wall/opening trace before editing truth. Doorless passage
    connections should be hosted `opening` entries that cut the wall without
    producing a blocking marker; doors should render as a directional door leaf
-   marker inside the hosted wall opening.
+   marker inside the hosted wall opening. If the door is present but attached
+   to the wrong wall, repair the source interpretation/generation path so the
+   host wall matches the intended adjacent spaces, such as
+   `bedroom + hallway`, instead of patching only the current truth.
 7. Call `plan_project_execution` again.
 8. Execute the project with `clean_before_execute=true` and `clean_scope="all"`
    when the designer wants SketchUp updated, so stale geometry does not remain

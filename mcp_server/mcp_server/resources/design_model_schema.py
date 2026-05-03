@@ -445,6 +445,19 @@ DESIGN_MODEL_SCHEMA: Dict[str, Any] = {
                             "type": "string",
                             "enum": ["left", "right"],
                         },
+                        "open_to_space": {
+                            "type": "string",
+                            "description": (
+                                "Optional space id the door leaf should open toward."
+                            ),
+                        },
+                        "open_side": {
+                            "type": "string",
+                            "enum": ["normal", "opposite"],
+                            "description": (
+                                "Which side of the host wall normal the door leaf opens toward."
+                            ),
+                        },
                         "representation": {
                             "type": "string",
                             "enum": ["placeholder", "hosted"],

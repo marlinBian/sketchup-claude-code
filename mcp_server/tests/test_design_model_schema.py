@@ -201,6 +201,8 @@ class TestValidateDesignModel:
                     "offset": 2400,
                     "width": 900,
                     "height": 2100,
+                    "open_to_space": "import_001_space_001",
+                    "open_side": "normal",
                     "representation": "placeholder",
                     "layer": "Doors",
                 },

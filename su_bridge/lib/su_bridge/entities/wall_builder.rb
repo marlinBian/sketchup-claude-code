@@ -290,6 +290,8 @@ module SuBridge
             sill_height: sill_height,
             layer: opening["layer"] || opening[:layer],
             swing_direction: opening["swing_direction"] || opening[:swing_direction],
+            open_side: opening["open_side"] || opening[:open_side] || "normal",
+            open_to_space: opening["open_to_space"] || opening[:open_to_space],
           }
         end.sort_by { |opening| opening[:offset] }
       end
@@ -370,13 +372,14 @@ module SuBridge
         return nil if leaf_thickness <= 0
 
         normal = Vector3d.new(-direction[1], direction[0], 0)
+        normal_multiplier = opening[:open_side] == "opposite" ? -1.0 : 1.0
         hinge_distance = if opening[:swing_direction] == "right"
                          opening[:offset] + opening[:width]
                          else
                          opening[:offset]
                          end
         hinge = Vector3d.new(*point_at(origin, direction, hinge_distance, opening[:sill_height]))
-        leaf_end = hinge + (normal * opening[:width])
+        leaf_end = hinge + (normal * normal_multiplier * opening[:width])
 
         create(
           start: hinge.to_a,
@@ -390,6 +393,8 @@ module SuBridge
             "opening_id" => opening[:opening_id],
             "opening_type" => opening[:type],
             "swing_direction" => opening[:swing_direction] || "left",
+            "open_side" => opening[:open_side] || "normal",
+            "open_to_space" => opening[:open_to_space],
           }
         )
       end

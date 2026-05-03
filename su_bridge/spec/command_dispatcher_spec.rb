@@ -777,6 +777,52 @@ RSpec.describe SuBridge::Entities::WallBuilder do
       expect(door_call[:options]["swing_direction"]).to eq("right")
       expect(door_call[:options]["opening_type"]).to eq("door")
     end
+
+    it "uses open_side to draw a hosted door leaf on the opposite wall side" do
+      groups = (1..4).map do |id|
+        Class.new do
+          define_method(:entityID) { id }
+        end.new
+      end
+      create_calls = []
+      allow(described_class).to receive(:create) do |kwargs|
+        create_calls << kwargs
+        groups.shift
+      end
+      allow(described_class).to receive(:spatial_delta).and_return(
+        bounding_box: { min: [0, 0, 0], max: [1, 1, 1] },
+        volume_mm3: 1
+      )
+
+      described_class.create_with_openings(
+        start: [2500, 3000, 0],
+        end_point: [2500, 6000, 0],
+        height: 2800,
+        thickness: 120,
+        alignment: "center",
+        openings: [
+          {
+            "opening_id" => "bedroom_door_001",
+            "type" => "door",
+            "offset" => 120,
+            "width" => 900,
+            "height" => 2100,
+            "sill_height" => 0,
+            "layer" => "Doors",
+            "swing_direction" => "left",
+            "open_side" => "opposite",
+            "open_to_space" => "bedroom_001",
+          },
+        ],
+        options: { "wall_id" => "bedroom_west", "wall_segment_id" => "bedroom_west" }
+      )
+
+      door_call = create_calls[2]
+      expect(door_call[:start]).to eq([2500.0, 3120.0, 0.0])
+      expect(door_call[:end_point]).to eq([3400.0, 3120.0, 0.0])
+      expect(door_call[:options]["open_side"]).to eq("opposite")
+      expect(door_call[:options]["open_to_space"]).to eq("bedroom_001")
+    end
   end
 
   describe "ALIGNMENT_MODES" do
