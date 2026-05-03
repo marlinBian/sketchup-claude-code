@@ -17,8 +17,7 @@ module SuBridge
 
       entity_ids.each do |id|
         entity = all_entities.find { |e| e.entityID.to_s == id }
-        if entity
-          entity.deleted = true
+        if erase_entity(entity)
           deleted << id
         end
       end
@@ -40,11 +39,12 @@ module SuBridge
       deleted_ids = []
 
       UndoManager.with_transaction(name: "Cleanup Model", rollback_on_failure: true) do
-        sketchup.active_model.entities.each do |entity|
+        sketchup.active_model.entities.to_a.each do |entity|
           if entity.layer && layers_to_clean.include?(entity.layer.name)
-            entity.deleted = true
-            deleted_count += 1
-            deleted_ids << entity.entityID.to_s
+            if erase_entity(entity)
+              deleted_count += 1
+              deleted_ids << entity.entityID.to_s
+            end
           end
         end
       end
@@ -65,12 +65,13 @@ module SuBridge
       deleted_ids = []
 
       UndoManager.with_transaction(name: "Cleanup by Tag", rollback_on_failure: true) do
-        sketchup.active_model.entities.each do |entity|
+        sketchup.active_model.entities.to_a.each do |entity|
           if entity.respond_to?(:definition) && entity.definition
             if entity.definition.name.include?(tag)
-              entity.deleted = true
-              deleted_count += 1
-              deleted_ids << entity.entityID.to_s
+              if erase_entity(entity)
+                deleted_count += 1
+                deleted_ids << entity.entityID.to_s
+              end
             end
           end
         end
@@ -113,6 +114,15 @@ module SuBridge
     end
 
     private
+
+    def self.erase_entity(entity)
+      return false unless entity
+      return false if entity.respond_to?(:valid?) && !entity.valid?
+      return false unless entity.respond_to?(:erase!)
+
+      entity.erase!
+      true
+    end
 
     def self.cleanup_empty_layers(layer_names)
       """Remove layers that have no entities."""
