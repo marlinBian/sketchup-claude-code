@@ -50,6 +50,10 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
 - Repair imported exterior corner notch: "the top-left corner notch is
   missing", "左上角折角漏掉了". Use `repair_imported_corner_notch` when a
   source-backed exterior stepped corner is missing from generated truth.
+- Repair imported boundary coverage: "this room boundary is missing a wall",
+  "这里漏了一段墙". Use `review_imported_boundary_coverage`, then
+  `repair_imported_boundary_coverage` when an imported space footprint edge
+  exists but the explicit wall list missed a long wall segment.
 - Search components: "find a sofa", "找一个马桶".
   Use `search_components` for machine-readable registry data. Use
   `search_local_library` only for a short display summary.

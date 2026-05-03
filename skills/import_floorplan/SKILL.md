@@ -99,11 +99,17 @@ whole import by default.
    corner, horizontal/vertical offsets in millimeters, and the affected imported
    space ID when known. This splits the boundary walls, adds the return walls,
    updates the space footprint, and records source-backed repair history.
-4. Call `repair_imported_region` with the specific correction, such as target
+4. If a space footprint edge exists in `design_model.json` but the explicit wall
+   list missed a long segment, call `review_imported_boundary_coverage`, then
+   `repair_imported_boundary_coverage`. The repair fills high-confidence gaps
+   that are longer than normal door/opening candidates and have structural wall
+   endpoints, records source-backed repair history, and marks the project for
+   clean replay.
+5. Call `repair_imported_region` with the specific correction, such as target
    dimensions or wall thickness, when the issue is not an exterior alignment
    normalization case.
-5. Call `plan_project_execution` again.
-6. Execute the project with `clean_before_execute=true` and `clean_scope="all"`
+6. Call `plan_project_execution` again.
+7. Execute the project with `clean_before_execute=true` and `clean_scope="all"`
    when the designer wants SketchUp updated, so stale geometry does not remain
    beside the repaired truth.
 
@@ -115,6 +121,10 @@ This wall is too thick compared with the source. Set imported walls to 180 mm.
 
 ```text
 The top-left exterior corner has a missing notch. Restore it from the source.
+```
+
+```text
+The living room boundary is missing a wall segment compared with the source.
 ```
 
 ```text

@@ -32,10 +32,12 @@ from mcp_server.tools.import_pipeline import (
     import_floorplan_to_model,
     list_import_sessions,
     normalize_imported_wall_alignment,
+    repair_imported_boundary_coverage,
     register_import_source,
     repair_imported_corner_notch,
     repair_imported_region,
     rescale_imported_model,
+    review_imported_boundary_coverage,
 )
 
 
@@ -430,6 +432,73 @@ def build_parser() -> argparse.ArgumentParser:
     )
     corner_notch_parser.add_argument("--notes", help="Repair notes")
 
+    boundary_review_parser = subparsers.add_parser(
+        "review-import-boundary-coverage",
+        help="Review imported space footprint edges for missing wall coverage",
+    )
+    boundary_review_parser.add_argument("project_path", help="Design project directory")
+    boundary_review_parser.add_argument("import_id", help="Import session ID")
+    boundary_review_parser.add_argument(
+        "--min-gap-length",
+        type=float,
+        default=50,
+        help="Ignore uncovered footprint gaps at or below this length in mm",
+    )
+    boundary_review_parser.add_argument(
+        "--max-opening-gap-length",
+        type=float,
+        default=1200,
+        help="Classify uncovered gaps at or below this length as possible openings",
+    )
+    boundary_review_parser.add_argument(
+        "--coordinate-match-tolerance",
+        type=float,
+        default=1,
+        help="Point-coordinate equality tolerance in mm",
+    )
+    boundary_review_parser.add_argument(
+        "--allow-unsupported-endpoints",
+        action="store_true",
+        help="Do not require nearby wall endpoints for repair recommendations",
+    )
+
+    boundary_repair_parser = subparsers.add_parser(
+        "repair-import-boundary-coverage",
+        help="Add walls for high-confidence imported footprint boundary gaps",
+    )
+    boundary_repair_parser.add_argument("project_path", help="Design project directory")
+    boundary_repair_parser.add_argument("import_id", help="Import session ID")
+    boundary_repair_parser.add_argument(
+        "--min-gap-length",
+        type=float,
+        default=50,
+        help="Ignore uncovered footprint gaps at or below this length in mm",
+    )
+    boundary_repair_parser.add_argument(
+        "--max-opening-gap-length",
+        type=float,
+        default=1200,
+        help="Treat larger uncovered gaps as missing-wall candidates",
+    )
+    boundary_repair_parser.add_argument(
+        "--coordinate-match-tolerance",
+        type=float,
+        default=1,
+        help="Point-coordinate equality tolerance in mm",
+    )
+    boundary_repair_parser.add_argument(
+        "--allow-unsupported-endpoints",
+        action="store_true",
+        help="Do not require nearby wall endpoints for automatic repair",
+    )
+    boundary_repair_parser.add_argument(
+        "--max-repairs",
+        type=int,
+        default=20,
+        help="Maximum wall segments to add in one repair pass",
+    )
+    boundary_repair_parser.add_argument("--notes", help="Repair notes")
+
     repair_import_parser = subparsers.add_parser(
         "repair-import",
         help="Patch imported working truth using source-backed repair inputs",
@@ -814,6 +883,30 @@ def main(argv: list[str] | None = None) -> int:
                 target_space_id=args.target_space_id,
                 coordinate_match_tolerance=args.coordinate_match_tolerance,
                 min_wall_length=args.min_wall_length,
+                notes=args.notes,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "review-import-boundary-coverage":
+            result = review_imported_boundary_coverage(
+                args.project_path,
+                args.import_id,
+                min_gap_length=args.min_gap_length,
+                max_opening_gap_length=args.max_opening_gap_length,
+                coordinate_match_tolerance=args.coordinate_match_tolerance,
+                require_structural_endpoints=not args.allow_unsupported_endpoints,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "repair-import-boundary-coverage":
+            result = repair_imported_boundary_coverage(
+                args.project_path,
+                args.import_id,
+                min_gap_length=args.min_gap_length,
+                max_opening_gap_length=args.max_opening_gap_length,
+                coordinate_match_tolerance=args.coordinate_match_tolerance,
+                require_structural_endpoints=not args.allow_unsupported_endpoints,
+                max_repairs=args.max_repairs,
                 notes=args.notes,
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))

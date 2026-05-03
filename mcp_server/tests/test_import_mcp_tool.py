@@ -42,6 +42,20 @@ def create_offset_right_boundary(project):
     )
 
 
+def create_missing_boundary_wall_gap(project):
+    """Create a long uncovered imported footprint edge segment."""
+    design_model_path = project / "design_model.json"
+    design_model = json.loads(design_model_path.read_text(encoding="utf-8"))
+    design_model["walls"]["import_001_wall_south"]["path"] = [
+        [1500.0, 0.0, 0.0],
+        [6000.0, 0.0, 0.0],
+    ]
+    design_model_path.write_text(
+        json.dumps(design_model, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 @pytest.mark.asyncio
 async def test_import_floorplan_to_model_tool_writes_project_truth(tmp_path):
     from mcp_server import server
@@ -168,6 +182,39 @@ async def test_repair_imported_corner_notch_tool_restores_step(tmp_path):
     assert "import_001_space_001" in data["changed_spaces"]
 
 
+@pytest.mark.asyncio
+async def test_boundary_coverage_tools_review_and_repair_missing_wall(tmp_path):
+    from mcp_server import server
+
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path)
+    await server.import_floorplan_to_model(
+        project_path=str(project),
+        source_path=str(source),
+        import_id="import_001",
+        width=6000,
+        depth=4000,
+    )
+    create_missing_boundary_wall_gap(project)
+
+    review_response = await server.review_imported_boundary_coverage(
+        project_path=str(project),
+        import_id="import_001",
+    )
+    repair_response = await server.repair_imported_boundary_coverage(
+        project_path=str(project),
+        import_id="import_001",
+    )
+    review = json.loads(review_response.text)
+    repair = json.loads(repair_response.text)
+
+    assert review["recommended_repair_count"] == 1
+    assert review["gaps"][0]["classification"] == "candidate_missing_wall"
+    assert repair["status"] == "repaired"
+    assert repair["added_walls"][0].startswith("import_001_boundary_gap_")
+
+
 def test_cli_import_floorplan_summary_and_rescale(tmp_path, capsys):
     project = tmp_path / "project"
     init_project(project, template="empty")
@@ -215,6 +262,23 @@ def test_cli_import_floorplan_summary_and_rescale(tmp_path, capsys):
         ]
     )
     corner_notch_output = json.loads(capsys.readouterr().out)
+    create_missing_boundary_wall_gap(project)
+    boundary_review_code = main(
+        [
+            "review-import-boundary-coverage",
+            str(project),
+            "import_001",
+        ]
+    )
+    boundary_review_output = json.loads(capsys.readouterr().out)
+    boundary_repair_code = main(
+        [
+            "repair-import-boundary-coverage",
+            str(project),
+            "import_001",
+        ]
+    )
+    boundary_repair_output = json.loads(capsys.readouterr().out)
     summary_code = main(["import-summary", str(project), "--import-id", "import_001"])
     summary_output = json.loads(capsys.readouterr().out)
     list_code = main(["list-imports", str(project)])
@@ -233,12 +297,16 @@ def test_cli_import_floorplan_summary_and_rescale(tmp_path, capsys):
     assert exit_code == 0
     assert normalize_code == 0
     assert corner_notch_code == 0
+    assert boundary_review_code == 0
+    assert boundary_repair_code == 0
     assert summary_code == 0
     assert list_code == 0
     assert rescale_code == 0
     assert import_output["status"] == "imported"
     assert normalize_output["status"] == "normalized"
     assert corner_notch_output["status"] == "repaired"
+    assert boundary_review_output["recommended_repair_count"] == 1
+    assert boundary_repair_output["status"] == "repaired"
     assert summary_output["count"] == 1
     assert list_output["imports"][0]["import_id"] == "import_001"
     assert rescale_output["scale_x"] == 1.5

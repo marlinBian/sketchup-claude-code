@@ -82,10 +82,12 @@ from mcp_server.tools.import_pipeline import (
     import_floorplan_to_model as import_floorplan_to_model_file,
     list_import_sessions as list_import_sessions_file,
     normalize_imported_wall_alignment as normalize_imported_wall_alignment_file,
+    repair_imported_boundary_coverage as repair_imported_boundary_coverage_file,
     register_import_source as register_import_source_file,
     repair_imported_corner_notch as repair_imported_corner_notch_file,
     repair_imported_region as repair_imported_region_file,
     rescale_imported_model as rescale_imported_model_file,
+    review_imported_boundary_coverage as review_imported_boundary_coverage_file,
     review_model_against_import_source as review_model_against_import_source_file,
 )
 from mcp_server.tools.render_brief import build_render_brief
@@ -1930,6 +1932,70 @@ async def repair_imported_corner_notch(
         return TextContent(
             type="text",
             text=f"Import corner notch repair failed: {str(e)}",
+        )
+
+
+@mcp.tool()
+async def review_imported_boundary_coverage(
+    project_path: str,
+    import_id: str,
+    min_gap_length: float = 50,
+    max_opening_gap_length: float = 1200,
+    coordinate_match_tolerance: float = 1,
+    require_structural_endpoints: bool = True,
+) -> TextContent:
+    """Review imported footprint edges for missing explicit wall coverage."""
+    try:
+        result = review_imported_boundary_coverage_file(
+            project_path,
+            import_id,
+            min_gap_length=min_gap_length,
+            max_opening_gap_length=max_opening_gap_length,
+            coordinate_match_tolerance=coordinate_match_tolerance,
+            require_structural_endpoints=require_structural_endpoints,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(
+            type="text",
+            text=f"Import boundary coverage review failed: {str(e)}",
+        )
+
+
+@mcp.tool()
+async def repair_imported_boundary_coverage(
+    project_path: str,
+    import_id: str,
+    min_gap_length: float = 50,
+    max_opening_gap_length: float = 1200,
+    coordinate_match_tolerance: float = 1,
+    require_structural_endpoints: bool = True,
+    max_repairs: int = 20,
+    notes: str | None = None,
+) -> TextContent:
+    """Add walls for high-confidence imported footprint boundary gaps."""
+    try:
+        result = repair_imported_boundary_coverage_file(
+            project_path,
+            import_id,
+            min_gap_length=min_gap_length,
+            max_opening_gap_length=max_opening_gap_length,
+            coordinate_match_tolerance=coordinate_match_tolerance,
+            require_structural_endpoints=require_structural_endpoints,
+            max_repairs=max_repairs,
+            notes=notes,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(
+            type="text",
+            text=f"Import boundary coverage repair failed: {str(e)}",
         )
 
 

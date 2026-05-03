@@ -126,8 +126,10 @@ When the designer later says the imported model differs from the source, call
 by a wall-thickness-sized step. Use `rescale_imported_model` when the correction
 is a better overall width, depth, or scale factor. Use
 `repair_imported_corner_notch` when the source has an exterior stepped corner or
-corner notch missing from the generated model. Use `repair_imported_region` for
-other specific corrections.
+corner notch missing from the generated model. Use
+`review_imported_boundary_coverage` and `repair_imported_boundary_coverage` when
+the imported footprint contains a room edge but the explicit wall list missed a
+long segment. Use `repair_imported_region` for other specific corrections.
 
 ### 5. Execute Only When the User Wants SketchUp Updated
 

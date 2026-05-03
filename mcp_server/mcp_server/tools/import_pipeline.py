@@ -31,6 +31,8 @@ DEFAULT_WALL_THICKNESS = 120.0
 DEFAULT_ALIGNMENT_TOLERANCE = 250.0
 DEFAULT_COORDINATE_MATCH_TOLERANCE = 1.0
 DEFAULT_MIN_WALL_LENGTH = 20.0
+DEFAULT_MIN_BOUNDARY_GAP_LENGTH = 50.0
+DEFAULT_MAX_OPENING_GAP_LENGTH = 1200.0
 VALID_CORNER_NOTCHES = {"top_left", "top_right", "bottom_left", "bottom_right"}
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".heic"}
@@ -721,6 +723,87 @@ def wall_length(path: list[Any]) -> float:
     return (dx * dx + dy * dy) ** 0.5
 
 
+def normalize_3d_point(point: list[Any], *, label: str) -> list[float]:
+    """Return one normalized 3D point or raise a ValueError."""
+    if not isinstance(point, list) or len(point) != 3:
+        raise ValueError(f"{label} must be a 3D point.")
+    return [float(point[0]), float(point[1]), float(point[2])]
+
+
+def segment_line_coordinate(path: list[Any], axis: str) -> float:
+    """Return the constant coordinate for one axis-aligned plan segment."""
+    point = path[0]
+    return float(point[0] if axis == "x" else point[1])
+
+
+def segment_interval(path: list[Any], axis: str) -> tuple[float, float]:
+    """Return the sorted variable-coordinate interval for a plan segment."""
+    start = path[0]
+    end = path[-1]
+    if axis == "x":
+        first = float(start[1])
+        second = float(end[1])
+    else:
+        first = float(start[0])
+        second = float(end[0])
+    return (min(first, second), max(first, second))
+
+
+def point_from_axis_interval(
+    axis: str,
+    line_coordinate: float,
+    interval_coordinate: float,
+    z: float,
+) -> list[float]:
+    """Return a plan point from an axis line and variable coordinate."""
+    if axis == "x":
+        return [float(line_coordinate), float(interval_coordinate), float(z)]
+    return [float(interval_coordinate), float(line_coordinate), float(z)]
+
+
+def merge_intervals(
+    intervals: list[tuple[float, float]],
+    *,
+    tolerance: float,
+) -> list[tuple[float, float]]:
+    """Merge overlapping or touching intervals."""
+    if not intervals:
+        return []
+    sorted_intervals = sorted(intervals)
+    merged: list[tuple[float, float]] = [sorted_intervals[0]]
+    for start, end in sorted_intervals[1:]:
+        last_start, last_end = merged[-1]
+        if start <= last_end + tolerance:
+            merged[-1] = (last_start, max(last_end, end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def subtract_intervals(
+    base: tuple[float, float],
+    coverage: list[tuple[float, float]],
+    *,
+    tolerance: float,
+) -> list[tuple[float, float]]:
+    """Return portions of base not covered by coverage intervals."""
+    gaps = [base]
+    for cover_start, cover_end in merge_intervals(coverage, tolerance=tolerance):
+        next_gaps: list[tuple[float, float]] = []
+        for gap_start, gap_end in gaps:
+            overlap_start = max(gap_start, cover_start)
+            overlap_end = min(gap_end, cover_end)
+            if overlap_end <= overlap_start + tolerance:
+                next_gaps.append((gap_start, gap_end))
+                continue
+            if gap_start < overlap_start - tolerance:
+                next_gaps.append((gap_start, overlap_start))
+            if overlap_end < gap_end - tolerance:
+                next_gaps.append((overlap_end, gap_end))
+        gaps = next_gaps
+    return gaps
+
+
 def imported_axis_bounds(
     design_model: dict[str, Any],
     import_id: str,
@@ -900,6 +983,281 @@ def imported_plan_bounds(
     if x_bounds is None or y_bounds is None:
         raise ValueError(f"no imported walls or spaces found for import_id: {import_id}")
     return x_bounds[0], x_bounds[1], y_bounds[0], y_bounds[1]
+
+
+def imported_wall_endpoints(
+    design_model: dict[str, Any],
+    import_id: str,
+) -> list[list[float]]:
+    """Return start and end points from imported wall paths."""
+    endpoints: list[list[float]] = []
+    for wall in design_model.get("walls", {}).values():
+        source = wall.get("source", {}) if isinstance(wall, dict) else {}
+        if not isinstance(source, dict) or source.get("import_id") != import_id:
+            continue
+        path = wall.get("path", [])
+        if isinstance(path, list) and len(path) >= 2:
+            endpoints.append(normalize_3d_point(path[0], label="wall path start"))
+            endpoints.append(normalize_3d_point(path[-1], label="wall path end"))
+    return endpoints
+
+
+def point_has_near_endpoint(
+    point: list[float],
+    endpoints: list[list[float]],
+    *,
+    tolerance: float,
+) -> bool:
+    """Return whether a point is supported by a nearby imported wall endpoint."""
+    return any(point_matches(endpoint, point, tolerance=tolerance) for endpoint in endpoints)
+
+
+def wall_coverage_for_edge(
+    design_model: dict[str, Any],
+    import_id: str,
+    *,
+    axis: str,
+    line_coordinate: float,
+    edge_interval: tuple[float, float],
+    coordinate_match_tolerance: float,
+) -> list[tuple[float, float]]:
+    """Return wall intervals that cover one imported space footprint edge."""
+    coverage: list[tuple[float, float]] = []
+    edge_start, edge_end = edge_interval
+    for wall in design_model.get("walls", {}).values():
+        source = wall.get("source", {}) if isinstance(wall, dict) else {}
+        if not isinstance(source, dict) or source.get("import_id") != import_id:
+            continue
+        path = wall.get("path", [])
+        if wall_axis(path, tolerance=coordinate_match_tolerance) != axis:
+            continue
+        if (
+            abs(segment_line_coordinate(path, axis) - line_coordinate)
+            > coordinate_match_tolerance
+        ):
+            continue
+        wall_start, wall_end = segment_interval(path, axis)
+        overlap_start = max(edge_start, wall_start)
+        overlap_end = min(edge_end, wall_end)
+        if overlap_end > overlap_start + coordinate_match_tolerance:
+            coverage.append((overlap_start, overlap_end))
+    return coverage
+
+
+def boundary_gap_id(
+    import_id: str,
+    start_point: list[float],
+    end_point: list[float],
+) -> str:
+    """Return a stable wall ID for a repaired imported boundary gap."""
+    payload = json.dumps([start_point, end_point], separators=(",", ":"), sort_keys=True)
+    digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:10]
+    return f"{import_id}_boundary_gap_{digest}"
+
+
+def imported_boundary_coverage_gaps(
+    design_model: dict[str, Any],
+    import_id: str,
+    *,
+    min_gap_length: float = DEFAULT_MIN_BOUNDARY_GAP_LENGTH,
+    max_opening_gap_length: float = DEFAULT_MAX_OPENING_GAP_LENGTH,
+    coordinate_match_tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
+    require_structural_endpoints: bool = True,
+) -> list[dict[str, Any]]:
+    """Return uncovered imported space footprint segments."""
+    if min_gap_length <= 0:
+        raise ValueError("min_gap_length must be positive.")
+    if max_opening_gap_length < 0:
+        raise ValueError("max_opening_gap_length must be non-negative.")
+    if coordinate_match_tolerance <= 0:
+        raise ValueError("coordinate_match_tolerance must be positive.")
+
+    endpoints = imported_wall_endpoints(design_model, import_id)
+    gaps: list[dict[str, Any]] = []
+    seen: set[tuple[str, int, int, int]] = set()
+
+    for space_id, space in design_model.get("spaces", {}).items():
+        source = space.get("source", {}) if isinstance(space, dict) else {}
+        if not isinstance(source, dict) or source.get("import_id") != import_id:
+            continue
+        footprint = space.get("footprint")
+        if not isinstance(footprint, list) or len(footprint) < 3:
+            continue
+        for index, raw_start in enumerate(footprint):
+            raw_end = footprint[(index + 1) % len(footprint)]
+            edge_path = [
+                normalize_3d_point(raw_start, label=f"{space_id} footprint[{index}]"),
+                normalize_3d_point(
+                    raw_end,
+                    label=f"{space_id} footprint[{(index + 1) % len(footprint)}]",
+                ),
+            ]
+            axis = wall_axis(edge_path, tolerance=coordinate_match_tolerance)
+            if axis is None:
+                continue
+            edge_interval = segment_interval(edge_path, axis)
+            if edge_interval[1] - edge_interval[0] <= min_gap_length:
+                continue
+            line_coordinate = segment_line_coordinate(edge_path, axis)
+            coverage = wall_coverage_for_edge(
+                design_model,
+                import_id,
+                axis=axis,
+                line_coordinate=line_coordinate,
+                edge_interval=edge_interval,
+                coordinate_match_tolerance=coordinate_match_tolerance,
+            )
+            uncovered = subtract_intervals(
+                edge_interval,
+                coverage,
+                tolerance=coordinate_match_tolerance,
+            )
+            z = float(edge_path[0][2])
+            for gap_start, gap_end in uncovered:
+                length = gap_end - gap_start
+                if length <= min_gap_length:
+                    continue
+                start_point = point_from_axis_interval(axis, line_coordinate, gap_start, z)
+                end_point = point_from_axis_interval(axis, line_coordinate, gap_end, z)
+                dedupe_key = (
+                    axis,
+                    round(line_coordinate / coordinate_match_tolerance),
+                    round(gap_start / coordinate_match_tolerance),
+                    round(gap_end / coordinate_match_tolerance),
+                )
+                if dedupe_key in seen:
+                    continue
+                seen.add(dedupe_key)
+                start_supported = point_has_near_endpoint(
+                    start_point,
+                    endpoints,
+                    tolerance=coordinate_match_tolerance,
+                )
+                end_supported = point_has_near_endpoint(
+                    end_point,
+                    endpoints,
+                    tolerance=coordinate_match_tolerance,
+                )
+                classification = (
+                    "candidate_opening_or_intentional_gap"
+                    if length <= max_opening_gap_length
+                    else "candidate_missing_wall"
+                )
+                repair_recommended = classification == "candidate_missing_wall" and (
+                    not require_structural_endpoints
+                    or (start_supported and end_supported)
+                )
+                gaps.append(
+                    {
+                        "space_id": space_id,
+                        "edge_index": index,
+                        "axis": axis,
+                        "line_coordinate": line_coordinate,
+                        "interval": [gap_start, gap_end],
+                        "start_point": start_point,
+                        "end_point": end_point,
+                        "length": length,
+                        "classification": classification,
+                        "repair_recommended": repair_recommended,
+                        "endpoint_support": {
+                            "start": start_supported,
+                            "end": end_supported,
+                        },
+                    }
+                )
+    return gaps
+
+
+def reference_wall_for_boundary_segment(
+    design_model: dict[str, Any],
+    import_id: str,
+    start_point: list[float],
+    end_point: list[float],
+    *,
+    coordinate_match_tolerance: float,
+) -> dict[str, Any]:
+    """Return a nearby imported wall to inherit wall attributes from."""
+    target_axis = wall_axis([start_point, end_point], tolerance=coordinate_match_tolerance)
+    candidates: list[dict[str, Any]] = []
+    for wall in design_model.get("walls", {}).values():
+        source = wall.get("source", {}) if isinstance(wall, dict) else {}
+        if not isinstance(source, dict) or source.get("import_id") != import_id:
+            continue
+        candidates.append(wall)
+        path = wall.get("path", [])
+        if target_axis is not None and wall_axis(path) == target_axis:
+            if any(
+                point_matches(point, start_point, tolerance=coordinate_match_tolerance)
+                or point_matches(point, end_point, tolerance=coordinate_match_tolerance)
+                for point in (path[0], path[-1])
+            ):
+                return wall
+    if candidates:
+        return candidates[0]
+    return {
+        "height": DEFAULT_WALL_HEIGHT,
+        "thickness": DEFAULT_WALL_THICKNESS,
+        "alignment": "inner",
+        "layer": "Walls",
+        "source": {
+            "kind": "import_floorplan",
+            "import_id": import_id,
+            "confidence": 0.5,
+            "assumptions": ["Boundary wall inferred from imported space footprint."],
+        },
+    }
+
+
+def add_imported_boundary_wall(
+    design_model: dict[str, Any],
+    import_id: str,
+    *,
+    start_point: list[float],
+    end_point: list[float],
+    wall_id: str | None = None,
+    coordinate_match_tolerance: float,
+) -> tuple[str, bool]:
+    """Add one source-backed imported boundary wall if it does not already exist."""
+    path = [start_point, end_point]
+    if wall_axis(path, tolerance=coordinate_match_tolerance) is None:
+        raise ValueError("boundary gap repair only supports axis-aligned wall segments.")
+    if wall_length(path) <= DEFAULT_MIN_WALL_LENGTH:
+        raise ValueError("boundary gap repair wall segment is too short.")
+
+    chosen_wall_id = wall_id or boundary_gap_id(import_id, start_point, end_point)
+    existing = design_model.setdefault("walls", {}).get(chosen_wall_id)
+    if isinstance(existing, dict):
+        existing_path = existing.get("path", [])
+        if (
+            isinstance(existing_path, list)
+            and len(existing_path) >= 2
+            and point_matches(
+                normalize_3d_point(existing_path[0], label=f"{chosen_wall_id} start"),
+                start_point,
+                tolerance=coordinate_match_tolerance,
+            )
+            and point_matches(
+                normalize_3d_point(existing_path[-1], label=f"{chosen_wall_id} end"),
+                end_point,
+                tolerance=coordinate_match_tolerance,
+            )
+        ):
+            return chosen_wall_id, False
+        raise ValueError(f"wall_id already exists with different geometry: {chosen_wall_id}")
+
+    reference_wall = reference_wall_for_boundary_segment(
+        design_model,
+        import_id,
+        start_point,
+        end_point,
+        coordinate_match_tolerance=coordinate_match_tolerance,
+    )
+    design_model["walls"][chosen_wall_id] = wall_payload_from_reference(
+        chosen_wall_id,
+        path,
+        reference_wall,
+    )
+    return chosen_wall_id, True
 
 
 def corner_notch_geometry(
@@ -1539,6 +1897,218 @@ def repair_imported_corner_notch(
         "changed_openings": changed_openings,
         "changed_model_ids": changed_model_ids,
         "active_changed_model_ids": active_changed_model_ids,
+        "quality_flags": session.get("quality_flags", []),
+    }
+
+
+def review_imported_boundary_coverage(
+    project_path: str | Path,
+    import_id: str,
+    *,
+    min_gap_length: float = DEFAULT_MIN_BOUNDARY_GAP_LENGTH,
+    max_opening_gap_length: float = DEFAULT_MAX_OPENING_GAP_LENGTH,
+    coordinate_match_tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
+    require_structural_endpoints: bool = True,
+) -> dict[str, Any]:
+    """Review whether imported space footprints are covered by explicit walls."""
+    root = Path(project_path).expanduser().resolve()
+    chosen_id = import_safe_id(import_id)
+    design_model_path = find_design_model_path(root)
+    design_model, errors = load_design_model(str(design_model_path))
+    if errors or design_model is None:
+        raise ValueError("; ".join(errors))
+    session = design_model.get("import_sessions", {}).get(chosen_id)
+    if not isinstance(session, dict):
+        raise ValueError(f"import session not found in design_model.json: {chosen_id}")
+
+    gaps = imported_boundary_coverage_gaps(
+        design_model,
+        chosen_id,
+        min_gap_length=min_gap_length,
+        max_opening_gap_length=max_opening_gap_length,
+        coordinate_match_tolerance=coordinate_match_tolerance,
+        require_structural_endpoints=require_structural_endpoints,
+    )
+    recommended = [gap for gap in gaps if gap["repair_recommended"]]
+    return {
+        "project_path": str(root),
+        "design_model_path": str(design_model_path),
+        "import_id": chosen_id,
+        "status": "gaps_found" if gaps else "covered",
+        "gap_count": len(gaps),
+        "recommended_repair_count": len(recommended),
+        "min_gap_length": min_gap_length,
+        "max_opening_gap_length": max_opening_gap_length,
+        "coordinate_match_tolerance": coordinate_match_tolerance,
+        "require_structural_endpoints": require_structural_endpoints,
+        "gaps": gaps,
+    }
+
+
+def repair_imported_boundary_coverage(
+    project_path: str | Path,
+    import_id: str,
+    *,
+    min_gap_length: float = DEFAULT_MIN_BOUNDARY_GAP_LENGTH,
+    max_opening_gap_length: float = DEFAULT_MAX_OPENING_GAP_LENGTH,
+    coordinate_match_tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
+    require_structural_endpoints: bool = True,
+    max_repairs: int = 20,
+    notes: str | None = None,
+) -> dict[str, Any]:
+    """Add source-backed walls for high-confidence imported boundary gaps."""
+    if max_repairs <= 0:
+        raise ValueError("max_repairs must be positive.")
+
+    root = Path(project_path).expanduser().resolve()
+    chosen_id = import_safe_id(import_id)
+    design_model_path = find_design_model_path(root)
+    design_model, errors = load_design_model(str(design_model_path))
+    if errors or design_model is None:
+        raise ValueError("; ".join(errors))
+    session = design_model.get("import_sessions", {}).get(chosen_id)
+    if not isinstance(session, dict):
+        raise ValueError(f"import session not found in design_model.json: {chosen_id}")
+
+    initial_gaps = imported_boundary_coverage_gaps(
+        design_model,
+        chosen_id,
+        min_gap_length=min_gap_length,
+        max_opening_gap_length=max_opening_gap_length,
+        coordinate_match_tolerance=coordinate_match_tolerance,
+        require_structural_endpoints=require_structural_endpoints,
+    )
+    repair_candidates = [gap for gap in initial_gaps if gap["repair_recommended"]]
+    added_walls: list[str] = []
+    unchanged_walls: list[str] = []
+    repaired_gaps: list[dict[str, Any]] = []
+
+    for gap in repair_candidates[:max_repairs]:
+        wall_id, added = add_imported_boundary_wall(
+            design_model,
+            chosen_id,
+            start_point=gap["start_point"],
+            end_point=gap["end_point"],
+            coordinate_match_tolerance=coordinate_match_tolerance,
+        )
+        if added:
+            added_walls.append(wall_id)
+            repaired_gaps.append({**gap, "wall_id": wall_id})
+        else:
+            unchanged_walls.append(wall_id)
+
+    changed_model_ids = list(dict.fromkeys(added_walls))
+    generated_model = session.setdefault("generated_model", {})
+    if isinstance(generated_model.get("wall_ids"), list):
+        for wall_id in added_walls:
+            if wall_id not in generated_model["wall_ids"]:
+                generated_model["wall_ids"].append(wall_id)
+    if isinstance(generated_model.get("changed_model_ids"), list):
+        for wall_id in added_walls:
+            if wall_id not in generated_model["changed_model_ids"]:
+                generated_model["changed_model_ids"].append(wall_id)
+
+    if added_walls:
+        add_import_quality_flag(
+            design_model,
+            chosen_id,
+            "import_boundary_coverage_repaired",
+            message="Imported space footprint gaps were repaired with explicit walls.",
+        )
+        add_import_quality_flag(
+            design_model,
+            chosen_id,
+            "source_backed_boundary_wall_added",
+            severity="warning",
+            message="A missing source-backed boundary wall was added to working truth.",
+        )
+        design_model["updated_at"] = utc_now()
+        mark_execution_dirty(
+            design_model,
+            reason="import_boundary_coverage_repaired",
+            source="repair_imported_boundary_coverage",
+            details={"import_id": chosen_id, "changed_model_ids": changed_model_ids},
+        )
+
+    remaining_gaps = imported_boundary_coverage_gaps(
+        design_model,
+        chosen_id,
+        min_gap_length=min_gap_length,
+        max_opening_gap_length=max_opening_gap_length,
+        coordinate_match_tolerance=coordinate_match_tolerance,
+        require_structural_endpoints=require_structural_endpoints,
+    )
+
+    if added_walls:
+        saved, save_errors = save_design_model(str(design_model_path), design_model)
+        if not saved:
+            raise ValueError("; ".join(save_errors))
+
+    action = {
+        "created_at": utc_now(),
+        "action": "repair_imported_boundary_coverage",
+        "min_gap_length": min_gap_length,
+        "max_opening_gap_length": max_opening_gap_length,
+        "coordinate_match_tolerance": coordinate_match_tolerance,
+        "require_structural_endpoints": require_structural_endpoints,
+        "max_repairs": max_repairs,
+        "initial_gap_count": len(initial_gaps),
+        "recommended_repair_count": len(repair_candidates),
+        "added_walls": added_walls,
+        "unchanged_walls": unchanged_walls,
+        "remaining_gap_count": len(remaining_gaps),
+        "repaired_gaps": repaired_gaps,
+        "notes": notes,
+    }
+
+    manifest, manifest_file = load_project_import_manifest(root, chosen_id)
+    if added_walls:
+        manifest["status"] = "repaired"
+        manifest["quality_flags"] = dedupe_quality_flags(
+            [
+                *manifest.get("quality_flags", []),
+                "import_boundary_coverage_repaired",
+                "source_backed_boundary_wall_added",
+            ]
+        )
+    append_processing_step(
+        manifest,
+        "repair_imported_boundary_coverage",
+        details=action,
+    )
+    manifest.setdefault("repair_history", []).append(action)
+    saved_manifest, manifest_errors = save_import_manifest(manifest_file, manifest)
+    if not saved_manifest:
+        raise ValueError("; ".join(manifest_errors))
+
+    interpretation_path = import_session_path(root, chosen_id) / "extracted" / "interpretation.json"
+    if interpretation_path.exists():
+        try:
+            interpretation = json.loads(interpretation_path.read_text(encoding="utf-8"))
+            interpretation.setdefault("processing_notes", []).append(
+                "Reviewed imported footprint boundary coverage and repaired high-confidence missing walls."
+            )
+            interpretation.setdefault("repairs", []).append(action)
+            interpretation_path.write_text(
+                json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        except json.JSONDecodeError:
+            pass
+
+    return {
+        "project_path": str(root),
+        "design_model_path": str(design_model_path),
+        "import_id": chosen_id,
+        "status": "repaired" if added_walls else "unchanged",
+        "initial_gap_count": len(initial_gaps),
+        "recommended_repair_count": len(repair_candidates),
+        "added_walls": added_walls,
+        "unchanged_walls": unchanged_walls,
+        "changed_model_ids": changed_model_ids,
+        "repaired_gaps": repaired_gaps,
+        "remaining_gap_count": len(remaining_gaps),
+        "remaining_gaps": remaining_gaps,
         "quality_flags": session.get("quality_flags", []),
     }
 

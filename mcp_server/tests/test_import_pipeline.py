@@ -11,9 +11,11 @@ from mcp_server.tools.import_pipeline import (
     import_floorplan_to_model,
     normalize_imported_wall_alignment,
     register_import_source,
+    repair_imported_boundary_coverage,
     repair_imported_corner_notch,
     repair_imported_region,
     rescale_imported_model,
+    review_imported_boundary_coverage,
     review_model_against_import_source,
 )
 from mcp_server.tools.project_executor import build_project_execution_plan
@@ -68,6 +70,20 @@ def create_offset_right_boundary(project):
     generated["changed_model_ids"].extend(
         ["import_001_wall_east_step", "import_001_wall_east_lower"]
     )
+    design_model_path.write_text(
+        json.dumps(design_model, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def create_missing_boundary_wall_gap(project):
+    """Create a long uncovered imported footprint edge segment."""
+    design_model_path = project / "design_model.json"
+    design_model = json.loads(design_model_path.read_text(encoding="utf-8"))
+    design_model["walls"]["import_001_wall_south"]["path"] = [
+        [1500.0, 0.0, 0.0],
+        [6000.0, 0.0, 0.0],
+    ]
     design_model_path.write_text(
         json.dumps(design_model, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -379,6 +395,58 @@ def test_repair_imported_corner_notch_restores_missing_step(tmp_path):
     )
     assert design_model["metadata"]["execution_sync"]["status"] == "dirty"
     assert manifest["repair_history"][-1]["action"] == "repair_imported_corner_notch"
+    assert plan["skipped_count"] == 0
+
+
+def test_boundary_coverage_review_and_repair_adds_missing_wall(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path)
+    import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        width=6000,
+        depth=4000,
+    )
+    create_missing_boundary_wall_gap(project)
+
+    review = review_imported_boundary_coverage(project, "import_001")
+    repair = repair_imported_boundary_coverage(
+        project,
+        "import_001",
+        notes="Fill a high-confidence footprint boundary gap.",
+    )
+    design_model = json.loads((project / "design_model.json").read_text(encoding="utf-8"))
+    manifest = json.loads(
+        (project / "imports" / "import_001" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    plan = build_project_execution_plan(project)
+    added_wall_id = repair["added_walls"][0]
+
+    assert review["status"] == "gaps_found"
+    assert review["recommended_repair_count"] == 1
+    assert review["gaps"][0]["start_point"] == [0.0, 0.0, 0.0]
+    assert review["gaps"][0]["end_point"] == [1500.0, 0.0, 0.0]
+    assert repair["status"] == "repaired"
+    assert repair["remaining_gap_count"] == 0
+    assert added_wall_id.startswith("import_001_boundary_gap_")
+    assert design_model["walls"][added_wall_id]["path"] == [
+        [0.0, 0.0, 0.0],
+        [1500.0, 0.0, 0.0],
+    ]
+    assert added_wall_id in (
+        design_model["import_sessions"]["import_001"]["generated_model"]["wall_ids"]
+    )
+    assert "import_boundary_coverage_repaired" in (
+        design_model["import_sessions"]["import_001"]["quality_flags"]
+    )
+    assert design_model["metadata"]["execution_sync"]["status"] == "dirty"
+    assert manifest["repair_history"][-1]["action"] == (
+        "repair_imported_boundary_coverage"
+    )
     assert plan["skipped_count"] == 0
 
 

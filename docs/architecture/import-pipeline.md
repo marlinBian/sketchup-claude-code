@@ -238,6 +238,17 @@ boundary walls at the selected corner, adds the vertical and horizontal return
 walls, updates the affected imported space footprint when provided, records
 source-backed repair history, and marks project truth for clean replay.
 
+Imported space `footprint` edges are also a source of truth that can expose
+missing wall segments. If an extracted model contains a footprint edge but the
+explicit `walls` list does not cover a long segment of that edge, the review
+path is `review_imported_boundary_coverage` and the repair path is
+`repair_imported_boundary_coverage`. The repair fills only high-confidence
+missing-wall candidates: uncovered segments longer than normal door/opening
+gaps and supported by nearby structural wall endpoints by default. Shorter
+uncovered segments remain classified as possible openings or intentional gaps so
+the first import stays autonomous and editable instead of blocking on
+confirmation.
+
 ## Validation Direction
 
 Validation should check import quality without blocking momentum:
@@ -269,7 +280,8 @@ interpretation:
    `quality_flags` into `design_model.json`.
 6. Produce a headless bridge trace for imported walls and opening placeholders.
 7. Expose list, summary, rescale, wall-alignment normalization, corner-notch
-   repair, review, and repair tools through MCP and CLI.
+   repair, boundary coverage review/repair, review, and repair tools through MCP
+   and CLI.
 
 Richer extractors should replace only the interpretation stage. They must keep
 the same manifest, generated truth, quality flag, and repair contracts.
