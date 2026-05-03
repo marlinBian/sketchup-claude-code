@@ -168,6 +168,72 @@ class TestSaveSkpModel:
 
     @pytest.mark.asyncio
     @patch('mcp_server.tools.export_tools.SocketBridge')
+    async def test_save_skp_model_can_require_clean_scene(self, mock_bridge_class):
+        """Test clean-scene audit before and after SketchUp model save."""
+        mock_bridge = MagicMock()
+        mock_bridge_class.return_value = mock_bridge
+        clean_audit = {
+            "result": {
+                "status": "success",
+                "entities": [],
+            }
+        }
+        save_result = {
+            "result": {
+                "status": "success",
+                "save_info": {
+                    "format": "skp",
+                    "output_path": "/tmp/model.skp",
+                },
+            }
+        }
+        mock_bridge.send.side_effect = [clean_audit, save_result, clean_audit]
+
+        from mcp_server.tools.export_tools import save_skp_model
+        result = await save_skp_model("/tmp/model.skp", require_clean_scene=True)
+
+        assert mock_bridge.send.call_count == 3
+        assert result["clean_scene_audit"]["before_save"]["status"] == "passed"
+        assert result["clean_scene_audit"]["after_save"]["status"] == "passed"
+        assert mock_bridge.send.call_args_list[0][0][0]["params"]["operation_type"] == (
+            "query_entities"
+        )
+        assert mock_bridge.send.call_args_list[1][0][0]["params"]["operation_type"] == (
+            "save_model"
+        )
+
+    @pytest.mark.asyncio
+    @patch('mcp_server.tools.export_tools.SocketBridge')
+    async def test_save_skp_model_rejects_dirty_scene_before_save(self, mock_bridge_class):
+        """Test clean-scene audit failure before saving."""
+        mock_bridge = MagicMock()
+        mock_bridge_class.return_value = mock_bridge
+        mock_bridge.send.return_value = {
+            "result": {
+                "status": "success",
+                "entities": [
+                    {
+                        "entityID": "stale-001",
+                        "type": "group",
+                        "layer": "Layer0",
+                        "bounding_box": {
+                            "min": [0, 0, 0],
+                            "max": [500, 500, 300],
+                        },
+                    }
+                ],
+            }
+        }
+
+        from mcp_server.tools.export_tools import save_skp_model
+
+        with pytest.raises(RuntimeError, match="Clean scene audit failed before_save"):
+            await save_skp_model("/tmp/model.skp", require_clean_scene=True)
+
+        mock_bridge.send.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch('mcp_server.tools.export_tools.SocketBridge')
     async def test_save_skp_model_error(self, mock_bridge_class):
         """Test SketchUp model save error handling."""
         mock_bridge = MagicMock()
@@ -191,9 +257,10 @@ def test_cli_save_skp_outputs_json(monkeypatch, capsys):
     """Test CLI save-skp command output."""
     from mcp_server import cli
 
-    async def fake_save_skp_model(output_path):
+    async def fake_save_skp_model(output_path, require_clean_scene=False):
         return {
             "status": "success",
+            "require_clean_scene": require_clean_scene,
             "save_info": {
                 "format": "skp",
                 "output_path": output_path,
@@ -208,3 +275,28 @@ def test_cli_save_skp_outputs_json(monkeypatch, capsys):
 
     assert exit_code == 0
     assert data["save_info"]["output_path"] == "/tmp/model.skp"
+    assert data["require_clean_scene"] is False
+
+
+def test_cli_save_skp_can_require_clean_scene(monkeypatch, capsys):
+    """Test CLI save-skp clean-scene option."""
+    from mcp_server import cli
+
+    async def fake_save_skp_model(output_path, require_clean_scene=False):
+        return {
+            "status": "success",
+            "require_clean_scene": require_clean_scene,
+            "save_info": {
+                "format": "skp",
+                "output_path": output_path,
+            },
+        }
+
+    monkeypatch.setattr(cli, "save_skp_model", fake_save_skp_model)
+
+    exit_code = cli.main(["save-skp", "/tmp/model.skp", "--require-clean-scene"])
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert data["require_clean_scene"] is True

@@ -39,6 +39,10 @@ contamination failure and should not be used for saving or visual judgment. Use
 the default managed scope when unrelated manual SketchUp geometry should be
 preserved.
 
+When saving an imported live model, callers can pass the clean-scene save option
+(`save-skp --require-clean-scene` or `save_sketchup_model(require_clean_scene=True)`)
+to repeat the `Layer0` audit before and after the `.skp` save operation.
+
 ## Operation Shape
 
 Each operation contains:

@@ -69,6 +69,9 @@ Import this floor plan and generate an editable model.
    current truth into SketchUp. Treat a failed `post_execution_audit` as a
    scene-contamination failure; do not save or judge the SketchUp file until
    the live scene has no unexpected `Layer0` leftovers after clean replay.
+   If saving the live SketchUp file after import, use `save_sketchup_model`
+   with `require_clean_scene=true` or the CLI equivalent
+   `save-skp --require-clean-scene`.
 5. Summarize the generated model IDs, wall/opening counts, scale source,
    quality flags, and assumptions.
 

@@ -213,6 +213,11 @@ def build_parser() -> argparse.ArgumentParser:
         "output_path",
         help="Destination .skp path. The bridge appends .skp when omitted.",
     )
+    save_skp_parser.add_argument(
+        "--require-clean-scene",
+        action="store_true",
+        help="Fail if unexpected top-level Layer0 entities exist before or after saving.",
+    )
 
     save_version_parser = subparsers.add_parser(
         "save-version",
@@ -871,7 +876,12 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result.get("status") == "success" else 1
         if args.command == "save-skp":
-            result = asyncio.run(save_skp_model(args.output_path))
+            result = asyncio.run(
+                save_skp_model(
+                    args.output_path,
+                    require_clean_scene=args.require_clean_scene,
+                )
+            )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
         if args.command == "save-version":

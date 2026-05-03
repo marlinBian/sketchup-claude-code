@@ -4263,10 +4263,16 @@ async def execute_project_model(
 
 
 @mcp.tool()
-async def save_sketchup_model(output_path: str) -> TextContent:
+async def save_sketchup_model(
+    output_path: str,
+    require_clean_scene: bool = False,
+) -> TextContent:
     """Save the active live SketchUp model as a .skp file."""
     try:
-        result = await save_skp_model_file(output_path)
+        result = await save_skp_model_file(
+            output_path,
+            require_clean_scene=require_clean_scene,
+        )
         return TextContent(
             type="text",
             text=json.dumps(result, ensure_ascii=False, indent=2),

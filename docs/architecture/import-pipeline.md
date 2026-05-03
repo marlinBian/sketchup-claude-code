@@ -244,7 +244,8 @@ in SketchUp. This removes stale managed geometry, raw source overlays, and
 template entities before the current `design_model.json` truth is replayed. A
 full-scene clean replay must pass the post-execution clean-scene audit; leftover
 top-level `Layer0` entities indicate stale SketchUp scene contamination, not
-current import truth.
+current import truth. Saving the live `.skp` after import should use the
+clean-scene save option so the same audit runs before and after the save.
 After replay, execution metadata should also represent only the current trace:
 hosted openings should point at their `create_wall_with_openings` operation,
 and old `opening_*` placeholder operations or split-wall `*_solid_*` operation
