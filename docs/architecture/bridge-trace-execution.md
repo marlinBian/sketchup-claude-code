@@ -33,8 +33,11 @@ syncs.
 
 For import replay, agents may also pass `clean_scope="all"` to remove source
 overlays, SketchUp template entities, and other scene objects before replaying
-project truth. Use the default managed scope when unrelated manual SketchUp
-geometry should be preserved.
+project truth. A full-scene clean replay runs a post-execution `Layer0` audit;
+if unexpected top-level scene entities remain, execution is reported as a scene
+contamination failure and should not be used for saving or visual judgment. Use
+the default managed scope when unrelated manual SketchUp geometry should be
+preserved.
 
 ## Operation Shape
 

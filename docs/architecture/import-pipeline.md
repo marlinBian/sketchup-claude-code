@@ -241,7 +241,10 @@ SketchUp execution after import should use clean replay. The agent should call
 `execute_project_model(clean_before_execute=True, clean_scope="all")` after a
 successful `plan_project_execution` when the designer wants the import reflected
 in SketchUp. This removes stale managed geometry, raw source overlays, and
-template entities before the current `design_model.json` truth is replayed.
+template entities before the current `design_model.json` truth is replayed. A
+full-scene clean replay must pass the post-execution clean-scene audit; leftover
+top-level `Layer0` entities indicate stale SketchUp scene contamination, not
+current import truth.
 After replay, execution metadata should also represent only the current trace:
 hosted openings should point at their `create_wall_with_openings` operation,
 and old `opening_*` placeholder operations or split-wall `*_solid_*` operation

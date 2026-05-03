@@ -32,6 +32,8 @@ DEFAULT_CLEAN_LAYERS = [
     "Lighting",
     "Materials",
 ]
+POST_CLEAN_AUDIT_LAYER = "Layer0"
+POST_CLEAN_AUDIT_LIMIT = 1000
 
 
 def utc_now() -> str:
@@ -677,6 +679,116 @@ def cleanup_operation(
     }
 
 
+def clean_scene_audit_operation(
+    *,
+    layer_name: str = POST_CLEAN_AUDIT_LAYER,
+    limit: int = POST_CLEAN_AUDIT_LIMIT,
+) -> dict[str, Any]:
+    """Build a query operation that detects stale top-level scene entities."""
+    return {
+        "operation_id": f"audit_after_clean_replay_{layer_name.lower()}",
+        "operation_type": "query_entities",
+        "payload": {
+            "entity_type": None,
+            "layer": layer_name,
+            "limit": limit,
+        },
+        "rollback_on_failure": False,
+    }
+
+
+def _query_result_payload(result: dict[str, Any]) -> dict[str, Any]:
+    response = result.get("response")
+    if not isinstance(response, dict):
+        return {}
+    payload = response.get("result")
+    return payload if isinstance(payload, dict) else {}
+
+
+def summarize_clean_scene_audit(
+    audit_report: dict[str, Any],
+    *,
+    layer_name: str = POST_CLEAN_AUDIT_LAYER,
+) -> dict[str, Any]:
+    """Return a compact pass/fail summary for a post clean-replay scene audit."""
+    unexpected_entities: list[dict[str, Any]] = []
+    failed_operations: list[dict[str, Any]] = []
+
+    for result in audit_report.get("results", []):
+        if not isinstance(result, dict):
+            continue
+        if not result.get("ok", False):
+            failed_operations.append(
+                {
+                    "operation_id": result.get("operation_id"),
+                    "operation_type": result.get("operation_type"),
+                    "error": result.get("response", {}).get("error"),
+                }
+            )
+            continue
+
+        payload = _query_result_payload(result)
+        entities = payload.get("entities")
+        if not isinstance(entities, list):
+            continue
+        for entity in entities:
+            if not isinstance(entity, dict):
+                continue
+            if entity.get("layer") != layer_name:
+                continue
+            unexpected_entities.append(
+                {
+                    "entityID": entity.get("entityID"),
+                    "type": entity.get("type"),
+                    "layer": entity.get("layer"),
+                    "bounding_box": entity.get("bounding_box"),
+                }
+            )
+
+    status = "passed"
+    reason = None
+    if audit_report.get("status") != "success":
+        status = "failed"
+        reason = "Scene audit query failed."
+    elif failed_operations:
+        status = "failed"
+        reason = "Scene audit operation failed."
+    elif unexpected_entities:
+        status = "failed"
+        reason = f"Unexpected top-level {layer_name} entities remain after clean replay."
+
+    return {
+        "status": status,
+        "reason": reason,
+        "layer": layer_name,
+        "unexpected_entity_count": len(unexpected_entities),
+        "unexpected_entities": unexpected_entities,
+        "failed_operations": failed_operations,
+    }
+
+
+def execute_project_clean_scene_audit(
+    *,
+    layer_name: str = POST_CLEAN_AUDIT_LAYER,
+    stop_on_error: bool = True,
+    execute_fn: Callable[..., dict[str, Any]] = execute_bridge_operations,
+) -> dict[str, Any]:
+    """Query the live scene after a full clean replay and summarize leftovers."""
+    audit_report = execute_fn(
+        [clean_scene_audit_operation(layer_name=layer_name)],
+        stop_on_error=stop_on_error,
+    )
+    audit_summary = summarize_clean_scene_audit(
+        audit_report,
+        layer_name=layer_name,
+    )
+    return {
+        "status": audit_summary["status"],
+        "summary": audit_summary,
+        "query_report": audit_report,
+    }
+
+
 def execute_project_cleanup(
     *,
     layer_names: list[str] | None = None,
@@ -759,6 +871,14 @@ def execute_project_execution_plan(
     plan["status"] = execution_report.get("status")
 
     if execution_report.get("status") == "success":
+        if clean_before_execute and clean_scope == "all":
+            audit_report = execute_project_clean_scene_audit(execute_fn=execute_fn)
+            plan["post_execution_audit"] = audit_report
+            if audit_report["status"] != "passed":
+                plan["status"] = "post_execution_audit_failed"
+                plan["reason"] = audit_report["summary"].get("reason")
+                return plan
+
         sync_report = sync_execution_report_to_design_model(
             plan["design_model"],
             execution_report,

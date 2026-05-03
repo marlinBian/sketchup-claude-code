@@ -352,6 +352,69 @@ def test_execute_project_execution_plan_can_clean_all_before_replay(tmp_path):
             "all_entities": True,
         }
     ]
+    assert result["post_execution_audit"]["status"] == "passed"
+
+
+def test_execute_project_execution_plan_fails_when_clean_replay_leaves_layer0(tmp_path):
+    init_project(tmp_path, template="bathroom")
+    calls = []
+
+    def fake_execute(operations, stop_on_error=True):
+        calls.append([operation["operation_type"] for operation in operations])
+        results = []
+        for operation in operations:
+            payload = operation.get("payload", {})
+            result = {
+                "status": "success",
+                "entity_ids": [f"su-{operation['operation_id']}"],
+                "spatial_delta": {},
+            }
+            if operation["operation_type"] == "query_entities":
+                result["entities"] = [
+                    {
+                        "entityID": "stale-001",
+                        "type": "group",
+                        "layer": "Layer0",
+                        "bounding_box": {
+                            "min": [0, 0, 0],
+                            "max": [500, 500, 300],
+                        },
+                    }
+                ]
+            results.append(
+                {
+                    "operation_id": operation["operation_id"],
+                    "operation_type": operation["operation_type"],
+                    "request": {"params": {"payload": payload}},
+                    "response": {"result": result},
+                    "ok": True,
+                }
+            )
+        return {
+            "status": "success",
+            "executed_count": len(operations),
+            "requested_count": len(operations),
+            "results": results,
+        }
+
+    result = execute_project_execution_plan(
+        tmp_path,
+        clean_before_execute=True,
+        clean_scope="all",
+        execute_fn=fake_execute,
+    )
+    design_model = json.loads((tmp_path / "design_model.json").read_text(encoding="utf-8"))
+
+    assert calls[0] == ["cleanup_model"]
+    assert calls[1][0] == "create_wall"
+    assert calls[2] == ["query_entities"]
+    assert result["status"] == "post_execution_audit_failed"
+    assert result["post_execution_audit"]["summary"]["unexpected_entity_count"] == 1
+    assert result["post_execution_audit"]["summary"]["unexpected_entities"][0][
+        "entityID"
+    ] == "stale-001"
+    assert "execution_sync" not in result
+    assert "execution_sync" not in design_model["metadata"]
 
 
 def test_execute_project_execution_plan_stops_when_cleanup_fails(tmp_path):

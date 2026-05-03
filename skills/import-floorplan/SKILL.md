@@ -66,7 +66,9 @@ Import this floor plan and generate an editable model.
    `execute_project_model` with `clean_before_execute=true` and
    `clean_scope="all"`. Import replay should remove stale generated walls,
    openings, old source overlays, and template entities before writing the
-   current truth into SketchUp.
+   current truth into SketchUp. Treat a failed `post_execution_audit` as a
+   scene-contamination failure; do not save or judge the SketchUp file until
+   the live scene has no unexpected `Layer0` leftovers after clean replay.
 5. Summarize the generated model IDs, wall/opening counts, scale source,
    quality flags, and assumptions.
 
