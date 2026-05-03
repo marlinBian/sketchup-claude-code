@@ -117,7 +117,8 @@ and `/tmp/su_bridge.sock` available:
 
 ```bash
 cd mcp_server
-uv run --extra dev pytest tests/test_integration.py -m integration -v --tb=short
+uv run --extra dev pytest tests/test_integration.py \
+  -m integration -o addopts="" -v --tb=short
 ```
 
 ## Current Development Order

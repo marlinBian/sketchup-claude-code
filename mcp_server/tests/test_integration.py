@@ -4,7 +4,8 @@ These tests require:
 1. SketchUp to be running with su_bridge plugin loaded
 2. Socket at /tmp/su_bridge.sock to exist
 
-Run with: cd mcp_server && uv run pytest tests/test_integration.py -v
+Run against a disposable SketchUp scene with:
+cd mcp_server && uv run pytest tests/test_integration.py -m integration -o addopts="" -v
 """
 
 import pytest

@@ -165,7 +165,14 @@ Live SketchUp integration tests require SketchUp to be open in a model window
 with `SuBridge` running and `/tmp/su_bridge.sock` available. Use
 `sketchup-agent launch-bridge` instead of leaving SketchUp on the welcome
 screen. If a SketchUp update prompt blocks the model window, use
-`sketchup-agent launch-bridge --suppress-update-check`.
+`sketchup-agent launch-bridge --suppress-update-check`. Run them only against a
+disposable SketchUp scene:
+
+```bash
+cd mcp_server
+uv run --extra dev pytest tests/test_integration.py \
+  -m integration -o addopts="" -v --tb=short
+```
 
 ## Documentation
 

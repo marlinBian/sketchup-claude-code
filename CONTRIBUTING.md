@@ -28,7 +28,7 @@ cd su_bridge && bundle install
 ## Testing
 
 ```bash
-# Python
+# Python, excluding live SketchUp integration tests by default
 cd mcp_server && uv run pytest tests/ -v
 
 # Ruby

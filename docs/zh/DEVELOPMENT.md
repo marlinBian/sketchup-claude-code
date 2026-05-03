@@ -477,7 +477,8 @@ cd mcp_server && uv run python -m py_compile mcp_server/server.py
 cd mcp_server && uv run pytest tests/ -v
 
 # 4. Run integration tests (requires SketchUp running)
-cd mcp_server && uv run pytest tests/test_integration.py -v
+cd mcp_server && uv run pytest tests/test_integration.py \
+  -m integration -o addopts="" -v
 ```
 
 ### Manual Test Sequence
