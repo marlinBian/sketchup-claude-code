@@ -32,6 +32,7 @@ DEFAULT_ALIGNMENT_TOLERANCE = 250.0
 DEFAULT_COORDINATE_MATCH_TOLERANCE = 1.0
 DEFAULT_MIN_WALL_LENGTH = 20.0
 DEFAULT_MIN_BOUNDARY_GAP_LENGTH = 50.0
+DEFAULT_MIN_SHELL_OVERREACH_LENGTH = 250.0
 DEFAULT_MAX_OPENING_GAP_LENGTH = 1200.0
 VALID_CORNER_NOTCHES = {"top_left", "top_right", "bottom_left", "bottom_right"}
 
@@ -1042,6 +1043,180 @@ def wall_coverage_for_edge(
         if overlap_end > overlap_start + coordinate_match_tolerance:
             coverage.append((overlap_start, overlap_end))
     return coverage
+
+
+def space_edge_coverage_for_wall(
+    design_model: dict[str, Any],
+    import_id: str,
+    *,
+    axis: str,
+    line_coordinate: float,
+    wall_interval: tuple[float, float],
+    coordinate_match_tolerance: float,
+) -> list[tuple[float, float]]:
+    """Return imported space footprint intervals that explain one wall segment."""
+    coverage: list[tuple[float, float]] = []
+    wall_start, wall_end = wall_interval
+    for space_id, space in design_model.get("spaces", {}).items():
+        source = space.get("source", {}) if isinstance(space, dict) else {}
+        if not isinstance(source, dict) or source.get("import_id") != import_id:
+            continue
+        footprint = space.get("footprint")
+        if not isinstance(footprint, list) or len(footprint) < 3:
+            continue
+        for index, raw_start in enumerate(footprint):
+            raw_end = footprint[(index + 1) % len(footprint)]
+            edge_path = [
+                normalize_3d_point(raw_start, label=f"{space_id} footprint[{index}]"),
+                normalize_3d_point(
+                    raw_end,
+                    label=f"{space_id} footprint[{(index + 1) % len(footprint)}]",
+                ),
+            ]
+            if wall_axis(edge_path, tolerance=coordinate_match_tolerance) != axis:
+                continue
+            if (
+                abs(segment_line_coordinate(edge_path, axis) - line_coordinate)
+                > coordinate_match_tolerance
+            ):
+                continue
+            edge_start, edge_end = segment_interval(edge_path, axis)
+            overlap_start = max(wall_start, edge_start)
+            overlap_end = min(wall_end, edge_end)
+            if overlap_end > overlap_start + coordinate_match_tolerance:
+                coverage.append((overlap_start, overlap_end))
+    return coverage
+
+
+def imported_wall_space_overreach_segments(
+    design_model: dict[str, Any],
+    import_id: str,
+    *,
+    min_segment_length: float = DEFAULT_MIN_SHELL_OVERREACH_LENGTH,
+    coordinate_match_tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
+) -> list[dict[str, Any]]:
+    """Return imported wall segments not explained by any imported space edge."""
+    if min_segment_length <= 0:
+        raise ValueError("min_segment_length must be positive.")
+    if coordinate_match_tolerance <= 0:
+        raise ValueError("coordinate_match_tolerance must be positive.")
+
+    segments: list[dict[str, Any]] = []
+    for wall_id, wall in design_model.get("walls", {}).items():
+        source = wall.get("source", {}) if isinstance(wall, dict) else {}
+        if not isinstance(source, dict) or source.get("import_id") != import_id:
+            continue
+        path = wall.get("path", [])
+        axis = wall_axis(path, tolerance=coordinate_match_tolerance)
+        if axis is None:
+            continue
+        line_coordinate = segment_line_coordinate(path, axis)
+        wall_interval = segment_interval(path, axis)
+        coverage = space_edge_coverage_for_wall(
+            design_model,
+            import_id,
+            axis=axis,
+            line_coordinate=line_coordinate,
+            wall_interval=wall_interval,
+            coordinate_match_tolerance=coordinate_match_tolerance,
+        )
+        uncovered = subtract_intervals(
+            wall_interval,
+            coverage,
+            tolerance=coordinate_match_tolerance,
+        )
+        z = float(path[0][2])
+        for start, end in uncovered:
+            length = end - start
+            if length <= min_segment_length:
+                continue
+            segments.append(
+                {
+                    "wall_id": wall_id,
+                    "axis": axis,
+                    "line_coordinate": line_coordinate,
+                    "wall_interval": [wall_interval[0], wall_interval[1]],
+                    "interval": [start, end],
+                    "start_point": point_from_axis_interval(axis, line_coordinate, start, z),
+                    "end_point": point_from_axis_interval(axis, line_coordinate, end, z),
+                    "length": length,
+                    "classification": "candidate_shell_overreach",
+                    "repair_recommended": True,
+                }
+            )
+    return segments
+
+
+def wall_path_from_interval(
+    axis: str,
+    line_coordinate: float,
+    interval: tuple[float, float],
+    z: float,
+) -> list[list[float]]:
+    """Return a wall path from an axis line and interval."""
+    return [
+        point_from_axis_interval(axis, line_coordinate, interval[0], z),
+        point_from_axis_interval(axis, line_coordinate, interval[1], z),
+    ]
+
+
+def split_wall_path_by_removing_intervals(
+    path: list[Any],
+    remove_intervals: list[tuple[float, float]],
+    *,
+    coordinate_match_tolerance: float,
+    min_wall_length: float,
+) -> list[list[list[float]]]:
+    """Return wall paths after removing overreach intervals."""
+    axis = wall_axis(path, tolerance=coordinate_match_tolerance)
+    if axis is None:
+        return []
+    base_interval = segment_interval(path, axis)
+    kept_intervals = subtract_intervals(
+        base_interval,
+        remove_intervals,
+        tolerance=coordinate_match_tolerance,
+    )
+    line_coordinate = segment_line_coordinate(path, axis)
+    z = float(path[0][2])
+    kept_paths: list[list[list[float]]] = []
+    for interval in kept_intervals:
+        if interval[1] - interval[0] <= min_wall_length:
+            continue
+        kept_paths.append(wall_path_from_interval(axis, line_coordinate, interval, z))
+    return kept_paths
+
+
+def sync_generated_wall_ids(
+    session: dict[str, Any],
+    *,
+    added_walls: list[str],
+    removed_walls: list[str],
+    changed_model_ids: list[str],
+) -> None:
+    """Keep import-session generated model IDs aligned with wall repairs."""
+    generated_model = session.setdefault("generated_model", {})
+    if isinstance(generated_model.get("wall_ids"), list):
+        generated_model["wall_ids"] = [
+            wall_id
+            for wall_id in generated_model["wall_ids"]
+            if wall_id not in removed_walls
+        ]
+        for wall_id in added_walls:
+            if wall_id not in generated_model["wall_ids"]:
+                generated_model["wall_ids"].append(wall_id)
+    if isinstance(generated_model.get("changed_model_ids"), list):
+        generated_model["changed_model_ids"] = [
+            entity_id
+            for entity_id in generated_model["changed_model_ids"]
+            if entity_id not in removed_walls
+        ]
+        for entity_id in changed_model_ids:
+            if (
+                entity_id not in removed_walls
+                and entity_id not in generated_model["changed_model_ids"]
+            ):
+                generated_model["changed_model_ids"].append(entity_id)
 
 
 def boundary_gap_id(
@@ -2109,6 +2284,343 @@ def repair_imported_boundary_coverage(
         "repaired_gaps": repaired_gaps,
         "remaining_gap_count": len(remaining_gaps),
         "remaining_gaps": remaining_gaps,
+        "quality_flags": session.get("quality_flags", []),
+    }
+
+
+def review_imported_wall_space_consistency(
+    project_path: str | Path,
+    import_id: str,
+    *,
+    min_segment_length: float = DEFAULT_MIN_SHELL_OVERREACH_LENGTH,
+    coordinate_match_tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
+) -> dict[str, Any]:
+    """Review imported walls for segments outside imported space footprints."""
+    root = Path(project_path).expanduser().resolve()
+    chosen_id = import_safe_id(import_id)
+    design_model_path = find_design_model_path(root)
+    design_model, errors = load_design_model(str(design_model_path))
+    if errors or design_model is None:
+        raise ValueError("; ".join(errors))
+    session = design_model.get("import_sessions", {}).get(chosen_id)
+    if not isinstance(session, dict):
+        raise ValueError(f"import session not found in design_model.json: {chosen_id}")
+
+    overreach_segments = imported_wall_space_overreach_segments(
+        design_model,
+        chosen_id,
+        min_segment_length=min_segment_length,
+        coordinate_match_tolerance=coordinate_match_tolerance,
+    )
+    recommended = [
+        segment for segment in overreach_segments if segment["repair_recommended"]
+    ]
+    return {
+        "project_path": str(root),
+        "design_model_path": str(design_model_path),
+        "import_id": chosen_id,
+        "status": "overreach_found" if overreach_segments else "consistent",
+        "overreach_count": len(overreach_segments),
+        "recommended_repair_count": len(recommended),
+        "min_segment_length": min_segment_length,
+        "coordinate_match_tolerance": coordinate_match_tolerance,
+        "overreach_segments": overreach_segments,
+    }
+
+
+def repair_imported_shell_overreach(
+    project_path: str | Path,
+    import_id: str,
+    *,
+    min_segment_length: float = DEFAULT_MIN_SHELL_OVERREACH_LENGTH,
+    coordinate_match_tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
+    min_wall_length: float = DEFAULT_MIN_WALL_LENGTH,
+    fill_resulting_boundary_gaps: bool = True,
+    max_repairs: int = 20,
+    notes: str | None = None,
+) -> dict[str, Any]:
+    """Trim or remove imported wall segments outside imported space footprints."""
+    if min_segment_length <= 0:
+        raise ValueError("min_segment_length must be positive.")
+    if coordinate_match_tolerance <= 0:
+        raise ValueError("coordinate_match_tolerance must be positive.")
+    if min_wall_length < 0:
+        raise ValueError("min_wall_length must be non-negative.")
+    if max_repairs <= 0:
+        raise ValueError("max_repairs must be positive.")
+
+    root = Path(project_path).expanduser().resolve()
+    chosen_id = import_safe_id(import_id)
+    design_model_path = find_design_model_path(root)
+    design_model, errors = load_design_model(str(design_model_path))
+    if errors or design_model is None:
+        raise ValueError("; ".join(errors))
+    session = design_model.get("import_sessions", {}).get(chosen_id)
+    if not isinstance(session, dict):
+        raise ValueError(f"import session not found in design_model.json: {chosen_id}")
+
+    initial_overreach_segments = imported_wall_space_overreach_segments(
+        design_model,
+        chosen_id,
+        min_segment_length=min_segment_length,
+        coordinate_match_tolerance=coordinate_match_tolerance,
+    )
+    repair_candidates = [
+        segment
+        for segment in initial_overreach_segments
+        if segment["repair_recommended"]
+    ][:max_repairs]
+
+    remove_intervals_by_wall: dict[str, list[tuple[float, float]]] = {}
+    for segment in repair_candidates:
+        remove_intervals_by_wall.setdefault(segment["wall_id"], []).append(
+            (float(segment["interval"][0]), float(segment["interval"][1]))
+        )
+
+    trimmed_walls: list[str] = []
+    removed_walls: list[str] = []
+    split_walls: list[str] = []
+    added_walls: list[str] = []
+    unchanged_walls: list[str] = []
+    repaired_overreach_segments: list[dict[str, Any]] = []
+
+    for wall_id, remove_intervals in remove_intervals_by_wall.items():
+        wall = design_model.get("walls", {}).get(wall_id)
+        if not isinstance(wall, dict):
+            continue
+        path = wall.get("path", [])
+        kept_paths = split_wall_path_by_removing_intervals(
+            path,
+            remove_intervals,
+            coordinate_match_tolerance=coordinate_match_tolerance,
+            min_wall_length=min_wall_length,
+        )
+        if not kept_paths:
+            design_model["walls"].pop(wall_id, None)
+            removed_walls.append(wall_id)
+        else:
+            wall["path"] = kept_paths[0]
+            wall.pop("execution", None)
+            trimmed_walls.append(wall_id)
+            for index, kept_path in enumerate(kept_paths[1:], start=1):
+                split_wall_id = f"{wall_id}_kept_{index}"
+                existing = design_model["walls"].get(split_wall_id)
+                if isinstance(existing, dict):
+                    if existing.get("path") == kept_path:
+                        unchanged_walls.append(split_wall_id)
+                        continue
+                    raise ValueError(
+                        f"wall_id already exists with different geometry: {split_wall_id}"
+                    )
+                design_model["walls"][split_wall_id] = wall_payload_from_reference(
+                    split_wall_id,
+                    kept_path,
+                    wall,
+                )
+                split_walls.append(split_wall_id)
+        for segment in repair_candidates:
+            if segment["wall_id"] == wall_id:
+                repaired_overreach_segments.append(segment)
+
+    added_boundary_gaps: list[dict[str, Any]] = []
+    if fill_resulting_boundary_gaps and (trimmed_walls or removed_walls or split_walls):
+        boundary_gaps = imported_boundary_coverage_gaps(
+            design_model,
+            chosen_id,
+            min_gap_length=min_segment_length,
+            coordinate_match_tolerance=coordinate_match_tolerance,
+            require_structural_endpoints=True,
+        )
+        for gap in [gap for gap in boundary_gaps if gap["repair_recommended"]][
+            :max_repairs
+        ]:
+            wall_id, added = add_imported_boundary_wall(
+                design_model,
+                chosen_id,
+                start_point=gap["start_point"],
+                end_point=gap["end_point"],
+                coordinate_match_tolerance=coordinate_match_tolerance,
+            )
+            if added:
+                added_walls.append(wall_id)
+                added_boundary_gaps.append({**gap, "wall_id": wall_id})
+            else:
+                unchanged_walls.append(wall_id)
+
+    changed_openings: list[str] = []
+    removed_openings: list[str] = []
+    if trimmed_walls or removed_walls or split_walls or added_walls:
+        for opening_id in imported_ids_in_model(design_model, chosen_id)["openings"]:
+            opening = design_model.get("openings", {}).get(opening_id)
+            if not isinstance(opening, dict):
+                continue
+            if opening.get("host_wall") in removed_walls:
+                design_model["openings"].pop(opening_id, None)
+                removed_openings.append(opening_id)
+                continue
+            opening.pop("execution", None)
+            changed_openings.append(opening_id)
+
+    changed_model_ids = list(
+        dict.fromkeys(
+            [
+                *trimmed_walls,
+                *removed_walls,
+                *split_walls,
+                *added_walls,
+                *changed_openings,
+                *removed_openings,
+            ]
+        )
+    )
+    active_changed_model_ids = [
+        entity_id
+        for entity_id in changed_model_ids
+        if entity_id not in removed_walls and entity_id not in removed_openings
+    ]
+    sync_generated_wall_ids(
+        session,
+        added_walls=[*split_walls, *added_walls],
+        removed_walls=removed_walls,
+        changed_model_ids=active_changed_model_ids,
+    )
+    generated_model = session.setdefault("generated_model", {})
+    if removed_openings and isinstance(generated_model.get("opening_ids"), list):
+        generated_model["opening_ids"] = [
+            opening_id
+            for opening_id in generated_model["opening_ids"]
+            if opening_id not in removed_openings
+        ]
+    if removed_openings and isinstance(generated_model.get("changed_model_ids"), list):
+        generated_model["changed_model_ids"] = [
+            entity_id
+            for entity_id in generated_model["changed_model_ids"]
+            if entity_id not in removed_openings
+        ]
+
+    changed = bool(changed_model_ids)
+    if changed:
+        add_import_quality_flag(
+            design_model,
+            chosen_id,
+            "import_shell_overreach_repaired",
+            message="Imported wall segments outside space footprints were trimmed or removed.",
+        )
+        add_import_quality_flag(
+            design_model,
+            chosen_id,
+            "source_backed_shell_trimmed",
+            severity="warning",
+            message="Source-backed imported shell geometry was trimmed to match space footprints.",
+        )
+        design_model["updated_at"] = utc_now()
+        mark_execution_dirty(
+            design_model,
+            reason="import_shell_overreach_repaired",
+            source="repair_imported_shell_overreach",
+            details={"import_id": chosen_id, "changed_model_ids": changed_model_ids},
+        )
+
+    remaining_overreach_segments = imported_wall_space_overreach_segments(
+        design_model,
+        chosen_id,
+        min_segment_length=min_segment_length,
+        coordinate_match_tolerance=coordinate_match_tolerance,
+    )
+    remaining_boundary_gaps = imported_boundary_coverage_gaps(
+        design_model,
+        chosen_id,
+        min_gap_length=min_segment_length,
+        coordinate_match_tolerance=coordinate_match_tolerance,
+        require_structural_endpoints=True,
+    )
+
+    if changed:
+        saved, save_errors = save_design_model(str(design_model_path), design_model)
+        if not saved:
+            raise ValueError("; ".join(save_errors))
+
+    action = {
+        "created_at": utc_now(),
+        "action": "repair_imported_shell_overreach",
+        "min_segment_length": min_segment_length,
+        "coordinate_match_tolerance": coordinate_match_tolerance,
+        "min_wall_length": min_wall_length,
+        "fill_resulting_boundary_gaps": fill_resulting_boundary_gaps,
+        "max_repairs": max_repairs,
+        "initial_overreach_count": len(initial_overreach_segments),
+        "recommended_repair_count": len(repair_candidates),
+        "trimmed_walls": trimmed_walls,
+        "removed_walls": removed_walls,
+        "split_walls": split_walls,
+        "added_walls": added_walls,
+        "unchanged_walls": unchanged_walls,
+        "changed_openings": changed_openings,
+        "removed_openings": removed_openings,
+        "repaired_overreach_segments": repaired_overreach_segments,
+        "added_boundary_gaps": added_boundary_gaps,
+        "remaining_overreach_count": len(remaining_overreach_segments),
+        "remaining_boundary_gap_count": len(remaining_boundary_gaps),
+        "notes": notes,
+    }
+
+    manifest, manifest_file = load_project_import_manifest(root, chosen_id)
+    if changed:
+        manifest["status"] = "repaired"
+        manifest["quality_flags"] = dedupe_quality_flags(
+            [
+                *manifest.get("quality_flags", []),
+                "import_shell_overreach_repaired",
+                "source_backed_shell_trimmed",
+            ]
+        )
+    append_processing_step(
+        manifest,
+        "repair_imported_shell_overreach",
+        details=action,
+    )
+    manifest.setdefault("repair_history", []).append(action)
+    saved_manifest, manifest_errors = save_import_manifest(manifest_file, manifest)
+    if not saved_manifest:
+        raise ValueError("; ".join(manifest_errors))
+
+    interpretation_path = import_session_path(root, chosen_id) / "extracted" / "interpretation.json"
+    if interpretation_path.exists():
+        try:
+            interpretation = json.loads(interpretation_path.read_text(encoding="utf-8"))
+            interpretation.setdefault("processing_notes", []).append(
+                "Reviewed wall-space consistency and repaired source-backed shell overreach."
+            )
+            interpretation.setdefault("repairs", []).append(action)
+            interpretation_path.write_text(
+                json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        except json.JSONDecodeError:
+            pass
+
+    return {
+        "project_path": str(root),
+        "design_model_path": str(design_model_path),
+        "import_id": chosen_id,
+        "status": "repaired" if changed else "unchanged",
+        "initial_overreach_count": len(initial_overreach_segments),
+        "recommended_repair_count": len(repair_candidates),
+        "trimmed_walls": trimmed_walls,
+        "removed_walls": removed_walls,
+        "split_walls": split_walls,
+        "added_walls": added_walls,
+        "unchanged_walls": unchanged_walls,
+        "changed_openings": changed_openings,
+        "removed_openings": removed_openings,
+        "changed_model_ids": changed_model_ids,
+        "active_changed_model_ids": active_changed_model_ids,
+        "repaired_overreach_segments": repaired_overreach_segments,
+        "added_boundary_gaps": added_boundary_gaps,
+        "remaining_overreach_count": len(remaining_overreach_segments),
+        "remaining_overreach_segments": remaining_overreach_segments,
+        "remaining_boundary_gap_count": len(remaining_boundary_gaps),
+        "remaining_boundary_gaps": remaining_boundary_gaps,
         "quality_flags": session.get("quality_flags", []),
     }
 

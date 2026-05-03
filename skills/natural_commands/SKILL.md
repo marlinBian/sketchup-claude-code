@@ -54,6 +54,11 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
   "这里漏了一段墙". Use `review_imported_boundary_coverage`, then
   `repair_imported_boundary_coverage` when an imported space footprint edge
   exists but the explicit wall list missed a long wall segment.
+- Repair imported shell overreach: "the import has an extra enclosed area",
+  "这里多包了一块空间", "右下角多出一块区域". Use
+  `review_imported_wall_space_consistency`, then
+  `repair_imported_shell_overreach` when explicit imported walls enclose space
+  outside any imported room or balcony footprint.
 - Search components: "find a sofa", "找一个马桶".
   Use `search_components` for machine-readable registry data. Use
   `search_local_library` only for a short display summary.

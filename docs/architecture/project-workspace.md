@@ -100,10 +100,12 @@ Agents can inspect project state through MCP tools:
   manifests, generated model IDs, quality flags, scale, and assumptions
 - `rescale_imported_model`, `normalize_imported_wall_alignment`,
   `repair_imported_corner_notch`, `review_imported_boundary_coverage`,
-  `repair_imported_boundary_coverage`, `review_model_against_import_source`, and
+  `repair_imported_boundary_coverage`,
+  `review_imported_wall_space_consistency`,
+  `repair_imported_shell_overreach`, `review_model_against_import_source`, and
   `repair_imported_region` patch imported working truth when a designer later
   points out a scale, exterior wall alignment, missing stepped corner, missing
-  footprint boundary wall, or source mismatch
+  footprint boundary wall, phantom shell overreach, or source mismatch
 
 `snapshots/` stores captures used for review, regression checks, and visual
 handoff. `snapshots/manifest.json` records provenance for each artifact and

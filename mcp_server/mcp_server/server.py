@@ -83,11 +83,13 @@ from mcp_server.tools.import_pipeline import (
     list_import_sessions as list_import_sessions_file,
     normalize_imported_wall_alignment as normalize_imported_wall_alignment_file,
     repair_imported_boundary_coverage as repair_imported_boundary_coverage_file,
+    repair_imported_shell_overreach as repair_imported_shell_overreach_file,
     register_import_source as register_import_source_file,
     repair_imported_corner_notch as repair_imported_corner_notch_file,
     repair_imported_region as repair_imported_region_file,
     rescale_imported_model as rescale_imported_model_file,
     review_imported_boundary_coverage as review_imported_boundary_coverage_file,
+    review_imported_wall_space_consistency as review_imported_wall_space_consistency_file,
     review_model_against_import_source as review_model_against_import_source_file,
 )
 from mcp_server.tools.render_brief import build_render_brief
@@ -1996,6 +1998,66 @@ async def repair_imported_boundary_coverage(
         return TextContent(
             type="text",
             text=f"Import boundary coverage repair failed: {str(e)}",
+        )
+
+
+@mcp.tool()
+async def review_imported_wall_space_consistency(
+    project_path: str,
+    import_id: str,
+    min_segment_length: float = 250,
+    coordinate_match_tolerance: float = 1,
+) -> TextContent:
+    """Review imported walls for segments outside imported space footprints."""
+    try:
+        result = review_imported_wall_space_consistency_file(
+            project_path,
+            import_id,
+            min_segment_length=min_segment_length,
+            coordinate_match_tolerance=coordinate_match_tolerance,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(
+            type="text",
+            text=f"Import wall-space consistency review failed: {str(e)}",
+        )
+
+
+@mcp.tool()
+async def repair_imported_shell_overreach(
+    project_path: str,
+    import_id: str,
+    min_segment_length: float = 250,
+    coordinate_match_tolerance: float = 1,
+    min_wall_length: float = 20,
+    fill_resulting_boundary_gaps: bool = True,
+    max_repairs: int = 20,
+    notes: str | None = None,
+) -> TextContent:
+    """Trim imported walls that enclose area outside imported space footprints."""
+    try:
+        result = repair_imported_shell_overreach_file(
+            project_path,
+            import_id,
+            min_segment_length=min_segment_length,
+            coordinate_match_tolerance=coordinate_match_tolerance,
+            min_wall_length=min_wall_length,
+            fill_resulting_boundary_gaps=fill_resulting_boundary_gaps,
+            max_repairs=max_repairs,
+            notes=notes,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(
+            type="text",
+            text=f"Import shell overreach repair failed: {str(e)}",
         )
 
 

@@ -13,9 +13,11 @@ from mcp_server.tools.import_pipeline import (
     register_import_source,
     repair_imported_boundary_coverage,
     repair_imported_corner_notch,
+    repair_imported_shell_overreach,
     repair_imported_region,
     rescale_imported_model,
     review_imported_boundary_coverage,
+    review_imported_wall_space_consistency,
     review_model_against_import_source,
 )
 from mcp_server.tools.project_executor import build_project_execution_plan
@@ -84,6 +86,35 @@ def create_missing_boundary_wall_gap(project):
         [1500.0, 0.0, 0.0],
         [6000.0, 0.0, 0.0],
     ]
+    design_model_path.write_text(
+        json.dumps(design_model, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def create_shell_overreach(project):
+    """Create imported wall geometry that encloses area outside the footprint."""
+    design_model_path = project / "design_model.json"
+    design_model = json.loads(design_model_path.read_text(encoding="utf-8"))
+    footprint = design_model["spaces"]["import_001_space_001"]["footprint"]
+    min_x = min(float(point[0]) for point in footprint)
+    max_x = max(float(point[0]) for point in footprint)
+    min_y = min(float(point[1]) for point in footprint)
+    max_y = max(float(point[1]) for point in footprint)
+    overreach_x = max_x + 1200.0
+    walls = design_model["walls"]
+    walls["import_001_wall_south"]["path"] = [
+        [min_x, min_y, 0.0],
+        [overreach_x, min_y, 0.0],
+    ]
+    walls["import_001_wall_east"]["path"] = [
+        [overreach_x, min_y, 0.0],
+        [overreach_x, max_y, 0.0],
+    ]
+    generated = design_model["import_sessions"]["import_001"]["generated_model"]
+    for wall_id in ("import_001_wall_south", "import_001_wall_east"):
+        if wall_id not in generated["changed_model_ids"]:
+            generated["changed_model_ids"].append(wall_id)
     design_model_path.write_text(
         json.dumps(design_model, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -447,6 +478,68 @@ def test_boundary_coverage_review_and_repair_adds_missing_wall(tmp_path):
     assert manifest["repair_history"][-1]["action"] == (
         "repair_imported_boundary_coverage"
     )
+    assert plan["skipped_count"] == 0
+
+
+def test_shell_overreach_review_and_repair_trim_phantom_pocket(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path)
+    import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        width=6000,
+        depth=4000,
+    )
+    create_shell_overreach(project)
+
+    review = review_imported_wall_space_consistency(project, "import_001")
+    repair = repair_imported_shell_overreach(
+        project,
+        "import_001",
+        notes="Trim shell area outside the imported footprint.",
+    )
+    design_model = json.loads((project / "design_model.json").read_text(encoding="utf-8"))
+    manifest = json.loads(
+        (project / "imports" / "import_001" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    plan = build_project_execution_plan(project)
+    added_wall_id = repair["added_walls"][0]
+
+    assert review["status"] == "overreach_found"
+    assert review["recommended_repair_count"] == 2
+    assert {
+        segment["wall_id"] for segment in review["overreach_segments"]
+    } == {"import_001_wall_south", "import_001_wall_east"}
+    assert repair["status"] == "repaired"
+    assert repair["remaining_overreach_count"] == 0
+    assert repair["remaining_boundary_gap_count"] == 0
+    assert "import_001_wall_south" in repair["trimmed_walls"]
+    assert "import_001_wall_east" in repair["removed_walls"]
+    assert added_wall_id.startswith("import_001_boundary_gap_")
+    assert design_model["walls"]["import_001_wall_south"]["path"] == [
+        [0.0, 0.0, 0.0],
+        [6000.0, 0.0, 0.0],
+    ]
+    assert "import_001_wall_east" not in design_model["walls"]
+    assert design_model["walls"][added_wall_id]["path"] == [
+        [6000.0, 0.0, 0.0],
+        [6000.0, 4000.0, 0.0],
+    ]
+    assert added_wall_id in (
+        design_model["import_sessions"]["import_001"]["generated_model"]["wall_ids"]
+    )
+    assert "import_001_wall_east" not in (
+        design_model["import_sessions"]["import_001"]["generated_model"]["wall_ids"]
+    )
+    assert "import_shell_overreach_repaired" in (
+        design_model["import_sessions"]["import_001"]["quality_flags"]
+    )
+    assert design_model["metadata"]["execution_sync"]["status"] == "dirty"
+    assert manifest["repair_history"][-1]["action"] == "repair_imported_shell_overreach"
     assert plan["skipped_count"] == 0
 
 

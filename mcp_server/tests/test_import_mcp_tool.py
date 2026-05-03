@@ -56,6 +56,34 @@ def create_missing_boundary_wall_gap(project):
     )
 
 
+def create_shell_overreach(project):
+    """Create imported wall geometry that encloses area outside the footprint."""
+    design_model_path = project / "design_model.json"
+    design_model = json.loads(design_model_path.read_text(encoding="utf-8"))
+    footprint = design_model["spaces"]["import_001_space_001"]["footprint"]
+    min_x = min(float(point[0]) for point in footprint)
+    max_x = max(float(point[0]) for point in footprint)
+    min_y = min(float(point[1]) for point in footprint)
+    max_y = max(float(point[1]) for point in footprint)
+    overreach_x = max_x + 1200.0
+    design_model["walls"]["import_001_wall_south"]["path"] = [
+        [min_x, min_y, 0.0],
+        [overreach_x, min_y, 0.0],
+    ]
+    design_model["walls"]["import_001_wall_east"]["path"] = [
+        [overreach_x, min_y, 0.0],
+        [overreach_x, max_y, 0.0],
+    ]
+    generated = design_model["import_sessions"]["import_001"]["generated_model"]
+    for wall_id in ("import_001_wall_south", "import_001_wall_east"):
+        if wall_id not in generated["changed_model_ids"]:
+            generated["changed_model_ids"].append(wall_id)
+    design_model_path.write_text(
+        json.dumps(design_model, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 @pytest.mark.asyncio
 async def test_import_floorplan_to_model_tool_writes_project_truth(tmp_path):
     from mcp_server import server
@@ -215,6 +243,42 @@ async def test_boundary_coverage_tools_review_and_repair_missing_wall(tmp_path):
     assert repair["added_walls"][0].startswith("import_001_boundary_gap_")
 
 
+@pytest.mark.asyncio
+async def test_shell_overreach_tools_review_and_repair_phantom_space(tmp_path):
+    from mcp_server import server
+
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path)
+    await server.import_floorplan_to_model(
+        project_path=str(project),
+        source_path=str(source),
+        import_id="import_001",
+        width=6000,
+        depth=4000,
+    )
+    create_shell_overreach(project)
+
+    review_response = await server.review_imported_wall_space_consistency(
+        project_path=str(project),
+        import_id="import_001",
+    )
+    repair_response = await server.repair_imported_shell_overreach(
+        project_path=str(project),
+        import_id="import_001",
+    )
+    review = json.loads(review_response.text)
+    repair = json.loads(repair_response.text)
+
+    assert review["status"] == "overreach_found"
+    assert review["recommended_repair_count"] == 2
+    assert repair["status"] == "repaired"
+    assert repair["remaining_overreach_count"] == 0
+    assert "import_001_wall_south" in repair["trimmed_walls"]
+    assert "import_001_wall_east" in repair["removed_walls"]
+    assert repair["added_walls"][0].startswith("import_001_boundary_gap_")
+
+
 def test_cli_import_floorplan_summary_and_rescale(tmp_path, capsys):
     project = tmp_path / "project"
     init_project(project, template="empty")
@@ -279,6 +343,23 @@ def test_cli_import_floorplan_summary_and_rescale(tmp_path, capsys):
         ]
     )
     boundary_repair_output = json.loads(capsys.readouterr().out)
+    create_shell_overreach(project)
+    wall_space_review_code = main(
+        [
+            "review-import-wall-space",
+            str(project),
+            "import_001",
+        ]
+    )
+    wall_space_review_output = json.loads(capsys.readouterr().out)
+    shell_overreach_code = main(
+        [
+            "repair-import-shell-overreach",
+            str(project),
+            "import_001",
+        ]
+    )
+    shell_overreach_output = json.loads(capsys.readouterr().out)
     summary_code = main(["import-summary", str(project), "--import-id", "import_001"])
     summary_output = json.loads(capsys.readouterr().out)
     list_code = main(["list-imports", str(project)])
@@ -299,6 +380,8 @@ def test_cli_import_floorplan_summary_and_rescale(tmp_path, capsys):
     assert corner_notch_code == 0
     assert boundary_review_code == 0
     assert boundary_repair_code == 0
+    assert wall_space_review_code == 0
+    assert shell_overreach_code == 0
     assert summary_code == 0
     assert list_code == 0
     assert rescale_code == 0
@@ -307,6 +390,8 @@ def test_cli_import_floorplan_summary_and_rescale(tmp_path, capsys):
     assert corner_notch_output["status"] == "repaired"
     assert boundary_review_output["recommended_repair_count"] == 1
     assert boundary_repair_output["status"] == "repaired"
+    assert wall_space_review_output["recommended_repair_count"] == 2
+    assert shell_overreach_output["status"] == "repaired"
     assert summary_output["count"] == 1
     assert list_output["imports"][0]["import_id"] == "import_001"
     assert rescale_output["scale_x"] == 1.5

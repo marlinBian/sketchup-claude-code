@@ -33,11 +33,13 @@ from mcp_server.tools.import_pipeline import (
     list_import_sessions,
     normalize_imported_wall_alignment,
     repair_imported_boundary_coverage,
+    repair_imported_shell_overreach,
     register_import_source,
     repair_imported_corner_notch,
     repair_imported_region,
     rescale_imported_model,
     review_imported_boundary_coverage,
+    review_imported_wall_space_consistency,
 )
 
 
@@ -499,6 +501,62 @@ def build_parser() -> argparse.ArgumentParser:
     )
     boundary_repair_parser.add_argument("--notes", help="Repair notes")
 
+    wall_space_review_parser = subparsers.add_parser(
+        "review-import-wall-space",
+        help="Review imported walls for shell overreach outside space footprints",
+    )
+    wall_space_review_parser.add_argument("project_path", help="Design project directory")
+    wall_space_review_parser.add_argument("import_id", help="Import session ID")
+    wall_space_review_parser.add_argument(
+        "--min-segment-length",
+        type=float,
+        default=250,
+        help="Ignore unexplained wall segments at or below this length in mm",
+    )
+    wall_space_review_parser.add_argument(
+        "--coordinate-match-tolerance",
+        type=float,
+        default=1,
+        help="Point-coordinate equality tolerance in mm",
+    )
+
+    shell_overreach_parser = subparsers.add_parser(
+        "repair-import-shell-overreach",
+        help="Trim imported wall segments that enclose space outside imported footprints",
+    )
+    shell_overreach_parser.add_argument("project_path", help="Design project directory")
+    shell_overreach_parser.add_argument("import_id", help="Import session ID")
+    shell_overreach_parser.add_argument(
+        "--min-segment-length",
+        type=float,
+        default=250,
+        help="Ignore unexplained wall segments at or below this length in mm",
+    )
+    shell_overreach_parser.add_argument(
+        "--coordinate-match-tolerance",
+        type=float,
+        default=1,
+        help="Point-coordinate equality tolerance in mm",
+    )
+    shell_overreach_parser.add_argument(
+        "--min-wall-length",
+        type=float,
+        default=20,
+        help="Delete trimmed wall remainders at or below this plan length in mm",
+    )
+    shell_overreach_parser.add_argument(
+        "--no-fill-boundary-gaps",
+        action="store_true",
+        help="Do not add missing footprint-boundary walls after trimming overreach",
+    )
+    shell_overreach_parser.add_argument(
+        "--max-repairs",
+        type=int,
+        default=20,
+        help="Maximum overreach segments to repair in one pass",
+    )
+    shell_overreach_parser.add_argument("--notes", help="Repair notes")
+
     repair_import_parser = subparsers.add_parser(
         "repair-import",
         help="Patch imported working truth using source-backed repair inputs",
@@ -906,6 +964,28 @@ def main(argv: list[str] | None = None) -> int:
                 max_opening_gap_length=args.max_opening_gap_length,
                 coordinate_match_tolerance=args.coordinate_match_tolerance,
                 require_structural_endpoints=not args.allow_unsupported_endpoints,
+                max_repairs=args.max_repairs,
+                notes=args.notes,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "review-import-wall-space":
+            result = review_imported_wall_space_consistency(
+                args.project_path,
+                args.import_id,
+                min_segment_length=args.min_segment_length,
+                coordinate_match_tolerance=args.coordinate_match_tolerance,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "repair-import-shell-overreach":
+            result = repair_imported_shell_overreach(
+                args.project_path,
+                args.import_id,
+                min_segment_length=args.min_segment_length,
+                coordinate_match_tolerance=args.coordinate_match_tolerance,
+                min_wall_length=args.min_wall_length,
+                fill_resulting_boundary_gaps=not args.no_fill_boundary_gaps,
                 max_repairs=args.max_repairs,
                 notes=args.notes,
             )

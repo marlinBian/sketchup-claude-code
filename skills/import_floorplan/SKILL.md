@@ -105,11 +105,19 @@ whole import by default.
    that are longer than normal door/opening candidates and have structural wall
    endpoints, records source-backed repair history, and marks the project for
    clean replay.
-5. Call `repair_imported_region` with the specific correction, such as target
+5. If the generated shell encloses an extra pocket that is not part of any
+   imported room or balcony footprint, call
+   `review_imported_wall_space_consistency`, then
+   `repair_imported_shell_overreach`. The repair trims or removes wall segments
+   outside imported space footprints and can fill the resulting high-confidence
+   footprint boundary gaps. The default overreach threshold is intentionally
+   larger than wall thickness so normal wall-continuity slivers are not
+   auto-trimmed.
+6. Call `repair_imported_region` with the specific correction, such as target
    dimensions or wall thickness, when the issue is not an exterior alignment
    normalization case.
-6. Call `plan_project_execution` again.
-7. Execute the project with `clean_before_execute=true` and `clean_scope="all"`
+7. Call `plan_project_execution` again.
+8. Execute the project with `clean_before_execute=true` and `clean_scope="all"`
    when the designer wants SketchUp updated, so stale geometry does not remain
    beside the repaired truth.
 
@@ -125,6 +133,10 @@ The top-left exterior corner has a missing notch. Restore it from the source.
 
 ```text
 The living room boundary is missing a wall segment compared with the source.
+```
+
+```text
+The bottom-right import has an extra enclosed pocket that is not in the source.
 ```
 
 ```text

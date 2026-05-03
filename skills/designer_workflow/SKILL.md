@@ -129,7 +129,10 @@ is a better overall width, depth, or scale factor. Use
 corner notch missing from the generated model. Use
 `review_imported_boundary_coverage` and `repair_imported_boundary_coverage` when
 the imported footprint contains a room edge but the explicit wall list missed a
-long segment. Use `repair_imported_region` for other specific corrections.
+long segment. Use `review_imported_wall_space_consistency` and
+`repair_imported_shell_overreach` when explicit imported walls enclose an extra
+area that no imported room or balcony footprint claims. Use
+`repair_imported_region` for other specific corrections.
 
 ### 5. Execute Only When the User Wants SketchUp Updated
 
@@ -179,7 +182,8 @@ After planning or execution, summarize:
   issues
 - execution sync details, if `execute_project_model` was used
 - import summary details, if `import_floorplan_to_model`,
-  `rescale_imported_model`, or `repair_imported_region` was used
+  `rescale_imported_model`, `repair_imported_shell_overreach`, or
+  `repair_imported_region` was used
 
 Do not replace structured output with only prose. The design model remains the
 canonical state.

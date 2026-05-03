@@ -197,6 +197,10 @@ The first tool set should be small and structured:
 - `rescale_imported_model`
 - `normalize_imported_wall_alignment`
 - `repair_imported_corner_notch`
+- `review_imported_boundary_coverage`
+- `repair_imported_boundary_coverage`
+- `review_imported_wall_space_consistency`
+- `repair_imported_shell_overreach`
 - `review_model_against_import_source`
 - `repair_imported_region`
 - `list_import_sessions`
@@ -248,6 +252,18 @@ gaps and supported by nearby structural wall endpoints by default. Shorter
 uncovered segments remain classified as possible openings or intentional gaps so
 the first import stays autonomous and editable instead of blocking on
 confirmation.
+
+Imported walls also need the inverse consistency check: every meaningful
+imported wall segment should be explainable by at least one imported room,
+balcony, or other space footprint edge. If a wall extends past all imported
+space footprints, it can create a phantom enclosed area even when no footprint
+claims that area. The review path is `review_imported_wall_space_consistency`
+and the repair path is `repair_imported_shell_overreach`. The repair trims or
+removes overreaching wall intervals, updates generated wall IDs, clears stale
+execution metadata, records source-backed repair history, and can fill the
+newly exposed high-confidence footprint boundary gaps. Its default minimum
+segment length is larger than normal wall thickness so wall-continuity slivers
+between adjacent footprints are not auto-trimmed as phantom spaces.
 
 ## Validation Direction
 
