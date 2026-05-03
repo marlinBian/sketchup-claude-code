@@ -114,7 +114,7 @@ millimeters. If dimensions are not available, let the tool estimate scale and
 report quality flags.
 
 After import, call `plan_project_execution` to verify that imported walls and
-opening placeholders can produce a SketchUp bridge trace. Use
+hosted openings produce an opening-aware SketchUp bridge trace. Use
 `execute_project_model(clean_before_execute=True, clean_scope="all")` only when
 the designer wants SketchUp updated. Normal import execution should not leave
 raw source images, template entities, or stale imported geometry in the SketchUp

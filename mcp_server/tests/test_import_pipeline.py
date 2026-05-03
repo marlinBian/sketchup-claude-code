@@ -225,10 +225,10 @@ def test_import_floorplan_to_model_writes_working_truth_and_trace(tmp_path):
         "import_001_window_001",
     ]
     assert plan["skipped_count"] == 0
-    assert plan["operation_count"] == 7
+    assert plan["operation_count"] == 9
     assert [op["operation_type"] for op in plan["bridge_operations"]].count(
         "create_wall"
-    ) == 4
+    ) == 6
     assert [op["operation_type"] for op in plan["bridge_operations"]].count(
         "create_box"
     ) == 2

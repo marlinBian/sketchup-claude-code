@@ -387,9 +387,30 @@ DESIGN_MODEL_SCHEMA: Dict[str, Any] = {
                             "description": "Live bridge execution metadata",
                             "properties": {
                                 "operation_id": {"type": "string"},
+                                "operation_ids": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                    "description": "Bridge operations that created solid wall segments",
+                                },
                                 "entity_ids": {
                                     "type": "array",
                                     "items": {"type": "string"},
+                                },
+                                "segments": {
+                                    "type": "object",
+                                    "description": "Execution metadata keyed by wall_segment_id",
+                                    "additionalProperties": {
+                                        "type": "object",
+                                        "properties": {
+                                            "operation_id": {"type": "string"},
+                                            "entity_ids": {
+                                                "type": "array",
+                                                "items": {"type": "string"},
+                                            },
+                                            "spatial_delta": {"type": "object"},
+                                            "status": {"type": "string"},
+                                        },
+                                    },
                                 },
                                 "spatial_delta": {"type": "object"},
                                 "status": {"type": "string"},

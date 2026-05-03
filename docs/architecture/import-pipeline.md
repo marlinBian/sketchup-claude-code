@@ -78,8 +78,9 @@ like any other project truth.
 Build a bridge trace from the imported model:
 
 - draw reference overlays when available
-- create wall geometry from wall paths
-- cut or represent hosted openings
+- create wall geometry from wall paths, splitting hosted wall segments around
+  doors, windows, and other openings for plan-view correctness
+- represent hosted openings with separate door/window marker geometry
 - create floor faces from room footprints when practical
 - tag imported entities separately from generated design additions
 
@@ -298,7 +299,8 @@ interpretation:
    model when richer extraction is unavailable.
 5. Write imported `spaces`, `walls`, `openings`, `import_sessions`, and
    `quality_flags` into `design_model.json`.
-6. Produce a headless bridge trace for imported walls and opening placeholders.
+6. Produce a headless bridge trace for imported walls, opening-aware solid wall
+   segments, and door/window marker geometry.
 7. Expose list, summary, rescale, wall-alignment normalization, corner-notch
    repair, boundary coverage review/repair, review, and repair tools through MCP
    and CLI.

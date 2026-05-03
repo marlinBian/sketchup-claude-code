@@ -10,6 +10,9 @@ For project-backed work, `plan_project_execution` reads the current
 `design_model.json` and derives a bridge trace for the full project truth:
 
 - rectangular space bounds become wall operations
+- explicit `walls` with hosted `openings` become opening-aware solid wall
+  segment operations, so imported windows and doors do not replay as continuous
+  walls in plan view
 - component instances become `place_component` operations
 - lighting with `component_ref` becomes `place_component` on the Lighting layer
 - lighting without `component_ref` falls back to `place_lighting`
@@ -87,6 +90,10 @@ into `design_model.json`:
   `entity_ids`, status, and spatial delta.
 - generated space walls receive wall-side execution feedback under
   `spaces.<space_id>.execution.walls.<side>`, including returned `entity_ids`.
+- explicit walls receive aggregated execution feedback. If a wall is split
+  around doors or windows, `walls.<wall_id>.execution.segments` records each
+  `wall_segment_id`, while `entity_ids` and `operation_ids` aggregate all solid
+  segment entities for that wall.
 - component and lighting instances receive the first returned SketchUp
   `entity_id`.
 - instance `execution.operation_id` records the bridge operation that created or

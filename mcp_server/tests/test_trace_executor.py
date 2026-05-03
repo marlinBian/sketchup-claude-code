@@ -173,3 +173,90 @@ def test_sync_execution_report_to_design_model_records_entity_ids():
     assert design_model["components"]["toilet_001"]["entity_id"] == "su-toilet"
     assert design_model["lighting"]["ceiling_light_001"]["entity_id"] == "su-light"
     assert "place_toilet_001" in design_model["execution"]["bridge_operations"]
+
+
+def test_sync_execution_report_aggregates_split_wall_segments():
+    design_model = {
+        "walls": {
+            "east_wall": {
+                "path": [[5000, 0, 0], [5000, 3000, 0]],
+                "height": 2800,
+                "thickness": 120,
+            },
+        },
+    }
+    execution_report = {
+        "results": [
+            {
+                "operation_id": "wall_east_wall_solid_01",
+                "operation_type": "create_wall",
+                "request": {
+                    "params": {
+                        "payload": {
+                            "wall_id": "east_wall",
+                            "wall_segment_id": "east_wall_solid_01",
+                        },
+                    },
+                },
+                "response": {
+                    "result": {
+                        "status": "success",
+                        "entity_ids": ["su-wall-1"],
+                        "spatial_delta": {
+                            "bounding_box": {
+                                "min": [5000, 0, 0],
+                                "max": [5120, 900, 2800],
+                            },
+                            "volume_mm3": 302400000,
+                        },
+                    },
+                },
+                "ok": True,
+            },
+            {
+                "operation_id": "wall_east_wall_solid_02",
+                "operation_type": "create_wall",
+                "request": {
+                    "params": {
+                        "payload": {
+                            "wall_id": "east_wall",
+                            "wall_segment_id": "east_wall_solid_02",
+                        },
+                    },
+                },
+                "response": {
+                    "result": {
+                        "status": "success",
+                        "entity_ids": ["su-wall-2"],
+                        "spatial_delta": {
+                            "bounding_box": {
+                                "min": [5000, 2100, 0],
+                                "max": [5120, 3000, 2800],
+                            },
+                            "volume_mm3": 302400000,
+                        },
+                    },
+                },
+                "ok": True,
+            },
+        ],
+    }
+
+    sync = sync_execution_report_to_design_model(design_model, execution_report)
+
+    assert sync["updated_walls"] == ["east_wall"]
+    execution = design_model["walls"]["east_wall"]["execution"]
+    assert execution["operation_ids"] == [
+        "wall_east_wall_solid_01",
+        "wall_east_wall_solid_02",
+    ]
+    assert execution["entity_ids"] == ["su-wall-1", "su-wall-2"]
+    assert sorted(execution["segments"]) == [
+        "east_wall_solid_01",
+        "east_wall_solid_02",
+    ]
+    assert execution["spatial_delta"]["bounding_box"] == {
+        "min": [5000, 0, 0],
+        "max": [5120, 3000, 2800],
+    }
+    assert execution["spatial_delta"]["volume_mm3"] == 604800000

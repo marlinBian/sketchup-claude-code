@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime, timezone
+import math
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,7 @@ from mcp_server.tools.trace_executor import (
 
 
 DEFAULT_WALL_THICKNESS = 100.0
+MIN_WALL_SEGMENT_LENGTH = 1.0
 DEFAULT_CLEAN_LAYERS = [
     "Walls",
     "Doors",
@@ -42,6 +44,100 @@ def _xyz(value: Any, field_name: str) -> list[float]:
     if not isinstance(value, list) or len(value) != 3:
         raise ValueError(f"{field_name} must be a three-number list.")
     return [float(value[0]), float(value[1]), float(value[2])]
+
+
+def _segment_length(start: list[float], end: list[float]) -> float:
+    """Return the length of a wall baseline segment in millimeters."""
+    return math.dist(start, end)
+
+
+def _point_at_segment_distance(
+    start: list[float],
+    end: list[float],
+    distance: float,
+) -> list[float]:
+    """Interpolate a point on a segment at a distance from its start."""
+    length = _segment_length(start, end)
+    if length <= 0:
+        raise ValueError("Cannot interpolate a zero-length segment.")
+    ratio = distance / length
+    return [
+        start[index] + (end[index] - start[index]) * ratio
+        for index in range(3)
+    ]
+
+
+def _wall_path_length(path: list[Any], wall_id: str) -> float:
+    """Return total baseline length for a wall path."""
+    length = 0.0
+    for index in range(len(path) - 1):
+        start = _xyz(path[index], f"{wall_id}.path[{index}]")
+        end = _xyz(path[index + 1], f"{wall_id}.path[{index + 1}]")
+        length += _segment_length(start, end)
+    return length
+
+
+def _opening_cut_intervals_for_wall(
+    wall_id: str,
+    wall: dict[str, Any],
+    openings: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Return opening intervals that should cut a host wall's plan trace."""
+    if not openings:
+        return []
+
+    path = wall.get("path")
+    if not isinstance(path, list) or len(path) < 2:
+        return []
+
+    wall_length = _wall_path_length(path, wall_id)
+    intervals: list[dict[str, Any]] = []
+    for opening_id in sorted(openings):
+        opening = openings[opening_id]
+        if opening.get("host_wall") != wall_id:
+            continue
+        try:
+            offset = float(opening.get("offset", 0))
+            width = float(opening.get("width", 0))
+        except (TypeError, ValueError):
+            continue
+        if width <= 0:
+            continue
+        start = max(offset, 0.0)
+        end = min(offset + width, wall_length)
+        if end - start <= MIN_WALL_SEGMENT_LENGTH:
+            continue
+        intervals.append(
+            {
+                "opening_id": opening_id,
+                "start": start,
+                "end": end,
+            }
+        )
+
+    intervals.sort(key=lambda interval: (interval["start"], interval["end"]))
+    return intervals
+
+
+def _solid_intervals_for_wall_span(
+    span_start: float,
+    span_end: float,
+    cut_intervals: list[dict[str, Any]],
+) -> list[tuple[float, float]]:
+    """Return solid sub-intervals after subtracting openings from one wall span."""
+    cursor = span_start
+    solid_intervals: list[tuple[float, float]] = []
+    for interval in cut_intervals:
+        cut_start = max(float(interval["start"]), span_start)
+        cut_end = min(float(interval["end"]), span_end)
+        if cut_end <= span_start or cut_start >= span_end:
+            continue
+        if cut_start - cursor > MIN_WALL_SEGMENT_LENGTH:
+            solid_intervals.append((cursor, cut_start))
+        cursor = max(cursor, cut_end)
+    if span_end - cursor > MIN_WALL_SEGMENT_LENGTH:
+        solid_intervals.append((cursor, span_end))
+    return solid_intervals
 
 
 def _manifest_dimensions(component: dict[str, Any]) -> dict[str, float]:
@@ -213,8 +309,14 @@ def bridge_operations_for_space(
 def bridge_operations_for_wall(
     wall_id: str,
     wall: dict[str, Any],
+    openings: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Build wall operations from explicit design_model walls."""
+    """Build wall operations from explicit design_model walls.
+
+    Hosted openings are compiled as gaps in the solid wall trace so imported
+    windows and doors do not appear as continuous full-height walls in plan
+    view. Opening marker operations are emitted separately.
+    """
     path = wall.get("path")
     if not isinstance(path, list) or len(path) < 2:
         raise ValueError(f"{wall_id}.path must include at least two points.")
@@ -223,27 +325,65 @@ def bridge_operations_for_wall(
     if height <= 0 or thickness <= 0:
         raise ValueError(f"{wall_id}.height and thickness must be positive.")
 
-    operations: list[dict[str, Any]] = []
+    cut_intervals = _opening_cut_intervals_for_wall(wall_id, wall, openings)
+    operation_segments: list[dict[str, Any]] = []
+    cumulative_distance = 0.0
+    solid_index = 1
     for index in range(len(path) - 1):
-        segment_id = wall_id if len(path) == 2 else f"{wall_id}_{index + 1:02d}"
-        operations.append(
-            {
-                "operation_id": f"wall_{segment_id}",
-                "operation_type": "create_wall",
-                "payload": {
-                    "wall_id": wall_id,
-                    "wall_segment_id": segment_id,
-                    "start": _xyz(path[index], f"{wall_id}.path[{index}]"),
-                    "end": _xyz(path[index + 1], f"{wall_id}.path[{index + 1}]"),
-                    "height": height,
-                    "thickness": thickness,
-                    "alignment": wall.get("alignment", "inner"),
-                    "layer": wall.get("layer", "Walls"),
-                },
-                "rollback_on_failure": True,
-            }
+        segment_start = _xyz(path[index], f"{wall_id}.path[{index}]")
+        segment_end = _xyz(path[index + 1], f"{wall_id}.path[{index + 1}]")
+        segment_length = _segment_length(segment_start, segment_end)
+        if segment_length <= MIN_WALL_SEGMENT_LENGTH:
+            cumulative_distance += segment_length
+            continue
+
+        span_start = cumulative_distance
+        span_end = cumulative_distance + segment_length
+        solid_intervals = _solid_intervals_for_wall_span(
+            span_start,
+            span_end,
+            cut_intervals,
         )
-    return operations
+
+        for solid_start, solid_end in solid_intervals:
+            local_start = solid_start - span_start
+            local_end = solid_end - span_start
+            start = _point_at_segment_distance(segment_start, segment_end, local_start)
+            end = _point_at_segment_distance(segment_start, segment_end, local_end)
+            if cut_intervals:
+                segment_id = f"{wall_id}_solid_{solid_index:02d}"
+                solid_index += 1
+            else:
+                segment_id = wall_id if len(path) == 2 else f"{wall_id}_{index + 1:02d}"
+            operation_segments.append(
+                {
+                    "segment_id": segment_id,
+                    "start": start,
+                    "end": end,
+                }
+            )
+        cumulative_distance = span_end
+
+    opening_ids = [interval["opening_id"] for interval in cut_intervals]
+    return [
+        {
+            "operation_id": f"wall_{segment['segment_id']}",
+            "operation_type": "create_wall",
+            "payload": {
+                "wall_id": wall_id,
+                "wall_segment_id": segment["segment_id"],
+                "start": segment["start"],
+                "end": segment["end"],
+                "height": height,
+                "thickness": thickness,
+                "alignment": wall.get("alignment", "inner"),
+                "layer": wall.get("layer", "Walls"),
+                **({"excluded_opening_ids": opening_ids} if opening_ids else {}),
+            },
+            "rollback_on_failure": True,
+        }
+        for segment in operation_segments
+    ]
 
 
 def _opening_box_for_wall(
@@ -368,6 +508,7 @@ def build_project_execution_plan(
     operations: list[dict[str, Any]] = []
     skipped_instances: list[dict[str, str]] = []
     walls = design_model.get("walls", {})
+    openings = design_model.get("openings", {})
 
     if include_spaces:
         for space_id in sorted(design_model.get("spaces", {})):
@@ -394,7 +535,13 @@ def build_project_execution_plan(
     if include_walls:
         for wall_id in sorted(walls):
             try:
-                operations.extend(bridge_operations_for_wall(wall_id, walls[wall_id]))
+                operations.extend(
+                    bridge_operations_for_wall(
+                        wall_id,
+                        walls[wall_id],
+                        openings=openings if include_openings else None,
+                    )
+                )
             except Exception as error:
                 skipped_instances.append(
                     {
@@ -405,12 +552,12 @@ def build_project_execution_plan(
                 )
 
     if include_openings:
-        for opening_id in sorted(design_model.get("openings", {})):
+        for opening_id in sorted(openings):
             try:
                 operations.append(
                     bridge_operation_for_opening(
                         opening_id,
-                        design_model["openings"][opening_id],
+                        openings[opening_id],
                         walls,
                     )
                 )
