@@ -1,5 +1,5 @@
 ---
-name: natural_commands
+name: natural-commands
 description: Map English and Chinese natural-language design requests to supported SketchUp Agent Harness tools.
 ---
 
@@ -32,9 +32,13 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
   `socket_ready` is false.
 - Import floor plan source: "import this floor plan", "导入这张户型图".
   Use `import_floorplan_to_model` to register the source and write an editable
-  working model directly into `design_model.json`. Do not ask the designer to
-  confirm routine wall, door, window, or numeric candidates before generating
-  the first model. When updating SketchUp from the import, call
+  working model directly into `design_model.json`. When visible room labels,
+  dimension chains, or outside blank source regions are available, first create
+  a source interpretation JSON and pass it as `source_interpretation_path` so
+  the import rejects overwide room candidates and shell overreach before truth
+  is saved. Do not ask the designer to confirm routine wall, door, window, or
+  numeric candidates before generating the first model. When updating SketchUp
+  from the import, call
   `execute_project_model(clean_before_execute=True, clean_scope="all")` so old
   source images, template entities, and stale generated geometry are removed.
 - Rescale imported source: "this plan should be 8200 mm wide",

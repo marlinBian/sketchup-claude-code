@@ -189,6 +189,33 @@ generic furniture components:
 `spaces.<id>.footprint` should support non-rectangular rooms while preserving
 the existing rectangular `bounds` field as a broad bounding box.
 
+### Source Interpretation Gate
+
+Raster/PDF/CAD extraction should produce a non-canonical
+`source_interpretation.json` before writing working truth when the source
+contains visible room labels, dimension chains, or outside/void regions. This
+intermediate file is evidence, not canonical model state.
+
+Useful interpretation fields:
+
+- `dimension_chains`: axis-specific measured chains from the source, such as a
+  bottom width chain that distinguishes interior rooms from outside white space.
+- `negative_regions`: source areas that should not become rooms, walls, slabs,
+  or exterior shell, such as blank outside-plan regions in a listing image.
+- `space_candidates`: one or more candidate footprints per target space, with
+  `label_area_m2`, `dimension_constraints`, and confidence.
+- `walls` and `openings`: explicit structural candidates after the space
+  candidates have been scored.
+
+`import_floorplan_to_model` can consume this interpretation with
+`source_interpretation_path`. During generation it rejects space candidates
+whose computed footprint area conflicts with a room label, whose dimensions
+conflict with a source chain, or whose footprint overlaps a negative region.
+After accepted spaces are selected, shell walls that extend outside all
+accepted footprints are trimmed before the truth is saved. This catches errors
+such as an imported balcony expanding into blank outside space instead of
+matching its visible area label.
+
 ## MCP Tool Direction
 
 The first tool set should be small and structured:

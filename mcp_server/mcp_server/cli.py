@@ -326,6 +326,26 @@ def build_parser() -> argparse.ArgumentParser:
     import_floorplan_parser.add_argument("--width", type=float, help="Known plan width in mm")
     import_floorplan_parser.add_argument("--depth", type=float, help="Known plan depth in mm")
     import_floorplan_parser.add_argument(
+        "--source-interpretation",
+        dest="source_interpretation_path",
+        help=(
+            "Optional extracted source interpretation JSON with dimension chains, "
+            "space candidates, room-label areas, and negative regions"
+        ),
+    )
+    import_floorplan_parser.add_argument(
+        "--area-tolerance-ratio",
+        type=float,
+        default=0.35,
+        help="Maximum room label area delta ratio before rejecting a space candidate",
+    )
+    import_floorplan_parser.add_argument(
+        "--negative-space-overlap-tolerance",
+        type=float,
+        default=0.05,
+        help="Maximum candidate overlap with outside/void regions in square meters",
+    )
+    import_floorplan_parser.add_argument(
         "--wall-height",
         type=float,
         default=2800,
@@ -905,6 +925,9 @@ def main(argv: list[str] | None = None) -> int:
                 label=args.label,
                 width=args.width,
                 depth=args.depth,
+                source_interpretation_path=args.source_interpretation_path,
+                area_tolerance_ratio=args.area_tolerance_ratio,
+                negative_space_overlap_tolerance_m2=args.negative_space_overlap_tolerance,
                 wall_height=args.wall_height,
                 wall_thickness=args.wall_thickness,
                 overwrite=args.force,

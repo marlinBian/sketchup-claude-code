@@ -30,6 +30,115 @@ def make_source(tmp_path, name="floorplan.pdf"):
     return source
 
 
+def make_area_guard_interpretation(tmp_path):
+    """Create an interpretation fixture with one rejected overwide balcony candidate."""
+    interpretation = {
+        "version": "1.0",
+        "scale": {
+            "units": "mm",
+            "source": "visible_dimension_annotations",
+            "confidence": 0.74,
+            "width": 7095,
+            "depth": 7880,
+        },
+        "dimension_chains": [
+            {
+                "id": "bottom_width_chain",
+                "axis": "x",
+                "segments": [
+                    {"id": "outside_left", "length": 1335},
+                    {"id": "kitchen", "length": 3130},
+                    {"id": "balcony_b", "length": 1315},
+                    {"id": "outside_right", "length": 1180},
+                ],
+            }
+        ],
+        "negative_regions": [
+            {
+                "id": "lower_right_outside_plan",
+                "kind": "outside_plan",
+                "footprint": [
+                    [5780, 1785, 0],
+                    [7095, 1785, 0],
+                    [7095, 0, 0],
+                    [5780, 0, 0],
+                ],
+            }
+        ],
+        "space_candidates": [
+            {
+                "id": "balcony_b_overwide_candidate",
+                "space_id": "balcony_b_001",
+                "type": "balcony",
+                "name": "Balcony B",
+                "label_area_m2": 2.3,
+                "confidence": 0.91,
+                "dimension_constraints": [
+                    {"axis": "x", "length": 1315, "tolerance": 80, "source": "bottom_width_chain"}
+                ],
+                "footprint": [
+                    [4465, 1785, 0],
+                    [7095, 1785, 0],
+                    [7095, 0, 0],
+                    [4465, 0, 0],
+                ],
+            },
+            {
+                "id": "balcony_b_area_matched_candidate",
+                "space_id": "balcony_b_001",
+                "type": "balcony",
+                "name": "Balcony B",
+                "label_area_m2": 2.3,
+                "confidence": 0.78,
+                "dimension_constraints": [
+                    {"axis": "x", "length": 1315, "tolerance": 80, "source": "bottom_width_chain"}
+                ],
+                "footprint": [
+                    [4465, 1785, 0],
+                    [5780, 1785, 0],
+                    [5780, 0, 0],
+                    [4465, 0, 0],
+                ],
+            },
+            {
+                "id": "kitchen_candidate",
+                "space_id": "kitchen_001",
+                "type": "kitchen",
+                "name": "Kitchen",
+                "label_area_m2": 5.6,
+                "confidence": 0.82,
+                "footprint": [
+                    [1335, 1785, 0],
+                    [4465, 1785, 0],
+                    [4465, 0, 0],
+                    [1335, 0, 0],
+                ],
+            },
+        ],
+        "walls": [
+            {
+                "wall_id": "w_ext_bottom",
+                "path": [[1335, 0, 0], [7095, 0, 0]],
+                "confidence": 0.66,
+            },
+            {
+                "wall_id": "w_balcony_b_west",
+                "path": [[4465, 0, 0], [4465, 1785, 0]],
+                "confidence": 0.7,
+            },
+            {
+                "wall_id": "w_balcony_b_east",
+                "path": [[5780, 0, 0], [5780, 1785, 0]],
+                "confidence": 0.7,
+            },
+        ],
+        "openings": [],
+    }
+    path = tmp_path / "source_interpretation.json"
+    path.write_text(json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
 def create_offset_right_boundary(project):
     """Create a near-boundary imported wall offset like a mixed dimension chain."""
     design_model_path = project / "design_model.json"
@@ -233,6 +342,60 @@ def test_import_floorplan_to_model_writes_working_truth_and_trace(tmp_path):
         "create_wall_with_openings"
     ) == 2
     assert [op["operation_type"] for op in plan["bridge_operations"]].count("create_box") == 0
+    assert validation["ok"] is True
+
+
+def test_interpreted_import_rejects_overwide_space_and_trims_shell(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "plan.png")
+    interpretation = make_area_guard_interpretation(tmp_path)
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation,
+        wall_thickness=180,
+    )
+    design_model = json.loads((project / "design_model.json").read_text(encoding="utf-8"))
+    extracted = json.loads(
+        (
+            project
+            / "imports"
+            / "import_001"
+            / "extracted"
+            / "interpretation.json"
+        ).read_text(encoding="utf-8")
+    )
+    validation = validate_project(project)
+
+    assert result["source_interpretation_used"] is True
+    assert result["summary"]["rejected_candidate_count"] == 1
+    assert "source_space_candidate_rejected" in result["quality_flags"]
+    assert "source_shell_overreach_trimmed_during_generation" in result["quality_flags"]
+    assert design_model["spaces"]["balcony_b_001"]["footprint"] == [
+        [4465.0, 1785.0, 0.0],
+        [5780.0, 1785.0, 0.0],
+        [5780.0, 0.0, 0.0],
+        [4465.0, 0.0, 0.0],
+    ]
+    assert design_model["walls"]["w_ext_bottom"]["path"] == [
+        [1335.0, 0.0, 0.0],
+        [5780.0, 0.0, 0.0],
+    ]
+    rejected = [
+        review
+        for review in extracted["candidate_reviews"]
+        if review["candidate_id"] == "balcony_b_overwide_candidate"
+    ][0]
+    assert rejected["status"] == "rejected"
+    assert {issue["code"] for issue in rejected["issues"]} == {
+        "room_label_area_mismatch",
+        "dimension_constraint_mismatch",
+        "negative_space_overlap",
+    }
+    assert extracted["shell_trim"]["trimmed_walls"] == ["w_ext_bottom"]
     assert validation["ok"] is True
 
 

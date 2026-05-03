@@ -35,6 +35,9 @@ DEFAULT_MIN_BOUNDARY_GAP_LENGTH = 50.0
 DEFAULT_MIN_SHELL_OVERREACH_LENGTH = 250.0
 DEFAULT_MAX_OPENING_GAP_LENGTH = 1200.0
 DEFAULT_MAX_SEMANTIC_SHORT_GAP_LENGTH = 900.0
+DEFAULT_LABEL_AREA_TOLERANCE_RATIO = 0.35
+DEFAULT_NEGATIVE_SPACE_OVERLAP_TOLERANCE_M2 = 0.05
+DEFAULT_DIMENSION_CONSTRAINT_TOLERANCE = 120.0
 VALID_CORNER_NOTCHES = {"top_left", "top_right", "bottom_left", "bottom_right"}
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".heic"}
@@ -379,6 +382,663 @@ def space_payload(
     }
 
 
+def polygon_area_mm2(points: list[list[float]]) -> float:
+    """Return the absolute XY area for one footprint polygon."""
+    if len(points) < 3:
+        return 0.0
+    area = 0.0
+    for index, start in enumerate(points):
+        end = points[(index + 1) % len(points)]
+        area += start[0] * end[1] - end[0] * start[1]
+    return abs(area) / 2.0
+
+
+def polygon_bounds(points: list[list[float]]) -> tuple[float, float, float, float]:
+    """Return footprint bounds as min_x, max_x, min_y, max_y."""
+    if not points:
+        raise ValueError("footprint must contain at least one point.")
+    xs = [point[0] for point in points]
+    ys = [point[1] for point in points]
+    return min(xs), max(xs), min(ys), max(ys)
+
+
+def bounds_overlap_area_mm2(
+    first: tuple[float, float, float, float],
+    second: tuple[float, float, float, float],
+) -> float:
+    """Return axis-aligned bounds overlap area in square millimeters."""
+    min_x = max(first[0], second[0])
+    max_x = min(first[1], second[1])
+    min_y = max(first[2], second[2])
+    max_y = min(first[3], second[3])
+    if max_x <= min_x or max_y <= min_y:
+        return 0.0
+    return (max_x - min_x) * (max_y - min_y)
+
+
+def footprint_from_payload(value: Any, *, label: str) -> list[list[float]]:
+    """Return a normalized 3D footprint from a source interpretation payload."""
+    if not isinstance(value, list) or len(value) < 3:
+        raise ValueError(f"{label} must contain at least three points.")
+    return [
+        normalize_3d_point(point, label=f"{label}[{index}]")
+        for index, point in enumerate(value)
+    ]
+
+
+def source_interpretation_quality_flags(source_type: str) -> list[str]:
+    """Return base quality flags for interpretation-driven import."""
+    flags = ["source_interpretation_used"]
+    if source_type in {"pdf", "image"}:
+        flags.append("raster_or_document_interpretation")
+    if source_type in {"dwg", "dxf"}:
+        flags.append("cad_layers_not_semantically_verified")
+    if source_type == "unknown":
+        flags.append("unknown_source_type")
+    return flags
+
+
+def load_source_interpretation(path: str | Path) -> dict[str, Any]:
+    """Load the optional structured extraction used before truth generation."""
+    source_path = Path(path).expanduser().resolve()
+    if not source_path.exists() or not source_path.is_file():
+        raise FileNotFoundError(f"source interpretation not found: {source_path}")
+    try:
+        data = json.loads(source_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise ValueError(f"source interpretation is not valid JSON: {error}") from error
+    if not isinstance(data, dict):
+        raise ValueError("source interpretation must be a JSON object.")
+    return data
+
+
+def interpretation_negative_regions(
+    interpretation: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Return normalized negative regions from a source interpretation."""
+    regions: list[dict[str, Any]] = []
+    for index, region in enumerate(interpretation.get("negative_regions", [])):
+        if not isinstance(region, dict):
+            continue
+        raw_footprint = region.get("footprint") or region.get("polygon")
+        if raw_footprint is None and isinstance(region.get("bounds"), dict):
+            bounds = region["bounds"]
+            min_point = bounds.get("min")
+            max_point = bounds.get("max")
+            if isinstance(min_point, list) and isinstance(max_point, list):
+                raw_footprint = [
+                    [min_point[0], min_point[1], 0],
+                    [max_point[0], min_point[1], 0],
+                    [max_point[0], max_point[1], 0],
+                    [min_point[0], max_point[1], 0],
+                ]
+        if raw_footprint is None:
+            continue
+        footprint = footprint_from_payload(
+            raw_footprint,
+            label=f"negative_regions[{index}].footprint",
+        )
+        regions.append(
+            {
+                "id": str(region.get("id") or f"negative_region_{index + 1}"),
+                "kind": str(region.get("kind") or "outside_plan"),
+                "footprint": footprint,
+                "bounds": polygon_bounds(footprint),
+                "area_m2": polygon_area_mm2(footprint) / 1_000_000,
+            }
+        )
+    return regions
+
+
+def dimension_constraints_for_candidate(
+    candidate: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Return normalized dimension constraints for one space candidate."""
+    constraints: list[dict[str, Any]] = []
+    raw_constraints = candidate.get("dimension_constraints", [])
+    if isinstance(raw_constraints, list):
+        for raw in raw_constraints:
+            if not isinstance(raw, dict):
+                continue
+            axis = raw.get("axis")
+            length = raw.get("length")
+            if axis not in {"x", "y"} or length is None:
+                continue
+            constraints.append(
+                {
+                    "axis": axis,
+                    "length": float(length),
+                    "tolerance": float(
+                        raw.get("tolerance", DEFAULT_DIMENSION_CONSTRAINT_TOLERANCE)
+                    ),
+                    "source": raw.get("source"),
+                }
+            )
+    if candidate.get("expected_width") is not None:
+        constraints.append(
+            {
+                "axis": "x",
+                "length": float(candidate["expected_width"]),
+                "tolerance": float(
+                    candidate.get("expected_width_tolerance", DEFAULT_DIMENSION_CONSTRAINT_TOLERANCE)
+                ),
+                "source": "expected_width",
+            }
+        )
+    if candidate.get("expected_depth") is not None:
+        constraints.append(
+            {
+                "axis": "y",
+                "length": float(candidate["expected_depth"]),
+                "tolerance": float(
+                    candidate.get("expected_depth_tolerance", DEFAULT_DIMENSION_CONSTRAINT_TOLERANCE)
+                ),
+                "source": "expected_depth",
+            }
+        )
+    return constraints
+
+
+def review_space_candidate(
+    candidate: dict[str, Any],
+    *,
+    candidate_index: int,
+    negative_regions: list[dict[str, Any]],
+    area_tolerance_ratio: float,
+    negative_space_overlap_tolerance_m2: float,
+) -> dict[str, Any]:
+    """Score one interpreted space candidate before it can become truth."""
+    if not isinstance(candidate, dict):
+        raise ValueError(f"space_candidates[{candidate_index}] must be an object.")
+    raw_footprint = candidate.get("footprint")
+    if raw_footprint is None:
+        raise ValueError(f"space_candidates[{candidate_index}].footprint is required.")
+    footprint = footprint_from_payload(
+        raw_footprint,
+        label=f"space_candidates[{candidate_index}].footprint",
+    )
+    area_m2 = polygon_area_mm2(footprint) / 1_000_000
+    bounds = polygon_bounds(footprint)
+    issues: list[dict[str, Any]] = []
+
+    label_area_m2 = (
+        candidate.get("label_area_m2")
+        if candidate.get("label_area_m2") is not None
+        else candidate.get("expected_area_m2")
+    )
+    if label_area_m2 is not None:
+        expected_area = float(label_area_m2)
+        if expected_area <= 0:
+            raise ValueError(
+                f"space_candidates[{candidate_index}].label_area_m2 must be positive."
+            )
+        area_delta_ratio = abs(area_m2 - expected_area) / expected_area
+        if area_delta_ratio > area_tolerance_ratio:
+            issues.append(
+                {
+                    "code": "room_label_area_mismatch",
+                    "severity": "reject",
+                    "expected_area_m2": expected_area,
+                    "actual_area_m2": area_m2,
+                    "delta_ratio": area_delta_ratio,
+                    "tolerance_ratio": area_tolerance_ratio,
+                }
+            )
+
+    for constraint in dimension_constraints_for_candidate(candidate):
+        actual = bounds[1] - bounds[0] if constraint["axis"] == "x" else bounds[3] - bounds[2]
+        delta = abs(actual - constraint["length"])
+        if delta > constraint["tolerance"]:
+            issues.append(
+                {
+                    "code": "dimension_constraint_mismatch",
+                    "severity": "reject",
+                    "axis": constraint["axis"],
+                    "expected_length": constraint["length"],
+                    "actual_length": actual,
+                    "delta": delta,
+                    "tolerance": constraint["tolerance"],
+                    "source": constraint.get("source"),
+                }
+            )
+
+    for region in negative_regions:
+        overlap_m2 = bounds_overlap_area_mm2(bounds, region["bounds"]) / 1_000_000
+        if overlap_m2 > negative_space_overlap_tolerance_m2:
+            issues.append(
+                {
+                    "code": "negative_space_overlap",
+                    "severity": "reject",
+                    "negative_region_id": region["id"],
+                    "negative_region_kind": region["kind"],
+                    "overlap_area_m2": overlap_m2,
+                    "tolerance_m2": negative_space_overlap_tolerance_m2,
+                }
+            )
+
+    status = "rejected" if any(issue["severity"] == "reject" for issue in issues) else "accepted"
+    return {
+        "candidate_id": str(candidate.get("id") or f"space_candidate_{candidate_index + 1}"),
+        "space_id": str(candidate.get("space_id") or candidate.get("id") or f"space_{candidate_index + 1}"),
+        "status": status,
+        "type": candidate.get("type", "other"),
+        "name": candidate.get("name"),
+        "confidence": float(candidate.get("confidence", 0.5)),
+        "computed_area_m2": area_m2,
+        "label_area_m2": label_area_m2,
+        "footprint": footprint,
+        "bounds": bounds,
+        "issues": issues,
+        "candidate": candidate,
+    }
+
+
+def space_payload_from_candidate(
+    import_id: str,
+    review: dict[str, Any],
+    *,
+    wall_height: float,
+    assumptions: list[str],
+) -> dict[str, Any]:
+    """Return one design_model space payload from an accepted candidate."""
+    min_x, max_x, min_y, max_y = review["bounds"]
+    candidate = review["candidate"]
+    payload = {
+        "type": str(candidate.get("type", review.get("type", "other"))),
+        "bounds": {
+            "min": [min_x, min_y, 0],
+            "max": [max_x, max_y, float(wall_height)],
+        },
+        "center": [
+            (min_x + max_x) / 2,
+            (min_y + max_y) / 2,
+            float(wall_height) / 2,
+        ],
+        "footprint": review["footprint"],
+        "source": {
+            "kind": "import_floorplan",
+            "import_id": import_id,
+            "confidence": review["confidence"],
+            "assumptions": assumptions,
+            "candidate_id": review["candidate_id"],
+            "computed_area_m2": review["computed_area_m2"],
+        },
+    }
+    if candidate.get("name"):
+        payload["name"] = str(candidate["name"])
+    if candidate.get("label"):
+        payload["label"] = str(candidate["label"])
+    if candidate.get("label_area_m2") is not None:
+        payload["source"]["label_area_m2"] = float(candidate["label_area_m2"])
+    return payload
+
+
+def wall_payload_from_interpretation(
+    import_id: str,
+    wall: dict[str, Any],
+    *,
+    wall_height: float,
+    wall_thickness: float,
+    assumptions: list[str],
+    index: int,
+) -> tuple[str, dict[str, Any]]:
+    """Return one explicit wall payload from source interpretation."""
+    wall_id = str(wall.get("wall_id") or wall.get("id") or f"{import_id}_wall_{index + 1:03d}")
+    path = wall.get("path")
+    if not isinstance(path, list) or len(path) < 2:
+        raise ValueError(f"walls[{index}].path must contain at least two points.")
+    normalized_path = [
+        normalize_3d_point(point, label=f"walls[{index}].path[{point_index}]")
+        for point_index, point in enumerate(path)
+    ]
+    payload = {
+        "path": normalized_path,
+        "height": float(wall.get("height", wall_height)),
+        "thickness": float(wall.get("thickness", wall_thickness)),
+        "alignment": wall.get("alignment", "center"),
+        "layer": wall.get("layer", "Walls"),
+        "source": {
+            "kind": "import_floorplan",
+            "import_id": import_id,
+            "confidence": float(wall.get("confidence", 0.58)),
+            "assumptions": assumptions,
+        },
+    }
+    if wall.get("space_refs"):
+        payload["source"]["space_refs"] = wall["space_refs"]
+    return wall_id, payload
+
+
+def opening_payload_from_interpretation(
+    import_id: str,
+    opening: dict[str, Any],
+    *,
+    assumptions: list[str],
+    index: int,
+) -> tuple[str, dict[str, Any]]:
+    """Return one hosted opening payload from source interpretation."""
+    opening_id = str(
+        opening.get("opening_id") or opening.get("id") or f"{import_id}_opening_{index + 1:03d}"
+    )
+    payload: dict[str, Any] = {
+        "type": opening.get("type", "opening"),
+        "host_wall": opening["host_wall"],
+        "offset": float(opening.get("offset", 0)),
+        "width": float(opening["width"]),
+        "height": float(opening["height"]),
+        "sill_height": float(opening.get("sill_height", 0)),
+        "representation": "hosted",
+        "layer": opening.get("layer") or ("Windows" if opening.get("type") == "window" else "Doors"),
+        "source": {
+            "kind": "import_floorplan",
+            "import_id": import_id,
+            "confidence": float(opening.get("confidence", 0.5)),
+            "assumptions": assumptions,
+        },
+    }
+    if opening.get("swing_direction"):
+        payload["swing_direction"] = opening["swing_direction"]
+    return opening_id, payload
+
+
+def path_start_shift_after_trim(original_path: list[Any], new_path: list[Any], axis: str) -> float:
+    """Return the offset shift caused by moving a wall start point during trim."""
+    original_start = point_axis_value(original_path[0], axis)
+    original_end = point_axis_value(original_path[-1], axis)
+    new_start = point_axis_value(new_path[0], axis)
+    if original_end >= original_start:
+        return max(0.0, new_start - original_start)
+    return max(0.0, original_start - new_start)
+
+
+def wall_path_from_interval_preserving_direction(
+    original_path: list[Any],
+    axis: str,
+    line_coordinate: float,
+    interval: tuple[float, float],
+    z: float,
+) -> list[list[float]]:
+    """Return a trimmed wall path while preserving the original path direction."""
+    original_start = point_axis_value(original_path[0], axis)
+    original_end = point_axis_value(original_path[-1], axis)
+    ordered = interval if original_end >= original_start else (interval[1], interval[0])
+    return [
+        point_from_axis_interval(axis, line_coordinate, ordered[0], z),
+        point_from_axis_interval(axis, line_coordinate, ordered[1], z),
+    ]
+
+
+def trim_generation_shell_overreach(
+    design_model: dict[str, Any],
+    import_id: str,
+    *,
+    min_segment_length: float = DEFAULT_MIN_SHELL_OVERREACH_LENGTH,
+    coordinate_match_tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
+    min_wall_length: float = DEFAULT_MIN_WALL_LENGTH,
+) -> dict[str, Any]:
+    """Trim imported walls that extend beyond accepted interpreted spaces."""
+    overreach_segments = imported_wall_space_overreach_segments(
+        design_model,
+        import_id,
+        min_segment_length=min_segment_length,
+        coordinate_match_tolerance=coordinate_match_tolerance,
+    )
+    if not overreach_segments:
+        return {
+            "status": "unchanged",
+            "overreach_count": 0,
+            "trimmed_walls": [],
+            "removed_walls": [],
+            "split_walls": [],
+            "removed_openings": [],
+            "adjusted_openings": [],
+            "segments": [],
+        }
+
+    remove_intervals_by_wall: dict[str, list[tuple[float, float]]] = {}
+    for segment in overreach_segments:
+        remove_intervals_by_wall.setdefault(segment["wall_id"], []).append(
+            (float(segment["interval"][0]), float(segment["interval"][1]))
+        )
+
+    trimmed_walls: list[str] = []
+    removed_walls: list[str] = []
+    split_walls: list[str] = []
+    removed_openings: list[str] = []
+    adjusted_openings: list[str] = []
+
+    for wall_id, remove_intervals in remove_intervals_by_wall.items():
+        wall = design_model.get("walls", {}).get(wall_id)
+        if not isinstance(wall, dict):
+            continue
+        original_path = wall.get("path", [])
+        axis = wall_axis(original_path, tolerance=coordinate_match_tolerance)
+        if axis is None:
+            continue
+        base_interval = segment_interval(original_path, axis)
+        kept_intervals = subtract_intervals(
+            base_interval,
+            remove_intervals,
+            tolerance=coordinate_match_tolerance,
+        )
+        line_coordinate = segment_line_coordinate(original_path, axis)
+        z = float(original_path[0][2])
+        kept_paths = [
+            wall_path_from_interval_preserving_direction(
+                original_path,
+                axis,
+                line_coordinate,
+                interval,
+                z,
+            )
+            for interval in kept_intervals
+            if interval[1] - interval[0] > min_wall_length
+        ]
+
+        if not kept_paths:
+            design_model["walls"].pop(wall_id, None)
+            removed_walls.append(wall_id)
+            continue
+
+        new_path = kept_paths[0]
+        wall["path"] = new_path
+        wall.pop("execution", None)
+        trimmed_walls.append(wall_id)
+        start_shift = path_start_shift_after_trim(original_path, new_path, axis)
+
+        new_length = wall_length(new_path)
+        for opening_id, opening in list(design_model.get("openings", {}).items()):
+            if not isinstance(opening, dict) or opening.get("host_wall") != wall_id:
+                continue
+            opening["offset"] = float(opening.get("offset", 0)) - start_shift
+            if opening["offset"] < -coordinate_match_tolerance or (
+                opening["offset"] + float(opening.get("width", 0))
+                > new_length + coordinate_match_tolerance
+            ):
+                design_model["openings"].pop(opening_id, None)
+                removed_openings.append(opening_id)
+                continue
+            opening["offset"] = max(0.0, opening["offset"])
+            opening.pop("execution", None)
+            adjusted_openings.append(opening_id)
+
+        for index, kept_path in enumerate(kept_paths[1:], start=1):
+            split_wall_id = f"{wall_id}_kept_{index}"
+            design_model["walls"][split_wall_id] = wall_payload_from_reference(
+                split_wall_id,
+                kept_path,
+                wall,
+            )
+            split_walls.append(split_wall_id)
+
+    return {
+        "status": "trimmed" if (trimmed_walls or removed_walls or split_walls) else "unchanged",
+        "overreach_count": len(overreach_segments),
+        "trimmed_walls": trimmed_walls,
+        "removed_walls": removed_walls,
+        "split_walls": split_walls,
+        "removed_openings": removed_openings,
+        "adjusted_openings": sorted(set(adjusted_openings)),
+        "segments": overreach_segments,
+    }
+
+
+def build_interpreted_import_payloads(
+    import_id: str,
+    interpretation: dict[str, Any],
+    *,
+    source_type: str,
+    wall_height: float,
+    wall_thickness: float,
+    area_tolerance_ratio: float,
+    negative_space_overlap_tolerance_m2: float,
+) -> dict[str, Any]:
+    """Build import truth from source candidates after generation-time checks."""
+    negative_regions = interpretation_negative_regions(interpretation)
+    assumptions = [
+        "Generated from source interpretation candidates, not a verified survey.",
+        "Room labels, dimension constraints, and negative regions were used as generation gates.",
+    ]
+    assumptions.extend(str(item) for item in interpretation.get("assumptions", []))
+    flags = source_interpretation_quality_flags(source_type)
+
+    candidate_reviews = [
+        review_space_candidate(
+            candidate,
+            candidate_index=index,
+            negative_regions=negative_regions,
+            area_tolerance_ratio=area_tolerance_ratio,
+            negative_space_overlap_tolerance_m2=negative_space_overlap_tolerance_m2,
+        )
+        for index, candidate in enumerate(interpretation.get("space_candidates", []))
+    ]
+    if not candidate_reviews:
+        raise ValueError("source interpretation must include at least one space candidate.")
+
+    selected_by_space: dict[str, dict[str, Any]] = {}
+    rejected_candidates: list[dict[str, Any]] = []
+    for review in sorted(
+        candidate_reviews,
+        key=lambda item: (str(item["space_id"]), -float(item["confidence"])),
+    ):
+        if review["status"] != "accepted":
+            rejected_candidates.append(review)
+            continue
+        selected_by_space.setdefault(review["space_id"], review)
+
+    if not selected_by_space:
+        raise ValueError("source interpretation produced no accepted space candidates.")
+
+    if rejected_candidates:
+        flags.append("source_space_candidate_rejected")
+
+    spaces = {
+        space_id: space_payload_from_candidate(
+            import_id,
+            review,
+            wall_height=wall_height,
+            assumptions=assumptions,
+        )
+        for space_id, review in sorted(selected_by_space.items())
+    }
+    walls: dict[str, dict[str, Any]] = {}
+    accepted_space_ids = set(spaces)
+    for index, wall in enumerate(interpretation.get("walls", interpretation.get("wall_candidates", []))):
+        if not isinstance(wall, dict):
+            continue
+        space_refs = wall.get("space_refs")
+        if isinstance(space_refs, list) and space_refs and not (
+            set(str(space_id) for space_id in space_refs) & accepted_space_ids
+        ):
+            continue
+        wall_id, payload = wall_payload_from_interpretation(
+            import_id,
+            wall,
+            wall_height=wall_height,
+            wall_thickness=wall_thickness,
+            assumptions=assumptions,
+            index=index,
+        )
+        walls[wall_id] = payload
+    openings: dict[str, dict[str, Any]] = {}
+    for index, opening in enumerate(interpretation.get("openings", [])):
+        if not isinstance(opening, dict):
+            continue
+        if opening.get("host_wall") not in walls:
+            continue
+        opening_id, payload = opening_payload_from_interpretation(
+            import_id,
+            opening,
+            assumptions=assumptions,
+            index=index,
+        )
+        openings[opening_id] = payload
+
+    scratch_model = {
+        "spaces": spaces,
+        "walls": walls,
+        "openings": openings,
+        "import_sessions": {import_id: {"quality_flags": flags}},
+        "quality_flags": [],
+    }
+    shell_trim = trim_generation_shell_overreach(scratch_model, import_id)
+    if shell_trim["status"] == "trimmed":
+        flags.append("source_shell_overreach_trimmed_during_generation")
+        walls = scratch_model["walls"]
+        openings = scratch_model["openings"]
+
+    generated_model = {
+        "design_model": DESIGN_MODEL_FILENAME,
+        "space_ids": sorted(spaces),
+        "wall_ids": sorted(walls),
+        "opening_ids": sorted(openings),
+        "changed_model_ids": sorted([*spaces, *walls, *openings]),
+    }
+    scale = interpretation.get("scale", {})
+    return {
+        "spaces": spaces,
+        "walls": walls,
+        "openings": openings,
+        "generated_model": generated_model,
+        "assumptions": assumptions,
+        "quality_flags": dedupe_quality_flags(flags),
+        "summary": {
+            "space_count": len(spaces),
+            "wall_count": len(walls),
+            "opening_count": len(openings),
+            "confidence": min(
+                [float(review["confidence"]) for review in selected_by_space.values()]
+                or [0.0]
+            ),
+            "accepted_candidate_count": len(selected_by_space),
+            "rejected_candidate_count": len(rejected_candidates),
+        },
+        "interpretation": {
+            "version": "1.0",
+            "import_id": import_id,
+            "created_at": utc_now(),
+            "autonomous_first": True,
+            "source_interpretation_used": True,
+            "scale": scale,
+            "negative_regions": negative_regions,
+            "candidate_reviews": [
+                {
+                    key: value
+                    for key, value in review.items()
+                    if key not in {"candidate", "footprint", "bounds"}
+                }
+                for review in candidate_reviews
+            ],
+            "selected_space_ids": sorted(spaces),
+            "rejected_candidate_count": len(rejected_candidates),
+            "shell_trim": shell_trim,
+            "assumptions": assumptions,
+            "quality_flags": dedupe_quality_flags(flags),
+            "generated_model": generated_model,
+        },
+    }
+
+
 def remove_previous_import_entities(
     design_model: dict[str, Any],
     import_id: str,
@@ -421,6 +1081,9 @@ def import_floorplan_to_model(
     label: str | None = None,
     width: float | None = None,
     depth: float | None = None,
+    source_interpretation_path: str | Path | None = None,
+    area_tolerance_ratio: float = DEFAULT_LABEL_AREA_TOLERANCE_RATIO,
+    negative_space_overlap_tolerance_m2: float = DEFAULT_NEGATIVE_SPACE_OVERLAP_TOLERANCE_M2,
     wall_height: float = DEFAULT_WALL_HEIGHT,
     wall_thickness: float = DEFAULT_WALL_THICKNESS,
     overwrite: bool = False,
@@ -449,37 +1112,15 @@ def import_floorplan_to_model(
         raise ValueError("depth must be positive when provided.")
     if wall_height <= 0 or wall_thickness <= 0:
         raise ValueError("wall_height and wall_thickness must be positive.")
+    if area_tolerance_ratio < 0:
+        raise ValueError("area_tolerance_ratio must be non-negative.")
+    if negative_space_overlap_tolerance_m2 < 0:
+        raise ValueError("negative_space_overlap_tolerance_m2 must be non-negative.")
 
     source_type = str(manifest["source"].get("source_type", "unknown"))
     has_explicit_dimensions = width is not None and depth is not None
     model_width = float(width if width is not None else DEFAULT_IMPORTED_WIDTH)
     model_depth = float(depth if depth is not None else DEFAULT_IMPORTED_DEPTH)
-    confidence = source_confidence(source_type, has_explicit_dimensions)
-    assumptions = [
-        "Generated as an editable working model, not a verified survey.",
-        "Outer shell interpreted as a rectangular floor plan.",
-    ]
-    if not has_explicit_dimensions:
-        assumptions.append(
-            f"Scale estimated as {model_width:g} mm by {model_depth:g} mm."
-        )
-
-    ids = imported_entity_ids(chosen_id)
-    generated_model = {
-        "design_model": DESIGN_MODEL_FILENAME,
-        "space_ids": [ids["space_id"]],
-        "wall_ids": ids["wall_ids"],
-        "opening_ids": ids["opening_ids"],
-        "changed_model_ids": [
-            ids["space_id"],
-            *ids["wall_ids"],
-            *ids["opening_ids"],
-        ],
-    }
-    flags = imported_quality_flags(
-        source_type,
-        has_explicit_dimensions=has_explicit_dimensions,
-    )
 
     design_model_path = find_design_model_path(root)
     design_model, model_errors = load_design_model(str(design_model_path))
@@ -487,16 +1128,84 @@ def import_floorplan_to_model(
         raise ValueError("; ".join(model_errors))
 
     removed = remove_previous_import_entities(design_model, chosen_id)
-    design_model.setdefault("spaces", {})[ids["space_id"]] = space_payload(
-        chosen_id,
-        width=model_width,
-        depth=model_depth,
-        wall_height=wall_height,
-        confidence=confidence,
-        assumptions=assumptions,
+    source_interpretation = (
+        load_source_interpretation(source_interpretation_path)
+        if source_interpretation_path is not None
+        else None
     )
-    design_model.setdefault("walls", {}).update(
-        wall_payloads(
+
+    if source_interpretation is not None:
+        payloads = build_interpreted_import_payloads(
+            chosen_id,
+            source_interpretation,
+            source_type=source_type,
+            wall_height=wall_height,
+            wall_thickness=wall_thickness,
+            area_tolerance_ratio=area_tolerance_ratio,
+            negative_space_overlap_tolerance_m2=negative_space_overlap_tolerance_m2,
+        )
+        spaces = payloads["spaces"]
+        walls = payloads["walls"]
+        openings = payloads["openings"]
+        generated_model = payloads["generated_model"]
+        assumptions = payloads["assumptions"]
+        flags = payloads["quality_flags"]
+        summary = {
+            **payloads["summary"],
+            "scale_source": "source_interpretation",
+        }
+        interpretation = payloads["interpretation"]
+        scale_payload = {
+            "units": "mm",
+            "source": "source_interpretation",
+            "confidence": float(source_interpretation.get("scale", {}).get("confidence", 0.65)),
+            **{
+                key: value
+                for key, value in source_interpretation.get("scale", {}).items()
+                if key not in {"units", "source", "confidence"}
+            },
+        }
+        if width is not None:
+            scale_payload["width"] = model_width
+        if depth is not None:
+            scale_payload["depth"] = model_depth
+    else:
+        confidence = source_confidence(source_type, has_explicit_dimensions)
+        assumptions = [
+            "Generated as an editable working model, not a verified survey.",
+            "Outer shell interpreted as a rectangular floor plan.",
+        ]
+        if not has_explicit_dimensions:
+            assumptions.append(
+                f"Scale estimated as {model_width:g} mm by {model_depth:g} mm."
+            )
+        ids = imported_entity_ids(chosen_id)
+        generated_model = {
+            "design_model": DESIGN_MODEL_FILENAME,
+            "space_ids": [ids["space_id"]],
+            "wall_ids": ids["wall_ids"],
+            "opening_ids": ids["opening_ids"],
+            "changed_model_ids": [
+                ids["space_id"],
+                *ids["wall_ids"],
+                *ids["opening_ids"],
+            ],
+        }
+        flags = imported_quality_flags(
+            source_type,
+            has_explicit_dimensions=has_explicit_dimensions,
+        )
+        spaces = {
+            ids["space_id"]: space_payload(
+                chosen_id,
+                width=model_width,
+                depth=model_depth,
+                wall_height=wall_height,
+                confidence=confidence,
+                assumptions=assumptions,
+            )
+        }
+        walls = wall_payloads(
             chosen_id,
             width=model_width,
             depth=model_depth,
@@ -505,28 +1214,47 @@ def import_floorplan_to_model(
             confidence=confidence,
             assumptions=assumptions,
         )
-    )
-    design_model.setdefault("openings", {}).update(
-        opening_payloads(
+        openings = opening_payloads(
             chosen_id,
             width=model_width,
             depth=model_depth,
             confidence=confidence,
             assumptions=assumptions,
         )
-    )
-    design_model.setdefault("import_sessions", {})[chosen_id] = {
-        "source_file": manifest["source"]["stored_path"],
-        "source_type": source_type,
-        "status": "imported",
-        "manifest_path": project_relative_path(root, manifest_file),
-        "scale": {
+        interpretation = {
+            "version": "1.0",
+            "import_id": chosen_id,
+            "created_at": utc_now(),
+            "autonomous_first": True,
+            "source_interpretation_used": False,
+            "assumptions": assumptions,
+            "quality_flags": flags,
+            "generated_model": generated_model,
+        }
+        scale_payload = {
             "units": "mm",
             "source": "user_dimensions" if has_explicit_dimensions else "estimated",
             "confidence": 1.0 if has_explicit_dimensions else 0.35,
             "width": model_width,
             "depth": model_depth,
-        },
+        }
+        summary = {
+            "space_count": 1,
+            "wall_count": len(ids["wall_ids"]),
+            "opening_count": len(ids["opening_ids"]),
+            "scale_source": scale_payload["source"],
+            "confidence": confidence,
+        }
+
+    design_model.setdefault("spaces", {}).update(spaces)
+    design_model.setdefault("walls", {}).update(walls)
+    design_model.setdefault("openings", {}).update(openings)
+    design_model.setdefault("import_sessions", {})[chosen_id] = {
+        "source_file": manifest["source"]["stored_path"],
+        "source_type": source_type,
+        "status": "imported",
+        "manifest_path": project_relative_path(root, manifest_file),
+        "scale": scale_payload,
         "quality_flags": flags,
         "generated_model": generated_model,
     }
@@ -554,24 +1282,29 @@ def import_floorplan_to_model(
         design_model,
         reason="floorplan_imported",
         source="import_floorplan_to_model",
-        details={"import_id": chosen_id, "changed_model_ids": generated_model["changed_model_ids"]},
+        details={
+            "import_id": chosen_id,
+            "changed_model_ids": generated_model["changed_model_ids"],
+            "source_interpretation_used": source_interpretation is not None,
+        },
     )
 
     saved, save_errors = save_design_model(str(design_model_path), design_model)
     if not saved:
         raise ValueError("; ".join(save_errors))
 
-    interpretation = {
-        "version": "1.0",
-        "import_id": chosen_id,
-        "created_at": utc_now(),
-        "autonomous_first": True,
-        "assumptions": assumptions,
-        "quality_flags": flags,
-        "generated_model": generated_model,
-    }
     extracted_path = import_session_path(root, chosen_id) / "extracted" / "interpretation.json"
     extracted_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_interpretation_path = None
+    if source_interpretation_path is not None:
+        raw_interpretation_path = extracted_path.parent / "source_interpretation.json"
+        source_file = Path(source_interpretation_path).expanduser().resolve()
+        if source_file != raw_interpretation_path:
+            shutil.copyfile(source_file, raw_interpretation_path)
+        interpretation["source_interpretation_path"] = project_relative_path(
+            root,
+            raw_interpretation_path,
+        )
     extracted_path.write_text(
         json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -588,6 +1321,11 @@ def import_floorplan_to_model(
             "autonomous_first": True,
             "removed_previous_entities": removed,
             "interpretation_path": project_relative_path(root, extracted_path),
+            "source_interpretation_path": (
+                project_relative_path(root, raw_interpretation_path)
+                if raw_interpretation_path is not None
+                else None
+            ),
         },
     )
     saved_manifest, manifest_errors = save_import_manifest(manifest_file, manifest)
@@ -605,13 +1343,8 @@ def import_floorplan_to_model(
         "assumptions": assumptions,
         "quality_flags": flags,
         "removed_previous_entities": removed,
-        "summary": {
-            "space_count": 1,
-            "wall_count": len(ids["wall_ids"]),
-            "opening_count": len(ids["opening_ids"]),
-            "scale_source": design_model["import_sessions"][chosen_id]["scale"]["source"],
-            "confidence": confidence,
-        },
+        "source_interpretation_used": source_interpretation is not None,
+        "summary": summary,
     }
 
 

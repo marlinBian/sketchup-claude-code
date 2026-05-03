@@ -1,5 +1,5 @@
 ---
-name: sketchfab_search
+name: sketchfab-search
 description: Search external 3D model sources when packaged components are insufficient.
 ---
 

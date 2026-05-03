@@ -24,8 +24,8 @@ def test_init_project_empty_template_creates_workspace_files(tmp_path):
     assert (project_path / ".mcp.json").exists()
     assert (project_path / "AGENTS.md").exists()
     assert (project_path / "CLAUDE.md").exists()
-    assert (project_path / ".agents" / "skills" / "bathroom_planning" / "SKILL.md").exists()
-    assert (project_path / ".claude" / "skills" / "bathroom_planning" / "SKILL.md").exists()
+    assert (project_path / ".agents" / "skills" / "bathroom-planning" / "SKILL.md").exists()
+    assert (project_path / ".claude" / "skills" / "bathroom-planning" / "SKILL.md").exists()
     assert (project_path / "snapshots").is_dir()
     assert (project_path / "snapshots" / "manifest.json").exists()
     assert (project_path / "imports").is_dir()
@@ -72,8 +72,8 @@ def test_init_project_bathroom_template_creates_seed_bathroom(tmp_path):
     assert (project_path / "imports").is_dir()
     assert (project_path / "AGENTS.md").exists()
     assert (project_path / "CLAUDE.md").exists()
-    assert (project_path / ".agents" / "skills" / "designer_workflow" / "SKILL.md").exists()
-    assert (project_path / ".claude" / "skills" / "designer_workflow" / "SKILL.md").exists()
+    assert (project_path / ".agents" / "skills" / "designer-workflow" / "SKILL.md").exists()
+    assert (project_path / ".claude" / "skills" / "designer-workflow" / "SKILL.md").exists()
 
 
 def test_init_project_applies_configured_designer_profile(monkeypatch, tmp_path):

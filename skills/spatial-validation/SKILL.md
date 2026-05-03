@@ -1,5 +1,5 @@
 ---
-name: spatial_validation
+name: spatial-validation
 description: Check project-backed layouts for geometric plausibility, containment, overlap, and simple clearance issues.
 ---
 

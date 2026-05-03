@@ -1,5 +1,5 @@
 ---
-name: geometry_composition
+name: geometry-composition
 description: Compose simple placeholder geometry from supported modeling tools.
 ---
 

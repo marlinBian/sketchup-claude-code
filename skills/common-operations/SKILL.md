@@ -1,5 +1,5 @@
 ---
-name: common_operations
+name: common-operations
 description: Use implemented SketchUp Agent Harness MCP tools for frequent designer requests while preserving project truth.
 ---
 

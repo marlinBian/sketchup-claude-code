@@ -262,6 +262,9 @@ default, then let designers repair it through normal iteration.
 - expose `import_floorplan_to_model`
 - write generated spaces, walls, openings, and provenance into
   `design_model.json`
+- support source interpretation evidence with dimension chains, room-label
+  areas, negative/outside regions, and candidate rejection before truth is
+  written
 - return model IDs, assumptions, quality flags, and import summary
 - avoid routine confirmation prompts before writing the first working model
 - add fixtures for a simple imported floor plan

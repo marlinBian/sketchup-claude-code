@@ -1,5 +1,5 @@
 ---
-name: designer_workflow
+name: designer-workflow
 description: Guide designers through project setup, planning, placement, validation, execution, versioning, and visual review workflows.
 ---
 

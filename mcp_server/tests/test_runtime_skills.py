@@ -1,6 +1,7 @@
 """Tests for runtime skill installation."""
 
 import json
+import re
 import shutil
 import subprocess
 import zipfile
@@ -30,7 +31,7 @@ def parse_skill_frontmatter(path):
 
 def make_runtime_skill_source(tmp_path):
     source = tmp_path / "skills"
-    skill_dir = source / "bathroom_planning"
+    skill_dir = source / "bathroom-planning"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("# Bathroom Planning\n", encoding="utf-8")
     style_dir = source / "styles"
@@ -53,8 +54,8 @@ def test_install_runtime_skills_copies_codex_and_claude_targets(tmp_path):
     result = install_runtime_skills(project_path, source_dir=source)
 
     assert result["installed"] is True
-    assert (project_path / ".agents" / "skills" / "bathroom_planning" / "SKILL.md").exists()
-    assert (project_path / ".claude" / "skills" / "bathroom_planning" / "SKILL.md").exists()
+    assert (project_path / ".agents" / "skills" / "bathroom-planning" / "SKILL.md").exists()
+    assert (project_path / ".claude" / "skills" / "bathroom-planning" / "SKILL.md").exists()
     assert (project_path / ".agents" / "skills" / "styles" / "SKILL.md").exists()
     assert result["installs"]["codex"]["file_count"] == 2
     assert result["installs"]["claude"]["file_count"] == 2
@@ -64,7 +65,7 @@ def test_install_runtime_skills_copies_codex_and_claude_targets(tmp_path):
         ).read_text(encoding="utf-8")
     )
     assert set(manifest["hashes"]) == {
-        "bathroom_planning/SKILL.md",
+        "bathroom-planning/SKILL.md",
         "styles/SKILL.md",
     }
 
@@ -85,7 +86,7 @@ def test_install_runtime_skills_requires_force_for_local_changes(tmp_path):
     source = make_runtime_skill_source(tmp_path)
     project_path = tmp_path / "design"
     install_runtime_skills(project_path, source_dir=source)
-    target_file = project_path / ".agents" / "skills" / "bathroom_planning" / "SKILL.md"
+    target_file = project_path / ".agents" / "skills" / "bathroom-planning" / "SKILL.md"
     target_file.write_text("# Local Edit\n", encoding="utf-8")
 
     try:
@@ -100,7 +101,7 @@ def test_install_runtime_skills_force_replaces_local_changes(tmp_path):
     source = make_runtime_skill_source(tmp_path)
     project_path = tmp_path / "design"
     install_runtime_skills(project_path, source_dir=source)
-    target_file = project_path / ".agents" / "skills" / "bathroom_planning" / "SKILL.md"
+    target_file = project_path / ".agents" / "skills" / "bathroom-planning" / "SKILL.md"
     target_file.write_text("# Local Edit\n", encoding="utf-8")
 
     result = install_runtime_skills(project_path, source_dir=source, force=True)
@@ -147,7 +148,7 @@ def test_runtime_skill_status_detects_modified_and_missing_files(tmp_path):
     source = make_runtime_skill_source(tmp_path)
     project_path = tmp_path / "design"
     install_runtime_skills(project_path, source_dir=source)
-    codex_skill = project_path / ".agents" / "skills" / "bathroom_planning" / "SKILL.md"
+    codex_skill = project_path / ".agents" / "skills" / "bathroom-planning" / "SKILL.md"
     claude_skill = project_path / ".claude" / "skills" / "styles" / "SKILL.md"
     codex_skill.write_text("# Local Edit\n", encoding="utf-8")
     claude_skill.unlink()
@@ -156,7 +157,7 @@ def test_runtime_skill_status_detects_modified_and_missing_files(tmp_path):
 
     assert status["ok"] is False
     assert status["checks"]["codex"]["modified_files"] == [
-        "bathroom_planning/SKILL.md"
+        "bathroom-planning/SKILL.md"
     ]
     assert status["checks"]["claude"]["missing_files"] == ["styles/SKILL.md"]
 
@@ -178,7 +179,7 @@ def test_cli_install_skills_outputs_json(tmp_path, capsys):
 
     assert exit_code == 0
     assert data["installed"] is True
-    assert (project_path / ".agents" / "skills" / "bathroom_planning" / "SKILL.md").exists()
+    assert (project_path / ".agents" / "skills" / "bathroom-planning" / "SKILL.md").exists()
 
 
 def test_packaged_runtime_skills_source_points_to_installed_runtime():
@@ -198,6 +199,7 @@ def test_product_runtime_skills_are_skill_directories():
     assert all((path / "SKILL.md").exists() for path in skill_dirs)
     for skill_dir in skill_dirs:
         frontmatter = parse_skill_frontmatter(skill_dir / "SKILL.md")
+        assert re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", skill_dir.name)
         assert frontmatter["name"] == skill_dir.name
         assert frontmatter["description"]
 
@@ -226,6 +228,6 @@ def test_wheel_contains_packaged_runtime_skills(tmp_path):
     with zipfile.ZipFile(wheel) as archive:
         names = set(archive.namelist())
 
-    assert "mcp_server/packaged/runtime_skills/bathroom_planning/SKILL.md" in names
-    assert "mcp_server/packaged/runtime_skills/designer_workflow/SKILL.md" in names
+    assert "mcp_server/packaged/runtime_skills/bathroom-planning/SKILL.md" in names
+    assert "mcp_server/packaged/runtime_skills/designer-workflow/SKILL.md" in names
     assert "mcp_server/packaged/runtime_skills/styles/SKILL.md" in names

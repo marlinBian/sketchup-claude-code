@@ -1,5 +1,5 @@
 ---
-name: import_floorplan
+name: import-floorplan
 description: Import DWG, DXF, PDF, image, or floor-plan source material directly into editable project truth with source-backed repair.
 ---
 
@@ -35,9 +35,14 @@ Import this floor plan and generate an editable model.
 
 1. Use `get_project_state` to confirm the current project path and whether
    existing imported model truth may be overwritten.
-2. Call `import_floorplan_to_model` with the source path. If the user gives
-   known dimensions, pass `width` and `depth` in millimeters. If not, let the
-   tool estimate scale and write quality flags.
+2. For raster/PDF/CAD sources where room labels, dimension chains, or outside
+   blank regions are visible, create a project-local source interpretation JSON
+   before import. Include `dimension_chains`, `negative_regions`,
+   `space_candidates` with `label_area_m2` and `dimension_constraints`, and
+   explicit wall/opening candidates when available. Then call
+   `import_floorplan_to_model` with `source_interpretation_path`. If the user
+   gives known dimensions, pass `width` and `depth` in millimeters. If not, let
+   the tool estimate scale and write quality flags.
 3. Call `plan_project_execution` to verify the imported walls can be compiled
    into hosted opening operations with sill/header wall pieces and thin
    door/window marker geometry.
@@ -51,6 +56,12 @@ Import this floor plan and generate an editable model.
 
 Do not ask the designer to confirm every detected wall, door, window, or numeric
 dimension before writing the first working model.
+
+Do not patch `design_model.json` directly when a first import obviously expands
+into outside blank source area or contradicts a visible room-area label. Treat
+that as a source interpretation/generation issue: update the extracted
+interpretation or rerun import with `source_interpretation_path` so candidate
+spaces are rejected before truth is written.
 
 For floor-plan images, treat the source image as an extraction aid, not as the
 final SketchUp object. Unless the designer explicitly asks for an overlay review,

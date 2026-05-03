@@ -198,7 +198,7 @@ Enables commands like "lamp above dining table":
 }
 ```
 
-See `skills/semantic_positioning/SKILL.md` for full documentation.
+See `skills/semantic-positioning/SKILL.md` for full documentation.
 
 ---
 
@@ -210,10 +210,10 @@ Skills are **instruction sets** that guide LLM behavior for specific domains.
 
 | Skill | File | Purpose |
 |-------|------|---------|
-| `geometry_composition` | `skills/geometry_composition/SKILL.md` | Compose furniture from primitives |
-| `designer_workflow` | `skills/designer_workflow/SKILL.md` | Standard design workflow |
-| `semantic_positioning` | `skills/semantic_positioning/SKILL.md` | Relative positioning |
-| `common_operations` | `skills/common_operations/SKILL.md` | Frequent design operations |
+| `geometry-composition` | `skills/geometry-composition/SKILL.md` | Compose furniture from primitives |
+| `designer-workflow` | `skills/designer-workflow/SKILL.md` | Standard design workflow |
+| `semantic-positioning` | `skills/semantic-positioning/SKILL.md` | Relative positioning |
+| `common-operations` | `skills/common-operations/SKILL.md` | Frequent design operations |
 
 ### Rules
 
@@ -331,13 +331,13 @@ sketchup-agent-harness/
 │   └── undo_semantics.md
 ├── skills/                            # LLM instruction sets
 │   ├── SKILL.md
-│   ├── geometry_composition/
+│   ├── geometry-composition/
 │   │   └── SKILL.md
-│   ├── designer_workflow/
+│   ├── designer-workflow/
 │   │   └── SKILL.md
-│   ├── semantic_positioning/
+│   ├── semantic-positioning/
 │   │   └── SKILL.md
-│   └── common_operations/
+│   └── common-operations/
 │       └── SKILL.md
 ├── scripts/                           # Utility scripts
 │   ├── reload_su_bridge.rb
@@ -471,11 +471,11 @@ export_ifc(output_path: str)
 - [x] Undo transaction wrapper
 
 ### Phase 4: Skills (ECC) ✅
-- [x] `geometry_composition/SKILL.md` - Furniture composition patterns
-- [x] `designer_workflow/SKILL.md` - Standard design workflow
-- [x] `semantic_positioning/SKILL.md` - Relative positioning
-- [x] `common_operations/SKILL.md` - Frequent operations
-- [x] `component_search/SKILL.md` - Library search workflow
+- [x] `geometry-composition/SKILL.md` - Furniture composition patterns
+- [x] `designer-workflow/SKILL.md` - Standard design workflow
+- [x] `semantic-positioning/SKILL.md` - Relative positioning
+- [x] `common-operations/SKILL.md` - Frequent operations
+- [x] `component-search/SKILL.md` - Library search workflow
 
 ### Phase 5: Rules ✅
 - [x] `rules/spatial_validator.rb` - Spatial constraint validation

@@ -41,7 +41,7 @@ def test_doctor_reports_project_validation(tmp_path):
 def test_doctor_warns_on_modified_runtime_skills(tmp_path):
     project_path = tmp_path / "bathroom"
     init_project(project_path, template="bathroom")
-    skill_file = project_path / ".agents" / "skills" / "designer_workflow" / "SKILL.md"
+    skill_file = project_path / ".agents" / "skills" / "designer-workflow" / "SKILL.md"
     skill_file.write_text("# Local Edit\n", encoding="utf-8")
 
     result = run_doctor(
@@ -55,7 +55,7 @@ def test_doctor_warns_on_modified_runtime_skills(tmp_path):
     assert skills_check["ok"] is False
     assert skills_check["severity"] == "warning"
     assert skills_check["details"]["checks"]["codex"]["modified_files"] == [
-        "designer_workflow/SKILL.md"
+        "designer-workflow/SKILL.md"
     ]
     assert "install-skills" in skills_check["message"]
 

@@ -314,8 +314,8 @@ def wheel_install_check(
         profile,
         plugins / "su_bridge" / "lib" / "su_bridge.rb",
         plugins / "su_bridge.rb",
-        project / ".agents" / "skills" / "bathroom_planning" / "SKILL.md",
-        project / ".claude" / "skills" / "bathroom_planning" / "SKILL.md",
+        project / ".agents" / "skills" / "bathroom-planning" / "SKILL.md",
+        project / ".claude" / "skills" / "bathroom-planning" / "SKILL.md",
         project / "imports" / "import_001" / "manifest.json",
         project / "imports" / "import_001" / "source" / import_source.name,
     ]

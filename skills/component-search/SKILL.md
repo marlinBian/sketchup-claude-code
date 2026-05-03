@@ -1,5 +1,5 @@
 ---
-name: component_search
+name: component-search
 description: Search, register, import, and place semantic components from packaged or project-local registries.
 ---
 

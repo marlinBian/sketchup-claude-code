@@ -1,5 +1,5 @@
 ---
-name: semantic_positioning
+name: semantic-positioning
 description: Resolve supported space-relative and component-relative placement language into project-backed coordinates.
 ---
 

@@ -1,5 +1,5 @@
 ---
-name: design_rules
+name: design-rules
 description: Read and update project-local or reusable designer design rules for planning preferences and clearances.
 ---
 
