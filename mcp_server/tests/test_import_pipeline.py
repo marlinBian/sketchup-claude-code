@@ -220,6 +220,68 @@ def make_ambiguous_balcony_interpretation(tmp_path):
     return path
 
 
+def make_blocked_passage_interpretation(tmp_path):
+    """Create a fixture where one continuous wall incorrectly blocks a hallway."""
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "living_candidate",
+                "space_id": "living_001",
+                "type": "living_room",
+                "name": "Living Room",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [4000, 0, 0], [4000, 3000, 0], [0, 3000, 0]],
+            },
+            {
+                "id": "storage_candidate",
+                "space_id": "storage_001",
+                "type": "storage",
+                "name": "Storage",
+                "confidence": 0.7,
+                "footprint": [
+                    [0, 3000, 0],
+                    [1200, 3000, 0],
+                    [1200, 4200, 0],
+                    [0, 4200, 0],
+                ],
+            },
+            {
+                "id": "passage_candidate",
+                "space_id": "passage_001",
+                "type": "hallway",
+                "name": "Passage",
+                "confidence": 0.7,
+                "footprint": [
+                    [1200, 3000, 0],
+                    [2500, 3000, 0],
+                    [2500, 4200, 0],
+                    [1200, 4200, 0],
+                ],
+            },
+        ],
+        "walls": [
+            {
+                "wall_id": "w_service_south",
+                "path": [[0, 3000, 0], [2500, 3000, 0]],
+                "space_refs": ["living_001", "storage_001", "passage_001"],
+                "confidence": 0.6,
+            },
+            {
+                "wall_id": "w_storage_passage",
+                "path": [[1200, 3000, 0], [1200, 4200, 0]],
+                "space_refs": ["storage_001", "passage_001"],
+                "confidence": 0.6,
+            },
+        ],
+        "openings": [],
+    }
+    path = tmp_path / "blocked_passage_interpretation.json"
+    path.write_text(json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
 def create_offset_right_boundary(project):
     """Create a near-boundary imported wall offset like a mixed dimension chain."""
     design_model_path = project / "design_model.json"
@@ -478,6 +540,52 @@ def test_interpreted_import_rejects_overwide_space_and_trims_shell(tmp_path):
     }
     assert extracted["shell_trim"]["trimmed_walls"] == ["w_ext_bottom"]
     assert validation["ok"] is True
+
+
+def test_interpreted_import_infers_doorless_circulation_opening(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "plan.png")
+    interpretation = make_blocked_passage_interpretation(tmp_path)
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation,
+    )
+    design_model = json.loads((project / "design_model.json").read_text(encoding="utf-8"))
+    extracted = json.loads(
+        (
+            project
+            / "imports"
+            / "import_001"
+            / "extracted"
+            / "interpretation.json"
+        ).read_text(encoding="utf-8")
+    )
+    plan = build_project_execution_plan(project)
+
+    opening = design_model["openings"]["w_service_south_circulation_opening_01"]
+    service_operation = next(
+        operation
+        for operation in plan["bridge_operations"]
+        if operation["payload"].get("wall_id") == "w_service_south"
+    )
+
+    assert (
+        "source_circulation_openings_inferred_during_generation"
+        in result["quality_flags"]
+    )
+    assert extracted["circulation_openings"]["status"] == "inferred"
+    assert opening["type"] == "opening"
+    assert opening["host_wall"] == "w_service_south"
+    assert opening["offset"] == 1200.0
+    assert opening["width"] == 1300.0
+    assert opening["height"] == 2800.0
+    assert opening["layer"] == "Other"
+    assert service_operation["operation_type"] == "create_wall_with_openings"
+    assert service_operation["payload"]["openings"][0]["type"] == "opening"
 
 
 def test_interpreted_import_prefers_label_area_over_ambiguous_blank_region(tmp_path):

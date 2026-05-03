@@ -289,6 +289,7 @@ module SuBridge
             height: effective_height,
             sill_height: sill_height,
             layer: opening["layer"] || opening[:layer],
+            swing_direction: opening["swing_direction"] || opening[:swing_direction],
           }
         end.sort_by { |opening| opening[:offset] }
       end
@@ -329,6 +330,12 @@ module SuBridge
       end
 
       def self.create_opening_marker(origin, direction, opening, thickness, alignment, options)
+        return nil if opening[:type] == "opening"
+
+        if opening[:type] == "door"
+          return create_door_marker(origin, direction, opening, thickness, options)
+        end
+
         marker_thickness = [DEFAULT_MARKER_THICKNESS, thickness / 4.0].min
         return nil if marker_thickness <= 0
 
@@ -354,6 +361,35 @@ module SuBridge
             "wall_id" => options["wall_id"],
             "opening_id" => opening[:opening_id],
             "opening_type" => opening[:type],
+          }
+        )
+      end
+
+      def self.create_door_marker(origin, direction, opening, thickness, options)
+        leaf_thickness = [DEFAULT_MARKER_THICKNESS * 2.0, thickness / 2.0].min
+        return nil if leaf_thickness <= 0
+
+        normal = Vector3d.new(-direction[1], direction[0], 0)
+        hinge_distance = if opening[:swing_direction] == "right"
+                         opening[:offset] + opening[:width]
+                         else
+                         opening[:offset]
+                         end
+        hinge = Vector3d.new(*point_at(origin, direction, hinge_distance, opening[:sill_height]))
+        leaf_end = hinge + (normal * opening[:width])
+
+        create(
+          start: hinge.to_a,
+          end_point: leaf_end.to_a,
+          height: opening[:height],
+          thickness: leaf_thickness,
+          alignment: "center",
+          options: {
+            "layer" => opening[:layer] || "Doors",
+            "wall_id" => options["wall_id"],
+            "opening_id" => opening[:opening_id],
+            "opening_type" => opening[:type],
+            "swing_direction" => opening[:swing_direction] || "left",
           }
         )
       end

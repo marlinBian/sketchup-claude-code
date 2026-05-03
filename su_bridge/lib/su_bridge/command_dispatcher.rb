@@ -880,7 +880,10 @@ module SuBridge
       raise ::SuBridge::UndoManager::ValidationError, "active SketchUp model not available" unless model
 
       ::FileUtils.mkdir_p(::File.dirname(output_path))
-      saved = if model.respond_to?(:save_copy)
+      model_path = model.respond_to?(:path) ? ::File.expand_path(model.path.to_s) : nil
+      saved = if model_path && !model_path.empty? && model_path == output_path && model.respond_to?(:save)
+                model.save
+              elsif model.respond_to?(:save_copy)
                 model.save_copy(output_path)
               else
                 model.save(output_path)

@@ -50,6 +50,12 @@ Import this floor plan and generate an editable model.
    balcony candidate than a visually adjacent `1180mm` strip. In ambiguous
    cases, emit competing `space_candidates` and avoid hard negative regions
    over any candidate that fits both the room label area and dimension chain.
+   Do not draw continuous walls through visible circulation paths. If a hallway
+   or passage visibly connects to a living/dining/kitchen area without a door
+   arc, emit a hosted `opening` or let the import tool infer one from adjacent
+   accepted space footprints. Use `door` only when the source shows a door leaf
+   or swing arc, and set `swing_direction` from the hinge side along the host
+   wall path.
 3. Call `plan_project_execution` to verify the imported walls can be compiled
    into hosted opening operations with sill/header wall pieces and thin
    door/window marker geometry.
@@ -144,6 +150,11 @@ whole import by default.
    rather than the import classifier: `plan_project_execution` should emit
    `create_wall_with_openings`, not a continuous wall and not a `create_box`
    placeholder for the opening.
+   If a designer reports that a passage or doorway disappeared, inspect the
+   generated wall/opening trace before editing truth. Doorless passage
+   connections should be hosted `opening` entries that cut the wall without
+   producing a blocking marker; doors should render as a directional door leaf
+   marker inside the hosted wall opening.
 7. Call `plan_project_execution` again.
 8. Execute the project with `clean_before_execute=true` and `clean_scope="all"`
    when the designer wants SketchUp updated, so stale geometry does not remain

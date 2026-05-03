@@ -328,10 +328,18 @@ RSpec.describe SuBridge::CommandDispatcher do
 
   describe "#handle_save_model" do
     class FakeSaveModelForDispatcher
-      attr_reader :saved_path
+      attr_reader :saved_path, :save_called
+
+      attr_accessor :path
 
       def save_copy(path)
         @saved_path = path
+        File.write(path, "skp")
+        true
+      end
+
+      def save
+        @save_called = true
         File.write(path, "skp")
         true
       end
@@ -353,6 +361,26 @@ RSpec.describe SuBridge::CommandDispatcher do
         expect(model.saved_path).to eq(expected_path)
         expect(result[:save_info][:format]).to eq("skp")
         expect(result[:save_info][:output_path]).to eq(expected_path)
+        expect(result[:save_info][:bytes]).to eq(3)
+      end
+    end
+
+    it "saves the active model in place when the output path matches the current model" do
+      model = FakeSaveModelForDispatcher.new
+      allow(Sketchup).to receive(:active_model).and_return(model)
+
+      Dir.mktmpdir do |dir|
+        output_path = File.join(dir, "fresh_import.skp")
+        model.path = output_path
+        result = dispatcher.send(
+          :handle_save_model,
+          { "output_path" => output_path }
+        )
+
+        expect(File).to exist(output_path)
+        expect(model.save_called).to be(true)
+        expect(model.saved_path).to be_nil
+        expect(result[:save_info][:output_path]).to eq(output_path)
         expect(result[:save_info][:bytes]).to eq(3)
       end
     end
@@ -659,6 +687,95 @@ RSpec.describe SuBridge::Entities::WallBuilder do
       expect(create_calls.map { |call| call[:height] }).to eq([2800, 900.0, 700.0, 1200.0, 2800])
       expect(create_calls[3][:options]["layer"]).to eq("Windows")
       expect(create_calls[3][:thickness]).to eq(20.0)
+    end
+
+    it "cuts a generic passage opening without adding a blocking marker" do
+      groups = (1..2).map do |id|
+        Class.new do
+          define_method(:entityID) { id }
+        end.new
+      end
+      create_calls = []
+      allow(described_class).to receive(:create) do |kwargs|
+        create_calls << kwargs
+        groups.shift
+      end
+      allow(described_class).to receive(:spatial_delta).and_return(
+        bounding_box: { min: [0, 0, 0], max: [1, 1, 1] },
+        volume_mm3: 1
+      )
+
+      result = described_class.create_with_openings(
+        start: [0, 0, 0],
+        end_point: [3000, 0, 0],
+        height: 2800,
+        thickness: 120,
+        alignment: "center",
+        openings: [
+          {
+            "opening_id" => "passage_001",
+            "type" => "opening",
+            "offset" => 1000,
+            "width" => 1000,
+            "height" => 2800,
+            "sill_height" => 0,
+            "layer" => "Other",
+          },
+        ],
+        options: { "wall_id" => "service_wall", "wall_segment_id" => "service_wall" }
+      )
+
+      expect(result[:entity_ids]).to eq(%w[1 2])
+      expect(result[:opening_results][0][:entity_ids]).to eq([])
+      expect(create_calls.length).to eq(2)
+      expect(create_calls.map { |call| call[:options]["wall_segment_id"] }).to eq(
+        %w[service_wall_solid_1_before service_wall_solid_after]
+      )
+    end
+
+    it "uses hosted door swing direction to draw a door leaf into the adjacent space" do
+      groups = (1..4).map do |id|
+        Class.new do
+          define_method(:entityID) { id }
+        end.new
+      end
+      create_calls = []
+      allow(described_class).to receive(:create) do |kwargs|
+        create_calls << kwargs
+        groups.shift
+      end
+      allow(described_class).to receive(:spatial_delta).and_return(
+        bounding_box: { min: [0, 0, 0], max: [1, 1, 1] },
+        volume_mm3: 1
+      )
+
+      result = described_class.create_with_openings(
+        start: [0, 0, 0],
+        end_point: [3000, 0, 0],
+        height: 2800,
+        thickness: 120,
+        alignment: "center",
+        openings: [
+          {
+            "opening_id" => "door_001",
+            "type" => "door",
+            "offset" => 1000,
+            "width" => 900,
+            "height" => 2100,
+            "sill_height" => 0,
+            "layer" => "Doors",
+            "swing_direction" => "right",
+          },
+        ],
+        options: { "wall_id" => "bedroom_wall", "wall_segment_id" => "bedroom_wall" }
+      )
+
+      door_call = create_calls[2]
+      expect(result[:opening_results][0][:entity_ids]).to eq(["3"])
+      expect(door_call[:start]).to eq([1900.0, 0.0, 0.0])
+      expect(door_call[:end_point]).to eq([1900.0, 900.0, 0.0])
+      expect(door_call[:options]["swing_direction"]).to eq("right")
+      expect(door_call[:options]["opening_type"]).to eq("door")
     end
   end
 

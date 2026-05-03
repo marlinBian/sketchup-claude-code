@@ -803,6 +803,233 @@ def opening_payload_from_interpretation(
     return opening_id, payload
 
 
+def wall_variable_axis(axis: str) -> str:
+    """Return the changing coordinate axis for an axis-aligned wall."""
+    return "y" if axis == "x" else "x"
+
+
+def interval_offset_from_wall_start(
+    path: list[Any],
+    axis: str,
+    interval: tuple[float, float],
+) -> float:
+    """Return a sorted interval's offset measured from the wall path start."""
+    variable_axis = wall_variable_axis(axis)
+    start_value = point_axis_value(path[0], variable_axis)
+    end_value = point_axis_value(path[-1], variable_axis)
+    interval_start, interval_end = interval
+    if end_value >= start_value:
+        return max(0.0, interval_start - start_value)
+    return max(0.0, start_value - interval_end)
+
+
+def opening_interval_on_wall(
+    opening: dict[str, Any],
+    wall: dict[str, Any],
+    axis: str,
+) -> tuple[float, float]:
+    """Return an opening interval in the wall's sorted variable coordinate."""
+    path = wall.get("path", [])
+    variable_axis = wall_variable_axis(axis)
+    start_value = point_axis_value(path[0], variable_axis)
+    end_value = point_axis_value(path[-1], variable_axis)
+    direction = 1.0 if end_value >= start_value else -1.0
+    offset = float(opening.get("offset", 0))
+    width = float(opening.get("width", 0))
+    first = start_value + direction * offset
+    second = start_value + direction * (offset + width)
+    return (min(first, second), max(first, second))
+
+
+def space_edge_intervals_for_wall(
+    design_model: dict[str, Any],
+    import_id: str,
+    *,
+    axis: str,
+    line_coordinate: float,
+    wall_interval: tuple[float, float],
+    coordinate_match_tolerance: float,
+) -> list[dict[str, Any]]:
+    """Return imported space footprint edges overlapping one wall interval."""
+    edges: list[dict[str, Any]] = []
+    wall_start, wall_end = wall_interval
+    for space_id, space in design_model.get("spaces", {}).items():
+        source = space.get("source", {}) if isinstance(space, dict) else {}
+        if not isinstance(source, dict) or source.get("import_id") != import_id:
+            continue
+        footprint = space.get("footprint")
+        if not isinstance(footprint, list) or len(footprint) < 3:
+            continue
+        center = space.get("center")
+        if isinstance(center, list) and len(center) >= 2:
+            center_value = float(center[0] if axis == "x" else center[1])
+        else:
+            bounds = space.get("bounds", {})
+            min_point = bounds.get("min", [0, 0, 0])
+            max_point = bounds.get("max", [0, 0, 0])
+            center_value = (
+                float(min_point[0] + max_point[0]) / 2
+                if axis == "x"
+                else float(min_point[1] + max_point[1]) / 2
+            )
+        side = center_value - line_coordinate
+        if abs(side) <= coordinate_match_tolerance:
+            continue
+
+        for index, raw_start in enumerate(footprint):
+            raw_end = footprint[(index + 1) % len(footprint)]
+            edge_path = [
+                normalize_3d_point(raw_start, label=f"{space_id} footprint[{index}]"),
+                normalize_3d_point(
+                    raw_end,
+                    label=f"{space_id} footprint[{(index + 1) % len(footprint)}]",
+                ),
+            ]
+            if wall_axis(edge_path, tolerance=coordinate_match_tolerance) != axis:
+                continue
+            if (
+                abs(segment_line_coordinate(edge_path, axis) - line_coordinate)
+                > coordinate_match_tolerance
+            ):
+                continue
+            edge_start, edge_end = segment_interval(edge_path, axis)
+            overlap_start = max(wall_start, edge_start)
+            overlap_end = min(wall_end, edge_end)
+            if overlap_end <= overlap_start + coordinate_match_tolerance:
+                continue
+            edges.append(
+                {
+                    "space_id": space_id,
+                    "type": space.get("type", "other"),
+                    "label": space.get("label"),
+                    "interval": (overlap_start, overlap_end),
+                    "side": 1 if side > 0 else -1,
+                    "edge_index": index,
+                }
+            )
+    return edges
+
+
+def should_infer_circulation_opening(first: dict[str, Any], second: dict[str, Any]) -> bool:
+    """Return whether adjacent space semantics imply a doorless passage opening."""
+    first_type = str(first.get("type", "other"))
+    second_type = str(second.get("type", "other"))
+    types = {first_type, second_type}
+    if "hallway" not in types:
+        return False
+    return bool(types & {"living_room", "dining_room", "kitchen", "office", "other"})
+
+
+def infer_generation_circulation_openings(
+    design_model: dict[str, Any],
+    import_id: str,
+    *,
+    assumptions: list[str],
+    min_opening_width: float = 650.0,
+    coordinate_match_tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
+) -> dict[str, Any]:
+    """Add hosted passage openings where a generated wall blocks circulation."""
+    openings = design_model.setdefault("openings", {})
+    added_openings: list[str] = []
+    inspected_pairs: list[dict[str, Any]] = []
+
+    for wall_id, wall in list(design_model.get("walls", {}).items()):
+        source = wall.get("source", {}) if isinstance(wall, dict) else {}
+        if not isinstance(source, dict) or source.get("import_id") != import_id:
+            continue
+        path = wall.get("path", [])
+        axis = wall_axis(path, tolerance=coordinate_match_tolerance)
+        if axis is None:
+            continue
+
+        line_coordinate = segment_line_coordinate(path, axis)
+        wall_interval = segment_interval(path, axis)
+        wall_height = float(wall.get("height", DEFAULT_WALL_HEIGHT))
+        existing_intervals = [
+            opening_interval_on_wall(opening, wall, axis)
+            for opening in openings.values()
+            if isinstance(opening, dict) and opening.get("host_wall") == wall_id
+        ]
+        edges = space_edge_intervals_for_wall(
+            design_model,
+            import_id,
+            axis=axis,
+            line_coordinate=line_coordinate,
+            wall_interval=wall_interval,
+            coordinate_match_tolerance=coordinate_match_tolerance,
+        )
+
+        candidate_intervals: list[tuple[float, float]] = []
+        for first_index, first in enumerate(edges):
+            for second in edges[first_index + 1 :]:
+                if int(first["side"]) == int(second["side"]):
+                    continue
+                if not should_infer_circulation_opening(first, second):
+                    continue
+                overlap = (
+                    max(float(first["interval"][0]), float(second["interval"][0])),
+                    min(float(first["interval"][1]), float(second["interval"][1])),
+                )
+                if overlap[1] - overlap[0] < min_opening_width:
+                    continue
+                candidate_intervals.append(overlap)
+                inspected_pairs.append(
+                    {
+                        "wall_id": wall_id,
+                        "spaces": [first["space_id"], second["space_id"]],
+                        "space_types": sorted([str(first["type"]), str(second["type"])]),
+                        "interval": [overlap[0], overlap[1]],
+                    }
+                )
+
+        for interval_index, interval in enumerate(
+            merge_intervals(candidate_intervals, tolerance=coordinate_match_tolerance),
+            start=1,
+        ):
+            for start, end in subtract_intervals(
+                interval,
+                existing_intervals,
+                tolerance=coordinate_match_tolerance,
+            ):
+                width = end - start
+                if width < min_opening_width:
+                    continue
+                opening_id = f"{wall_id}_circulation_opening_{interval_index:02d}"
+                suffix = 2
+                while opening_id in openings:
+                    opening_id = f"{wall_id}_circulation_opening_{interval_index:02d}_{suffix}"
+                    suffix += 1
+                openings[opening_id] = {
+                    "type": "opening",
+                    "host_wall": wall_id,
+                    "offset": interval_offset_from_wall_start(path, axis, (start, end)),
+                    "width": width,
+                    "height": wall_height,
+                    "sill_height": 0,
+                    "representation": "hosted",
+                    "layer": "Other",
+                    "source": {
+                        "kind": "import_floorplan",
+                        "import_id": import_id,
+                        "confidence": 0.62,
+                        "assumptions": [
+                            *assumptions,
+                            (
+                                "A doorless circulation opening was inferred where "
+                                "a wall crossed a shared hallway-to-public-space edge."
+                            ),
+                        ],
+                    },
+                }
+                added_openings.append(opening_id)
+
+    return {
+        "status": "inferred" if added_openings else "unchanged",
+        "added_openings": added_openings,
+        "inspected_pairs": inspected_pairs,
+    }
+
+
 def path_start_shift_after_trim(original_path: list[Any], new_path: list[Any], axis: str) -> float:
     """Return the offset shift caused by moving a wall start point during trim."""
     original_start = point_axis_value(original_path[0], axis)
@@ -1053,6 +1280,14 @@ def build_interpreted_import_payloads(
         "import_sessions": {import_id: {"quality_flags": flags}},
         "quality_flags": [],
     }
+    circulation_openings = infer_generation_circulation_openings(
+        scratch_model,
+        import_id,
+        assumptions=assumptions,
+    )
+    if circulation_openings["status"] == "inferred":
+        flags.append("source_circulation_openings_inferred_during_generation")
+        openings = scratch_model["openings"]
     shell_trim = trim_generation_shell_overreach(scratch_model, import_id)
     if shell_trim["status"] == "trimmed":
         flags.append("source_shell_overreach_trimmed_during_generation")
@@ -1103,6 +1338,7 @@ def build_interpreted_import_payloads(
             ],
             "selected_space_ids": sorted(spaces),
             "rejected_candidate_count": len(rejected_candidates),
+            "circulation_openings": circulation_openings,
             "shell_trim": shell_trim,
             "assumptions": assumptions,
             "quality_flags": dedupe_quality_flags(flags),
