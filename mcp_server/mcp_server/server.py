@@ -1784,6 +1784,8 @@ async def register_import_source(
 async def import_floorplan_to_model(
     project_path: str,
     source_path: str | None = None,
+    source_reference: str | None = None,
+    source_reference_type: str = "chat_image_attachment",
     import_id: str | None = None,
     label: str | None = None,
     width: float | None = None,
@@ -1800,6 +1802,8 @@ async def import_floorplan_to_model(
         result = import_floorplan_to_model_file(
             project_path,
             source_path=source_path,
+            source_reference=source_reference,
+            source_reference_type=source_reference_type,
             import_id=import_id,
             label=label,
             width=width,

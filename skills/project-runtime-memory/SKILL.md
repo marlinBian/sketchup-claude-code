@@ -33,7 +33,10 @@ discovers guidance that should affect future turns in the same project, such as:
 
 Do not create a dynamic skill for one trivial action that is already captured in
 `design_model.json`, `design_rules.json`, a component manifest, or an import
-manifest.
+manifest. A source-interpreted import is not trivial: when an import uses
+`source_interpretation_path` or an unfiled runtime `source_reference`, the import
+tool should create or update a project-local `import-source-<import-id>` dynamic
+skill even on the first import.
 
 ## Storage
 
@@ -50,7 +53,7 @@ Preferred locations when supported:
 For import-specific guidance, prefer a stable name based on the import ID:
 
 ```text
-import-source-<import_id>
+import-source-<import-id>
 ```
 
 For project-wide preferences, prefer:
@@ -65,7 +68,7 @@ Every dynamic `SKILL.md` must be loadable by agent CLIs:
 
 ```markdown
 ---
-name: import-source-import_001
+name: import-source-import-001
 description: Project-local guidance for import source import_001.
 ---
 

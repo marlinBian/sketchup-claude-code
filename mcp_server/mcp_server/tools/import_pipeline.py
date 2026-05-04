@@ -108,7 +108,16 @@ SOURCE_INTERPRETATION_DIRECT_CONSTRAINT_KEYS = (
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".heic"}
 CAD_EXTENSIONS = {".dwg", ".dxf"}
-INTERPRETATION_SOURCE_TYPES = {"image", "pdf", "dwg", "dxf", "sketchup"}
+SOURCE_REFERENCE_TYPES = {"chat_image_attachment"}
+INTERPRETATION_SOURCE_TYPES = {
+    "image",
+    "pdf",
+    "dwg",
+    "dxf",
+    "sketchup",
+    *SOURCE_REFERENCE_TYPES,
+}
+RASTER_INTERPRETATION_SOURCE_TYPES = {"image", "pdf", "chat_image_attachment"}
 Y_DOWN_COORDINATE_TOKENS = ("y south", "y_down", "y-down", "y down", "image y")
 Y_UP_COORDINATE_TOKENS = ("y north", "y_up", "y-up", "y up", "model y")
 POINT_FIELD_KEYS = {
@@ -268,6 +277,7 @@ def register_import_source(
         "filename": destination.name,
         "extension": destination.suffix.lower(),
         "source_type": detect_source_type(destination),
+        "file_backed": True,
         "sha256": sha256_file(destination),
         "size_bytes": destination.stat().st_size,
     }
@@ -286,6 +296,236 @@ def register_import_source(
         "manifest_path": str(manifest_path),
         "source": source_info,
         "status": "registered",
+    }
+
+
+def register_import_source_reference(
+    project_path: str | Path,
+    source_reference: str,
+    *,
+    import_id: str | None = None,
+    label: str | None = None,
+    source_reference_type: str = "chat_image_attachment",
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    """Register an unfiled runtime source reference under imports/<import_id>/.
+
+    This is used when an agent can see a chat/CLI-attached floor-plan image but
+    the attachment has no local file path available to the MCP server. It is
+    intentionally marked as not file-backed so source fidelity can stay honest.
+    """
+    root = Path(project_path).expanduser().resolve()
+    source_reference_type = source_reference_type.strip().lower()
+    if source_reference_type not in SOURCE_REFERENCE_TYPES:
+        supported = ", ".join(sorted(SOURCE_REFERENCE_TYPES))
+        raise ValueError(
+            f"Unsupported source_reference_type {source_reference_type!r}. "
+            f"Use one of: {supported}."
+        )
+    if not source_reference.strip():
+        raise ValueError("source_reference must not be empty.")
+
+    chosen_id = import_safe_id(import_id) if import_id else next_import_id(root)
+    session_dir = import_session_path(root, chosen_id)
+    manifest_path = import_manifest_path(root, chosen_id)
+    if manifest_path.exists() and not overwrite:
+        raise FileExistsError(
+            f"Import manifest already exists: {manifest_path}. Use overwrite=True."
+        )
+
+    for directory in (
+        session_dir / "source",
+        session_dir / "previews",
+        session_dir / "evidence",
+        session_dir / "extracted",
+    ):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    evidence_file = session_dir / "evidence" / "source_reference.md"
+    evidence_file.write_text(
+        "\n".join(
+            [
+                "# Runtime Source Reference",
+                "",
+                f"- import_id: {chosen_id}",
+                f"- source_reference_type: {source_reference_type}",
+                f"- source_reference: {source_reference.strip()}",
+                "- file_backed: false",
+                "",
+                "The original attachment was visible to the runtime agent but was not",
+                "available to the MCP server as a local source file path. Treat this",
+                "import as a source-reference draft until it is rerun with an actual",
+                "image, PDF, DWG, DXF, or SketchUp source file path.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    source_info = {
+        "original_path": source_reference.strip(),
+        "stored_path": project_relative_path(root, evidence_file),
+        "filename": evidence_file.name,
+        "extension": evidence_file.suffix.lower(),
+        "source_type": source_reference_type,
+        "file_backed": False,
+        "note": (
+            "Runtime source reference only; the original raster/document file was "
+            "not available as a local path."
+        ),
+        "sha256": sha256_file(evidence_file),
+        "size_bytes": evidence_file.stat().st_size,
+    }
+    manifest = create_import_manifest(
+        import_id=chosen_id,
+        source=source_info,
+        label=label,
+    )
+    manifest["quality_flags"] = dedupe_quality_flags(
+        [
+            flag
+            for flag in manifest.get("quality_flags", [])
+            if flag != "scale_missing"
+        ]
+        + [
+            "chat_attachment_no_local_source_file",
+            "source_file_backed_import_pending",
+        ]
+    )
+    append_processing_step(
+        manifest,
+        "register_source_reference",
+        details={
+            "source_reference_type": source_reference_type,
+            "file_backed": False,
+        },
+    )
+    saved, errors = save_import_manifest(manifest_path, manifest)
+    if not saved:
+        raise ValueError("; ".join(errors))
+
+    return {
+        "project_path": str(root),
+        "import_id": chosen_id,
+        "manifest_path": str(manifest_path),
+        "source": source_info,
+        "status": "registered",
+    }
+
+
+def source_is_file_backed(manifest: dict[str, Any]) -> bool:
+    """Return whether an import manifest source points to a real source file."""
+    source = manifest.get("source", {}) if isinstance(manifest, dict) else {}
+    if "file_backed" in source:
+        return bool(source["file_backed"])
+    return str(source.get("source_type", "unknown")) not in SOURCE_REFERENCE_TYPES
+
+
+def dynamic_import_skill_name(import_id: str) -> str:
+    """Return a Codex/Claude-loadable project dynamic skill name."""
+    slug = re.sub(r"[^a-z0-9]+", "-", import_id.lower()).strip("-")
+    if not slug:
+        slug = "source"
+    return f"import-source-{slug}"
+
+
+def skill_markdown_value(value: Any) -> str:
+    """Return a one-line markdown-safe metadata value."""
+    if value is None:
+        return "none"
+    return str(value).replace("\n", " ").strip() or "none"
+
+
+def write_import_dynamic_runtime_skill(
+    project_path: str | Path,
+    *,
+    import_id: str,
+    manifest: dict[str, Any],
+    interpretation_path: str | None,
+    source_interpretation_path: str | None,
+    source_constraints_path: str | None,
+    lifecycle: str = "persistent-project-memory",
+) -> dict[str, Any]:
+    """Create or update project-local dynamic runtime skills for one import."""
+    root = Path(project_path).expanduser().resolve()
+    source = manifest.get("source", {})
+    source_type = str(source.get("source_type", "unknown"))
+    file_backed = source_is_file_backed(manifest)
+    skill_name = dynamic_import_skill_name(import_id)
+    source_reference_note = (
+        "This import is backed by a local source file."
+        if file_backed
+        else (
+            "This import was created from an unfiled runtime source reference. "
+            "Do not claim source-file-backed automatic recognition until it is "
+            "rerun with a local source file path."
+        )
+    )
+    constraints_note = (
+        "Use the linked constraints file for machine-checkable source fidelity."
+        if source_constraints_path
+        else (
+            "No source constraints file is linked yet; source fidelity is not "
+            "constraint-checked."
+        )
+    )
+    content = f"""---
+name: {skill_name}
+description: Project-local memory for import source {import_id}.
+---
+
+# Import Source {import_id}
+
+## Scope
+
+This dynamic runtime skill applies only to this design project and import
+source. `design_model.json` remains canonical truth.
+
+## Classification
+
+- origin: product_import_tool
+- lifecycle: {lifecycle}
+- source_file_backed: {str(file_backed).lower()}
+
+## Provenance
+
+- import_id: {import_id}
+- source_type: {source_type}
+- source_path_or_reference: {skill_markdown_value(source.get("original_path"))}
+- stored_source_record: {skill_markdown_value(source.get("stored_path"))}
+- source_hash: {skill_markdown_value(source.get("sha256"))}
+- manifest_path: {project_relative_path(root, import_manifest_path(root, import_id))}
+- generated_interpretation_path: {skill_markdown_value(interpretation_path)}
+- source_interpretation_path: {skill_markdown_value(source_interpretation_path)}
+- source_constraints_path: {skill_markdown_value(source_constraints_path)}
+
+## Recognition Status
+
+{source_reference_note}
+
+{constraints_note}
+
+## Runtime Guidance
+
+- Read the linked import evidence before repairing this import.
+- Store source-specific geometry, openings, boundaries, negative regions, and
+  corrections as structured evidence under `imports/{import_id}/`.
+- Do not promote this source-specific guidance into shipped runtime skills or
+  maintainer development skills.
+- Do not treat this dynamic skill as proof of automatic recognition. Automatic
+  recognition requires source-extracted evidence with provenance such as
+  `vision_extracted`, `ocr_extracted`, `cad_extracted`, or `tool_extracted`.
+"""
+    relative_paths: list[str] = []
+    for base in (Path(".agents") / "skills", Path(".claude") / "skills"):
+        skill_file = root / base / skill_name / "SKILL.md"
+        skill_file.parent.mkdir(parents=True, exist_ok=True)
+        skill_file.write_text(content, encoding="utf-8")
+        relative_paths.append(project_relative_path(root, skill_file))
+    return {
+        "skill_name": skill_name,
+        "paths": relative_paths,
+        "lifecycle": lifecycle,
+        "source_file_backed": file_backed,
     }
 
 
@@ -310,6 +550,7 @@ def source_confidence(source_type: str, has_explicit_dimensions: bool) -> float:
             "pdf": 0.66,
             "image": 0.58,
             "sketchup": 0.55,
+            "chat_image_attachment": 0.48,
             "unknown": 0.42,
         }.get(source_type, 0.42)
     return {
@@ -318,6 +559,7 @@ def source_confidence(source_type: str, has_explicit_dimensions: bool) -> float:
         "pdf": 0.45,
         "image": 0.38,
         "sketchup": 0.4,
+        "chat_image_attachment": 0.32,
         "unknown": 0.3,
     }.get(source_type, 0.3)
 
@@ -331,10 +573,17 @@ def imported_quality_flags(
     flags = ["source_interpreted_as_rectangular_shell"]
     if not has_explicit_dimensions:
         flags.append("scale_estimated")
-    if source_type in {"pdf", "image"}:
+    if source_type in RASTER_INTERPRETATION_SOURCE_TYPES:
         flags.append("raster_or_document_interpretation")
     if source_type in {"dwg", "dxf"}:
         flags.append("cad_layers_not_semantically_verified")
+    if source_type == "chat_image_attachment":
+        flags.extend(
+            [
+                "chat_attachment_no_local_source_file",
+                "source_file_backed_import_pending",
+            ]
+        )
     if source_type == "unknown":
         flags.append("unknown_source_type")
     return flags
@@ -661,10 +910,17 @@ def footprint_from_payload(value: Any, *, label: str) -> list[list[float]]:
 def source_interpretation_quality_flags(source_type: str) -> list[str]:
     """Return base quality flags for interpretation-driven import."""
     flags = ["source_interpretation_used"]
-    if source_type in {"pdf", "image"}:
+    if source_type in RASTER_INTERPRETATION_SOURCE_TYPES:
         flags.append("raster_or_document_interpretation")
     if source_type in {"dwg", "dxf"}:
         flags.append("cad_layers_not_semantically_verified")
+    if source_type == "chat_image_attachment":
+        flags.extend(
+            [
+                "chat_attachment_no_local_source_file",
+                "source_file_backed_import_pending",
+            ]
+        )
     if source_type == "unknown":
         flags.append("unknown_source_type")
     return flags
@@ -688,16 +944,17 @@ def require_known_source_for_interpretation(
     source_type: str,
     manifest: dict[str, Any],
 ) -> None:
-    """Reject source interpretations that are not tied to a real source file."""
+    """Reject source interpretations without a recognized source provenance."""
     if source_type in INTERPRETATION_SOURCE_TYPES:
         return
     source = manifest.get("source", {}) if isinstance(manifest, dict) else {}
     filename = source.get("filename") or source.get("stored_path") or "unknown source"
     raise ValueError(
-        "source_interpretation_path requires a registered source file with a "
-        f"recognized source type, got {source_type!r} for {filename!r}. "
-        "Do not use text notes or chat-only placeholders as automatic image "
-        "import sources; register the actual image, PDF, CAD, or SketchUp file."
+        "source_interpretation_path requires a registered source file or an "
+        f"official source_reference with a recognized source type, got {source_type!r} "
+        f"for {filename!r}. Do not use text notes or ad hoc placeholders as "
+        "image import sources; use source_path for a local file or source_reference "
+        "for a chat/CLI attachment that has no local path."
     )
 
 
@@ -951,7 +1208,7 @@ def normalize_source_interpretation_coordinates(
     """Normalize source interpretation coordinates before truth generation."""
     if not coordinate_system_is_y_down(interpretation):
         return interpretation, None, []
-    if source_type not in {"image", "pdf"}:
+    if source_type not in RASTER_INTERPRETATION_SOURCE_TYPES:
         return interpretation, None, []
 
     depth, depth_source = interpretation_plan_depth(interpretation)
@@ -3030,6 +3287,8 @@ def import_floorplan_to_model(
     project_path: str | Path,
     *,
     source_path: str | Path | None = None,
+    source_reference: str | None = None,
+    source_reference_type: str = "chat_image_attachment",
     import_id: str | None = None,
     label: str | None = None,
     width: float | None = None,
@@ -3043,6 +3302,8 @@ def import_floorplan_to_model(
 ) -> dict[str, Any]:
     """Generate editable working truth from an imported source file."""
     root = Path(project_path).expanduser().resolve()
+    if source_path is not None and source_reference is not None:
+        raise ValueError("Use either source_path or source_reference, not both.")
     if source_path is not None:
         registered = register_import_source(
             root,
@@ -3053,11 +3314,22 @@ def import_floorplan_to_model(
         )
         chosen_id = registered["import_id"]
         manifest, manifest_file = load_project_import_manifest(root, chosen_id)
+    elif source_reference is not None:
+        registered = register_import_source_reference(
+            root,
+            source_reference,
+            import_id=import_id,
+            label=label,
+            source_reference_type=source_reference_type,
+            overwrite=overwrite,
+        )
+        chosen_id = registered["import_id"]
+        manifest, manifest_file = load_project_import_manifest(root, chosen_id)
     elif import_id is not None:
         chosen_id = import_safe_id(import_id)
         manifest, manifest_file = load_project_import_manifest(root, chosen_id)
     else:
-        raise ValueError("source_path or import_id is required.")
+        raise ValueError("source_path, source_reference, or import_id is required.")
 
     if width is not None and width <= 0:
         raise ValueError("width must be positive when provided.")
@@ -3071,6 +3343,7 @@ def import_floorplan_to_model(
         raise ValueError("negative_space_overlap_tolerance_m2 must be non-negative.")
 
     source_type = str(manifest["source"].get("source_type", "unknown"))
+    file_backed_source = source_is_file_backed(manifest)
     has_explicit_dimensions = width is not None and depth is not None
     model_width = float(width if width is not None else DEFAULT_IMPORTED_WIDTH)
     model_depth = float(depth if depth is not None else DEFAULT_IMPORTED_DEPTH)
@@ -3217,6 +3490,8 @@ def import_floorplan_to_model(
         }
 
     raw_interpretation_path = None
+    extracted_path = import_session_path(root, chosen_id) / "extracted" / "interpretation.json"
+    extracted_relative_path = project_relative_path(root, extracted_path)
     constraints_path_from_interpretation = None
     constraints_derived_from_interpretation = False
     if source_interpretation_path is not None:
@@ -3241,6 +3516,7 @@ def import_floorplan_to_model(
     design_model.setdefault("import_sessions", {})[chosen_id] = {
         "source_file": manifest["source"]["stored_path"],
         "source_type": source_type,
+        "source_file_backed": file_backed_source,
         "status": "imported",
         "manifest_path": project_relative_path(root, manifest_file),
         "scale": scale_payload,
@@ -3251,6 +3527,29 @@ def import_floorplan_to_model(
         design_model["import_sessions"][chosen_id][
             "source_constraints_path"
         ] = constraints_path_from_interpretation
+    dynamic_runtime_skill = None
+    if source_interpretation_path is not None or not file_backed_source:
+        anticipated_source_interpretation_path = (
+            project_relative_path(
+                root,
+                import_session_path(root, chosen_id)
+                / "extracted"
+                / "source_interpretation.json",
+            )
+            if source_interpretation_path is not None
+            else None
+        )
+        dynamic_runtime_skill = write_import_dynamic_runtime_skill(
+            root,
+            import_id=chosen_id,
+            manifest=manifest,
+            interpretation_path=extracted_relative_path,
+            source_interpretation_path=anticipated_source_interpretation_path,
+            source_constraints_path=constraints_path_from_interpretation,
+        )
+        design_model["import_sessions"][chosen_id][
+            "dynamic_runtime_skill"
+        ] = dynamic_runtime_skill
     quality_flags = [
         flag
         for flag in design_model.get("quality_flags", [])
@@ -3286,7 +3585,6 @@ def import_floorplan_to_model(
     if not saved:
         raise ValueError("; ".join(save_errors))
 
-    extracted_path = import_session_path(root, chosen_id) / "extracted" / "interpretation.json"
     extracted_path.parent.mkdir(parents=True, exist_ok=True)
     if source_interpretation_path is not None:
         raw_interpretation_path = extracted_path.parent / "source_interpretation.json"
@@ -3316,13 +3614,14 @@ def import_floorplan_to_model(
         details={
             "autonomous_first": True,
             "removed_previous_entities": removed,
-            "interpretation_path": project_relative_path(root, extracted_path),
+            "interpretation_path": extracted_relative_path,
             "source_interpretation_path": (
                 project_relative_path(root, raw_interpretation_path)
                 if raw_interpretation_path is not None
                 else None
             ),
             "source_constraints_path": constraints_path_from_interpretation,
+            "dynamic_runtime_skill": dynamic_runtime_skill,
         },
     )
     saved_manifest, manifest_errors = save_import_manifest(manifest_file, manifest)
@@ -3349,6 +3648,8 @@ def import_floorplan_to_model(
         "quality_flags": flags,
         "removed_previous_entities": removed,
         "source_interpretation_used": source_interpretation is not None,
+        "source_file_backed": file_backed_source,
+        "dynamic_runtime_skill": dynamic_runtime_skill,
         "source_fidelity": source_fidelity,
         "summary": summary,
     }

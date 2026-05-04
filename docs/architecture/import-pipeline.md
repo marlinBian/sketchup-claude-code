@@ -326,6 +326,14 @@ source evidence. They should not rely on prose for geometry that can be
 validated as outline segments, negative/outside regions, boundary closure,
 opening intervals, or symbol legends.
 
+Source-interpreted imports create project-local dynamic import skills
+automatically. This includes file-backed imports that use
+`source_interpretation_path` and source-reference drafts for chat or CLI image
+attachments where the runtime agent can inspect the image but the MCP server has
+no local source file path. Source-reference drafts must use explicit
+non-file-backed provenance; they must not register ad hoc text notes as if they
+were automatic image recognition sources.
+
 Imported walls also need the inverse consistency check: every meaningful
 imported wall segment should be explainable by at least one imported room,
 balcony, or other space footprint edge. If a wall extends past all imported
@@ -358,16 +366,20 @@ The current implementation avoids heavy external dependencies while accepting a
 structured extraction produced by an agent vision pass, CAD/vector parser, OCR
 tool, or future deterministic extractor. If no richer extraction is available,
 it can still generate a low-confidence rectangular working model, but
-source-checked image/PDF/CAD import requires a real registered source file plus
+source-checked image/PDF/CAD import requires either a real registered source
+file or an explicit non-file-backed source-reference draft, plus
 `source_interpretation.json` and source-scoped constraints.
 
 1. Create `imports/<import_id>/` with `source/`, `previews/`, `evidence/`, and
    `extracted/`.
-2. Register DWG, DXF, PDF, image, SketchUp, or unknown sources with hashes and
-   source type.
-3. Reject structured interpretations that are attached only to text notes,
-   screenshots of prior output, or other unknown placeholder sources. Automatic
-   image/PDF/CAD recognition must point at the actual source file.
+2. Register DWG, DXF, PDF, image, SketchUp, or unknown file sources with hashes
+   and source type. If the runtime can inspect a chat/CLI attachment but the MCP
+   server has no local file path, register an explicit `chat_image_attachment`
+   source reference instead of a fake text-note source.
+3. Reject structured interpretations that are attached only to ad hoc text
+   notes, screenshots of prior output, or other unknown placeholder sources.
+   File-backed automatic image/PDF/CAD recognition should point at the actual
+   source file; source-reference drafts must remain marked as non-file-backed.
 4. Normalize raster/PDF Y-down source coordinates into model-space Y-up
    coordinates before writing truth. Host-wall source intervals are interpreted
    as wall-coordinate intervals unless explicitly marked as offset values.
@@ -379,9 +391,10 @@ source-checked image/PDF/CAD import requires a real registered source file plus
    model when richer extraction is unavailable.
 7. Write imported `spaces`, `walls`, `openings`, `import_sessions`, and
    `quality_flags` into `design_model.json`.
-8. Preserve project/source-specific runtime guidance through project-local
-   dynamic skills when needed, without promoting those facts into shipped
-   runtime skills.
+8. Preserve project/source-specific runtime guidance through automatically
+   generated project-local dynamic import skills when a source interpretation
+   or unfiled source reference is used, without promoting those facts into
+   shipped runtime skills.
 9. Produce a headless bridge trace for imported walls and hosted opening
    operations that create wall pieces, sills, headers, and thin door/window
    markers.

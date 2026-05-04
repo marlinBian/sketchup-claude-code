@@ -930,6 +930,20 @@ def test_interpreted_image_import_normalizes_y_down_coordinates(tmp_path):
         / design_model["import_sessions"]["import_001"]["source_constraints_path"]
     )
     constraints = json.loads(constraints_path.read_text(encoding="utf-8"))
+    dynamic_skill = (
+        project
+        / ".agents"
+        / "skills"
+        / "import-source-import-001"
+        / "SKILL.md"
+    )
+    dynamic_skill_text = dynamic_skill.read_text(encoding="utf-8")
+    assert dynamic_skill.exists()
+    assert result["dynamic_runtime_skill"]["skill_name"] == "import-source-import-001"
+    assert "source_file_backed: true" in dynamic_skill_text
+    assert "source_interpretation_path: imports/import_001/extracted/source_interpretation.json" in dynamic_skill_text
+    assert "source_constraints_path: imports/import_001/constraints.json" in dynamic_skill_text
+    assert (project / ".claude" / "skills" / "import-source-import-001" / "SKILL.md").exists()
     assert constraints["derived_from_source_interpretation"] is True
     assert constraints["negative_region_constraints"][0]["footprint"] == [
         [0.0, 1000.0, 0.0],
@@ -955,6 +969,105 @@ def test_interpreted_image_import_normalizes_y_down_coordinates(tmp_path):
     ]
     assert constraints["opening_constraints"][1]["source_interval_mode"] == (
         "wall_coordinate"
+    )
+
+
+def test_chat_attachment_source_reference_import_creates_draft_dynamic_skill(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    interpretation_path = tmp_path / "chat_source_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(
+            {
+                "version": "1.0",
+                "scale": {
+                    "units": "mm",
+                    "source": "vision_attachment",
+                    "confidence": 0.52,
+                    "width": 2400,
+                    "depth": 1800,
+                },
+                "source": {"provenance": {"origin": "vision_extracted"}},
+                "space_candidates": [
+                    {
+                        "id": "room_candidate",
+                        "space_id": "room_001",
+                        "type": "other",
+                        "confidence": 0.62,
+                        "footprint": [
+                            [0, 0, 0],
+                            [2400, 0, 0],
+                            [2400, 1800, 0],
+                            [0, 1800, 0],
+                        ],
+                    }
+                ],
+                "walls": [
+                    {
+                        "wall_id": "w_room_south",
+                        "path": [[0, 0, 0], [2400, 0, 0]],
+                        "space_refs": ["room_001"],
+                        "confidence": 0.58,
+                    }
+                ],
+                "openings": [],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = import_floorplan_to_model(
+        project,
+        source_reference="chat attachment Image #1",
+        import_id="chat_floorplan_001",
+        source_interpretation_path=interpretation_path,
+    )
+
+    manifest = json.loads(
+        (
+            project
+            / "imports"
+            / "chat_floorplan_001"
+            / "manifest.json"
+        ).read_text(encoding="utf-8")
+    )
+    design_model = json.loads((project / "design_model.json").read_text(encoding="utf-8"))
+    dynamic_skill = (
+        project
+        / ".agents"
+        / "skills"
+        / "import-source-chat-floorplan-001"
+        / "SKILL.md"
+    )
+    dynamic_skill_text = dynamic_skill.read_text(encoding="utf-8")
+
+    assert result["source_file_backed"] is False
+    assert result["dynamic_runtime_skill"]["skill_name"] == (
+        "import-source-chat-floorplan-001"
+    )
+    assert manifest["source"]["source_type"] == "chat_image_attachment"
+    assert manifest["source"]["file_backed"] is False
+    assert manifest["source"]["original_path"] == "chat attachment Image #1"
+    assert (
+        project / "imports" / "chat_floorplan_001" / "evidence" / "source_reference.md"
+    ).exists()
+    assert "chat_attachment_no_local_source_file" in result["quality_flags"]
+    assert "source_file_backed_import_pending" in result["quality_flags"]
+    assert dynamic_skill.exists()
+    assert "source_file_backed: false" in dynamic_skill_text
+    assert "stored_source_record: imports/chat_floorplan_001/evidence/source_reference.md" in dynamic_skill_text
+    assert (
+        "source_interpretation_path: imports/chat_floorplan_001/extracted/source_interpretation.json"
+        in dynamic_skill_text
+    )
+    assert (
+        design_model["import_sessions"]["chat_floorplan_001"]["dynamic_runtime_skill"][
+            "paths"
+        ][0]
+        == ".agents/skills/import-source-chat-floorplan-001/SKILL.md"
     )
 
 

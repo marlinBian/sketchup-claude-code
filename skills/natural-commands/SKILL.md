@@ -32,19 +32,21 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
   `socket_ready` is false.
 - Import floor plan source: "import this floor plan", "导入这张户型图".
   Use `import_floorplan_to_model` to register the source and write an editable
-  working model directly into `design_model.json`. When visible room labels,
-  dimension chains, or outside blank source regions are available, first create
-  a source interpretation JSON and pass it as `source_interpretation_path` so
-  the import rejects overwide room candidates and shell overreach before truth
-  is saved. Do not ask the designer to confirm routine wall, door, window, or
-  numeric candidates before generating the first model. When updating SketchUp
-  from the import, call
+  working model directly into `design_model.json`. If the source is a visible
+  chat/CLI attachment with no local file path, use `source_reference` with
+  `source_reference_type=chat_image_attachment` instead of inventing a text-note
+  source file. When visible room labels, dimension chains, or outside blank
+  source regions are available, first create a source interpretation JSON and
+  pass it as `source_interpretation_path` so the import rejects overwide room
+  candidates and shell overreach before truth is saved. Do not ask the designer
+  to confirm routine wall, door, window, or numeric candidates before generating
+  the first model. When updating SketchUp from the import, call
   `execute_project_model(clean_before_execute=True, clean_scope="all")` so old
   source images, template entities, and stale generated geometry are removed.
-  If the source needs persistent project-local interpretation, use
-  `project-runtime-memory` to create or update a dynamic runtime skill in the
-  active design project rather than adding source-specific facts to shipped
-  skills.
+  Imports that use `source_interpretation_path` or an unfiled
+  `source_reference` should return a tool-generated project-local dynamic skill;
+  use that skill as scoped memory rather than adding source-specific facts to
+  shipped skills.
 - Rescale imported source: "this plan should be 8200 mm wide",
   "这个户型整体宽度应该是 8200 毫米". Use `rescale_imported_model` or
   `repair_imported_region` rather than asking the designer to edit JSON.

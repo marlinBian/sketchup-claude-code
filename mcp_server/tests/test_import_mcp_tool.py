@@ -188,6 +188,75 @@ async def test_import_floorplan_to_model_tool_writes_project_truth(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_import_floorplan_to_model_tool_accepts_source_reference(tmp_path):
+    from mcp_server import server
+
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    interpretation = tmp_path / "source_interpretation.json"
+    interpretation.write_text(
+        json.dumps(
+            {
+                "version": "1.0",
+                "scale": {
+                    "units": "mm",
+                    "source": "vision_attachment",
+                    "confidence": 0.5,
+                },
+                "source": {"provenance": {"origin": "vision_extracted"}},
+                "space_candidates": [
+                    {
+                        "id": "room_candidate",
+                        "space_id": "room_001",
+                        "type": "other",
+                        "confidence": 0.6,
+                        "footprint": [
+                            [0, 0, 0],
+                            [1200, 0, 0],
+                            [1200, 900, 0],
+                            [0, 900, 0],
+                        ],
+                    }
+                ],
+                "walls": [
+                    {
+                        "wall_id": "w_room_south",
+                        "path": [[0, 0, 0], [1200, 0, 0]],
+                        "space_refs": ["room_001"],
+                    }
+                ],
+                "openings": [],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    response = await server.import_floorplan_to_model(
+        project_path=str(project),
+        source_reference="chat attachment Image #1",
+        import_id="chat_floorplan_001",
+        source_interpretation_path=str(interpretation),
+    )
+    data = json.loads(response.text)
+
+    assert data["status"] == "imported"
+    assert data["source_file_backed"] is False
+    assert data["dynamic_runtime_skill"]["skill_name"] == (
+        "import-source-chat-floorplan-001"
+    )
+    assert (
+        project
+        / ".agents"
+        / "skills"
+        / "import-source-chat-floorplan-001"
+        / "SKILL.md"
+    ).exists()
+
+
+@pytest.mark.asyncio
 async def test_rescale_and_repair_tools_patch_imported_truth(tmp_path):
     from mcp_server import server
 
@@ -531,3 +600,68 @@ def test_cli_import_floorplan_summary_and_rescale(tmp_path, capsys):
     assert summary_output["count"] == 1
     assert list_output["imports"][0]["import_id"] == "import_001"
     assert rescale_output["scale_x"] == 1.5
+
+
+def test_cli_import_floorplan_accepts_source_reference(tmp_path, capsys):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    interpretation = tmp_path / "source_interpretation.json"
+    interpretation.write_text(
+        json.dumps(
+            {
+                "version": "1.0",
+                "scale": {
+                    "units": "mm",
+                    "source": "vision_attachment",
+                    "confidence": 0.5,
+                },
+                "source": {"provenance": {"origin": "vision_extracted"}},
+                "space_candidates": [
+                    {
+                        "id": "room_candidate",
+                        "space_id": "room_001",
+                        "type": "other",
+                        "confidence": 0.6,
+                        "footprint": [
+                            [0, 0, 0],
+                            [1200, 0, 0],
+                            [1200, 900, 0],
+                            [0, 900, 0],
+                        ],
+                    }
+                ],
+                "walls": [
+                    {
+                        "wall_id": "w_room_south",
+                        "path": [[0, 0, 0], [1200, 0, 0]],
+                        "space_refs": ["room_001"],
+                    }
+                ],
+                "openings": [],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "import-floorplan",
+            str(project),
+            "--source-reference",
+            "chat attachment Image #1",
+            "--import-id",
+            "chat_floorplan_001",
+            "--source-interpretation",
+            str(interpretation),
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert output["source_file_backed"] is False
+    assert output["dynamic_runtime_skill"]["skill_name"] == (
+        "import-source-chat-floorplan-001"
+    )

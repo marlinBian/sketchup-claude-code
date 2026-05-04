@@ -336,7 +336,23 @@ def build_parser() -> argparse.ArgumentParser:
     import_floorplan_parser.add_argument(
         "source_path",
         nargs="?",
-        help="Source file to register and import. Omit when --import-id already exists.",
+        help=(
+            "Source file to register and import. Omit when --import-id already "
+            "exists or --source-reference is used."
+        ),
+    )
+    import_floorplan_parser.add_argument(
+        "--source-reference",
+        help=(
+            "Runtime source reference for a chat/CLI attachment that has no local "
+            "source file path. Use with --source-interpretation."
+        ),
+    )
+    import_floorplan_parser.add_argument(
+        "--source-reference-type",
+        default="chat_image_attachment",
+        choices=["chat_image_attachment"],
+        help="Type for --source-reference.",
     )
     import_floorplan_parser.add_argument("--import-id", help="Optional import session ID")
     import_floorplan_parser.add_argument("--label", help="Optional human label")
@@ -986,6 +1002,8 @@ def main(argv: list[str] | None = None) -> int:
             result = import_floorplan_to_model(
                 args.project_path,
                 source_path=args.source_path,
+                source_reference=args.source_reference,
+                source_reference_type=args.source_reference_type,
                 import_id=args.import_id,
                 label=args.label,
                 width=args.width,

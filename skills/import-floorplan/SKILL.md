@@ -43,13 +43,16 @@ Import this floor plan and generate an editable model.
    `source_interpretation.json` with the extracted geometry and source
    constraints.
 
-   The import source must be the actual file being interpreted. For a chat or
-   CLI-attached image, first use the attachment's real local path or copy the
-   raster file into the project; never register a `.txt` note, prose
-   description, old screenshot, or placeholder file as the source for automatic
-   image recognition. If no real source file path is available, stop and ask the
-   designer for the original image/PDF/CAD file path before claiming import
-   recognition.
+   The import source should be the actual file being interpreted whenever a
+   local path is available. For a chat or CLI-attached image with no local file
+   path, do not hand-write a `.txt` or `.md` placeholder source and do not patch
+   `design_model.json` manually. Create the structured source interpretation
+   from the visible attachment, then call `import_floorplan_to_model` with
+   `source_reference` such as `chat attachment Image #1`,
+   `source_reference_type: chat_image_attachment`, and
+   `source_interpretation_path`. This produces an honest source-reference draft
+   and records that the import is not source-file-backed. If a local file path
+   becomes available later, rerun the import with `source_path`.
 
    For raster floor-plan images, use the agent's vision capability to inspect
    the source image and extract a structured interpretation. The extraction
@@ -84,9 +87,10 @@ Import this floor plan and generate an editable model.
    Include `dimension_chains`, `negative_regions`, `space_candidates` with
    `label_area_m2` and `dimension_constraints`, and explicit wall/opening
    candidates when available. Then call
-   `import_floorplan_to_model` with `source_interpretation_path`. If the user
-   gives known dimensions, pass `width` and `depth` in millimeters. If not, let
-   the tool estimate scale and write quality flags.
+   `import_floorplan_to_model` with `source_path` or `source_reference` and
+   `source_interpretation_path`. If the user gives known dimensions, pass
+   `width` and `depth` in millimeters. If not, let the tool estimate scale and
+   write quality flags.
    For raster/PDF extraction, state the source coordinate system explicitly. If
    coordinates come from image space, use a `scale.coordinate_system` such as
    `x east, y south, origin at north-west source corner` and include
@@ -120,11 +124,10 @@ Import this floor plan and generate an editable model.
    the target space and the access space over an exterior-only target boundary;
    reserve exterior-only single-space hosts for doors marked as entry/exterior
    access.
-   If the import source has repeated ambiguity, a local symbol legend, or
-   corrections that should guide later turns in the same project, create or
-   update a project/session dynamic runtime skill in the active design project
-   using normal skill frontmatter. Prefer names like
-   `import-source-<import_id>`. Keep it project-local, for example under
+   The import tool creates or updates a project/session dynamic runtime skill
+   automatically whenever the import uses `source_interpretation_path` or an
+   unfiled `source_reference`. Prefer the tool-generated
+   `import-source-<import-id>` skill. Keep it project-local, for example under
    `.agents/skills/` and `.claude/skills/` when those runtime locations are
    supported. The dynamic skill may record source-specific interpretation and
    repair guidance, but `design_model.json` remains canonical truth and the
