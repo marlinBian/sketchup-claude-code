@@ -43,7 +43,7 @@ RSpec.describe SuBridge::ServerListener do
       response = listener.send(:handle_ping, request["params"], request["id"])
 
       expect(response["result"]["status"]).to eq("pong")
-      expect(response["result"]["server_version"]).to eq("0.1.0")
+      expect(response["result"]["server_version"]).to eq("1.0.0")
       expect(response["result"]["protocol_version"]).to eq("1.0")
     end
   end

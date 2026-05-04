@@ -1,6 +1,6 @@
 {
   "name": "sketchup-agent-harness",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Natural language SketchUp modeling harness for Codex CLI. Create, query, validate, and export SketchUp designs through MCP tools and runtime design skills.",
   "author": {
     "name": "marlinBian",

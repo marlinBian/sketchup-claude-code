@@ -468,7 +468,7 @@ begin
     "su_bridge/lib/su_bridge"
   )
   extension.description = "Local socket bridge for SketchUp Agent Harness."
-  extension.version = "0.1.0"
+  extension.version = "1.0.0"
   extension.creator = "SketchUp Agent Harness"
   Sketchup.register_extension(extension, true)
 

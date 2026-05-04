@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Initial release
+- None
 
 ### Changed
 
@@ -30,6 +30,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - None
+
+---
+
+## [1.0.0] - 2026-05-04
+
+### Added
+
+- CLI-first SketchUp Agent Harness distribution for Claude CLI and Codex CLI.
+- MCP server, SketchUp Ruby bridge, project initialization, validation, smoke,
+  and bridge install flows for designer project workspaces.
+- Runtime skill packaging for designer-facing natural-language workflows.
+- Structured design model, design rules, component registry, asset lock, and
+  project version contracts.
+- Source import pipeline for images and other source references, including
+  project-local dynamic import memory for source-backed iteration.
+- Release smoke coverage for source checkout, installed wheel, runtime skill
+  installation, and Ruby bridge behavior.
 
 ---
 

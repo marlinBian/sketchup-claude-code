@@ -12,7 +12,7 @@ module SuBridge
     SOCKET_PATH = "/tmp/su_bridge.sock"
     TIMER_INTERVAL = 0.1 # seconds
     PROTOCOL_VERSION = "1.0"
-    SERVER_VERSION = "0.1.0"
+    SERVER_VERSION = "1.0.0"
     RECONNECT_DELAY = 1.0 # seconds before attempting reconnect
     MAX_RECONNECT_ATTEMPTS = 3
 

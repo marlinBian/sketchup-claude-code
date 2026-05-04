@@ -153,7 +153,7 @@ def test_bridge_runtime_capability_check_reports_supported_operations(
             return {
                 "result": {
                     "bridge_info": {
-                        "version": "0.1.0",
+                        "version": "1.0.0",
                         "supported_operations": [
                             "get_bridge_info",
                             "get_scene_info",
@@ -171,7 +171,7 @@ def test_bridge_runtime_capability_check_reports_supported_operations(
     result = bridge_runtime_capability_check(socket_path=str(socket_path))
 
     assert result["ok"] is True
-    assert result["details"]["bridge_info"]["version"] == "0.1.0"
+    assert result["details"]["bridge_info"]["version"] == "1.0.0"
     assert result["details"]["required_operations"]["get_scene_info"]["ok"] is True
     assert result["details"]["required_operations"]["get_selection_info"]["ok"] is True
 
@@ -193,7 +193,7 @@ def test_bridge_runtime_capability_check_reports_missing_advertised_operation(
             return {
                 "result": {
                     "bridge_info": {
-                        "version": "0.1.0",
+                        "version": "1.0.0",
                         "supported_operations": ["get_bridge_info", "get_scene_info"],
                     }
                 }
@@ -208,7 +208,7 @@ def test_bridge_runtime_capability_check_reports_missing_advertised_operation(
 
     assert result["ok"] is False
     assert "Restart SketchUp" in result["message"]
-    assert result["details"]["bridge_info"]["version"] == "0.1.0"
+    assert result["details"]["bridge_info"]["version"] == "1.0.0"
     assert result["details"]["required_operations"]["get_scene_info"]["ok"] is True
     assert result["details"]["required_operations"]["get_selection_info"]["ok"] is False
 
