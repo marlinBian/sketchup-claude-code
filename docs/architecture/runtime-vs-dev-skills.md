@@ -1,11 +1,11 @@
-# Runtime vs Development Skills
+# Skill Layers
 
-The repository contains two different categories of skills. They must not be
+SketchUp Agent Harness uses three different skill layers. They must not be
 mixed.
 
-## Runtime Skills
+## Product Runtime Skills
 
-Runtime skills live in `skills/`.
+Product runtime skills live in `skills/`.
 
 They are installed with the Claude or Codex plugin and are meant to guide the
 designer-facing natural language experience. They should describe design
@@ -18,6 +18,45 @@ The repository copy is the authoring source, not the expected designer runtime
 location. Installation must register or copy these skills through the supported
 Claude, Codex, or future agent CLI plugin/skill mechanisms so the selected AI
 tool can load them normally.
+
+Product runtime skills must stay generic across projects. They may define how
+to create, update, and use project-specific runtime memory, but they must not
+encode one source image's room names, coordinates, dimensions, labels, or
+designer corrections as reusable product behavior.
+
+## Project/Session Dynamic Runtime Skills
+
+Project/session dynamic runtime skills are generated during designer use inside
+the active design project, usually under that project's supported agent skill
+locations, such as:
+
+```text
+<design-project>/.agents/skills/
+<design-project>/.claude/skills/
+```
+
+These skills are not shipped by default. They can be created after importing a
+source plan, after repeated designer corrections, or after the designer defines
+project-specific preferences. They are allowed to be specific to a source,
+project, or session.
+
+Examples of valid dynamic runtime skill content:
+
+- a source-specific symbol legend extracted from one imported floor plan
+- known corrections the designer made for one import source
+- project-local room naming conventions
+- project-local preferences that should guide later natural-language changes
+- confidence notes and repair history for an import source
+
+Dynamic runtime skills are guidance only. `design_model.json` remains the
+canonical editable truth, and import evidence remains under
+`imports/<import_id>/`.
+
+Dynamic runtime skills must not be copied into the product repository's
+`skills/` directory, and they must not be stored in maintainer development skill
+directories. If a dynamic skill exposes a pattern that should apply broadly,
+generalize the pattern first, add tests across variants, then update product
+code, docs, or baseline runtime skills.
 
 ## Development Skills
 
@@ -56,7 +95,12 @@ publish a separate maintainer plugin.
 ## Rule
 
 If a skill helps a designer create or review a SketchUp design, it belongs in
-`skills/` and must be distributed through the product install/plugin flow.
+`skills/` only when it is generic product behavior and must be distributed
+through the product install/plugin flow.
+
+If a skill helps a designer continue a specific project or remember facts about
+a specific import source, it belongs in that active design project's dynamic
+runtime skill locations.
 
 If a skill helps a maintainer change this repository, it belongs outside the
 product repository in the `ai4design` development workspace.

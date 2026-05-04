@@ -50,12 +50,19 @@ Check that the project contains:
 - `.mcp.json`
 - `AGENTS.md`
 - `CLAUDE.md`
+- `.agents/skills/`
+- `.claude/skills/`
 - `snapshots/`
 - `snapshots/manifest.json`
 
 Then continue with `plan_bathroom` or `execute_bathroom_plan` for the first
 supported vertical slice. If the designer gives project preferences, store them
 in `design_rules.json` before planning.
+
+Use packaged runtime skills for generic product behavior. If later import or
+design work produces project-specific guidance, create a project-local dynamic
+runtime skill in `.agents/skills/` or `.claude/skills/` following
+`project-runtime-memory`.
 
 ## User-Facing Guidance
 

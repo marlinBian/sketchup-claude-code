@@ -35,21 +35,76 @@ Import this floor plan and generate an editable model.
 
 1. Use `get_project_state` to confirm the current project path and whether
    existing imported model truth may be overwritten.
-2. For raster/PDF/CAD sources where room labels, dimension chains, or outside
-   blank regions are visible, create a project-local source interpretation JSON
-   before import. Include `dimension_chains`, `negative_regions`,
-   `space_candidates` with `label_area_m2` and `dimension_constraints`, and
-   explicit wall/opening candidates when available. Then call
+2. For raster/PDF/CAD sources where room labels, dimension chains, openings,
+   exterior shell steps, or outside blank regions are visible, run a vision or
+   vector extraction pass before import. Start from the source file itself, not
+   from an old `design_model.json`, old `source_interpretation.json`, dynamic
+   skill notes, or prior failed truth. Create a project-local
+   `source_interpretation.json` with the extracted geometry and source
+   constraints.
+
+   The import source must be the actual file being interpreted. For a chat or
+   CLI-attached image, first use the attachment's real local path or copy the
+   raster file into the project; never register a `.txt` note, prose
+   description, old screenshot, or placeholder file as the source for automatic
+   image recognition. If no real source file path is available, stop and ask the
+   designer for the original image/PDF/CAD file path before claiming import
+   recognition.
+
+   For raster floor-plan images, use the agent's vision capability to inspect
+   the source image and extract a structured interpretation. The extraction
+   must include:
+
+   - visible dimension chains and the resulting scale/orientation assumptions
+   - room/space candidates with footprints, room-label areas when visible, and
+     dimension constraints where available
+   - wall candidates and exterior outline segments, including notches, recesses,
+     and stepped corners
+   - door, window, glazing, and generic passage candidates with source anchors
+     or source intervals
+   - negative/outside regions for visible blank areas that must not become
+     rooms, balconies, platforms, or enclosed pockets
+   - boundary closure constraints for positive spaces whose source edge is
+     visibly closed by wall, railing, facade, glazing, or a window/door/opening
+   - adjacency and alignment constraints when the source shows connected spaces,
+     repeated facade lines, stacked openings, or shared boundaries
+
+   Every extracted constraint must carry provenance. Use
+   `vision_extracted` for image/PDF vision extraction, `ocr_extracted` for
+   OCR-only text/dimension extraction, `cad_extracted` for CAD/vector layer
+   extraction, and `tool_extracted` for deterministic extractor output. Include
+   enough local evidence fields, such as `source_bbox`, `source_anchor`,
+   `source_interval`, `visual_cue`, and `confidence`, so later repair can trace
+   why the constraint exists. Do not use extracted provenance for constraints
+   copied from user corrections, dynamic skills, or maintainer debugging.
+   Do not emit placeholder evidence. If the source provides an interval but no
+   reliable point anchor, include `source_interval` or `interval` only; do not
+   write fake anchors such as `[0, 0, 0]` just to satisfy a schema.
+
+   Include `dimension_chains`, `negative_regions`, `space_candidates` with
+   `label_area_m2` and `dimension_constraints`, and explicit wall/opening
+   candidates when available. Then call
    `import_floorplan_to_model` with `source_interpretation_path`. If the user
    gives known dimensions, pass `width` and `depth` in millimeters. If not, let
    the tool estimate scale and write quality flags.
+   For raster/PDF extraction, state the source coordinate system explicitly. If
+   coordinates come from image space, use a `scale.coordinate_system` such as
+   `x east, y south, origin at north-west source corner` and include
+   `scale.depth` or enough geometry for the import tool to transform the
+   extraction into model-space Y-up coordinates before writing truth.
+   Opening intervals should be explicit about semantics. Use
+   `source_interval` for the visible coordinate interval along the host wall in
+   the source/model plan coordinate system, and set `source_interval_mode` to
+   `wall_coordinate` when known. Use `offset` and `width`, or
+   `source_interval_mode: offset`, only when the values are already measured as
+   distance from the host wall start. This matters on vertical walls in raster
+   images because Y-down source intervals must be reversed into model Y-up
+   coordinates before the opening offset is computed.
    When a room label includes an area, use it as positive evidence to test
    adjacent dimension-chain segments before marking any unlabeled strip as
-   outside. For example, a `2.3m2` balcony beside a `1785mm` depth implies a
-   width near `1289mm`, so a neighboring `1315mm` chain segment is a stronger
-   balcony candidate than a visually adjacent `1180mm` strip. In ambiguous
-   cases, emit competing `space_candidates` and avoid hard negative regions
-   over any candidate that fits both the room label area and dimension chain.
+   outside. In ambiguous cases, emit competing `space_candidates` and avoid hard
+   negative regions over any candidate that fits both the room label area and
+   dimension chain.
    Do not draw continuous walls through visible circulation paths. If a hallway
    or passage visibly connects to a living/dining/kitchen area without a door
    arc, emit a hosted `opening` or let the import tool infer one from adjacent
@@ -58,10 +113,80 @@ Import this floor plan and generate an editable model.
    wall path. For private room doors, bind the door to the wall shared by the
    target room and hallway/passage when such an edge exists; include
    `open_to_space` so the door leaf opens toward the room rather than whichever
-   side the wall path normal happens to face.
+   side the wall path normal happens to face. When the source makes it
+   inferable, also include `access_from_space`, source-side anchor or interval
+   evidence, and whether the door is explicitly an exterior/entry door. A
+   balcony or interior access door should prefer the shared boundary between
+   the target space and the access space over an exterior-only target boundary;
+   reserve exterior-only single-space hosts for doors marked as entry/exterior
+   access.
+   If the import source has repeated ambiguity, a local symbol legend, or
+   corrections that should guide later turns in the same project, create or
+   update a project/session dynamic runtime skill in the active design project
+   using normal skill frontmatter. Prefer names like
+   `import-source-<import_id>`. Keep it project-local, for example under
+   `.agents/skills/` and `.claude/skills/` when those runtime locations are
+   supported. The dynamic skill may record source-specific interpretation and
+   repair guidance, but `design_model.json` remains canonical truth and the
+   source evidence remains under `imports/<import_id>/`. Follow the
+   `project-runtime-memory` skill for dynamic skill scope, format, and
+   guardrails. When source-specific guidance should constrain final output,
+   store it as structured import constraints under `imports/<import_id>/` and
+   have the dynamic skill point to those constraints. Do not rely on prose alone
+   when the correction needs to be checked.
+   Source constraints should cover visible source fidelity, not just execution:
+   use opening constraints for required doors/windows, source intervals, source
+   anchors, source host-wall orientation, and host-wall space references; use
+   space constraints for footprint bounds and room-label areas; use adjacency
+   constraints when the source shows that two spaces are connected through a
+   door, window, or open passage; use exterior outline constraints when the
+   source has a visible shell step, notch, recess, or wall-mass outline that
+   must not be simplified into a rectangle; use boundary closure constraints
+   when a visible source edge must be closed by a wall or must contain a
+   window/door/opening; use negative-region constraints with `forbid_spaces`
+   when a blank or exterior source area must not become an imported room,
+   balcony, platform, or other positive space. Also use negative-region
+   boundary-enclosure constraints when that blank area must remain outside or
+   open; do not turn visible lines around a blank area into full-height wall
+   constraints if doing so would close the blank area into a room-like pocket.
+   Visible facade, railing, or glazing evidence around a blank area should be
+   represented as non-enclosing source evidence or checked with explicit
+   boundary type constraints, not treated as proof that the blank region is a
+   positive space. When an accepted positive space such as a balcony or room
+   borders a negative/outside region, separately encode the positive space edge
+   as a boundary closure constraint, and require a wall/window/opening type when
+   the source shows one. This closes the positive space without enclosing the
+   outside blank region. Use alignment constraints when repeated exterior
+   columns, stacked balconies, glazing runs, or other visible edges should stay
+   on the same plan line.
+   Source constraints must also record extraction provenance. If a constraint
+   was written from a designer correction or temporary validation note, mark it
+   that way and do not claim automatic recognition passed. Use extracted
+   origins such as `vision_extracted`, `ocr_extracted`, `cad_extracted`, or
+   `tool_extracted` only when the constraint was produced by source extraction
+   from the uploaded file.
+   For visible doors, do not rely only on a selected host wall ID and interval.
+   Extract and store the source host axis or wall orientation, source anchor or
+   interval, `open_to_space`, `access_from_space` when inferable, and
+   `require_host_space_refs` when both spaces are known. If a generated door
+   leaf or marker overlaps a nearby passage, adjacent door, or circulation path
+   in top view, treat that as a door host/leaf-clearance source-fidelity
+   failure. Regenerate or repair the source interpretation; do not make it pass
+   by moving the door in a dynamic skill note.
 3. Call `plan_project_execution` to verify the imported walls can be compiled
    into hosted opening operations with sill/header wall pieces and thin
    door/window marker geometry.
+   Then call `validate_import_source_constraints` with
+   `require_extracted_evidence=true` for E2E/source-recognition validation. If
+   this fails because constraints are missing extracted provenance, do not claim
+   the importer recognized the source. Rerun the extraction from the source
+   image or classify the constraints as project-local manual correction.
+   For image/PDF E2E, also check the import manifest and import session before
+   execution: `source.source_type` must be `image`, `pdf`, `dwg`, `dxf`, or
+   `sketchup`, and a recognition-driven import should have a
+   `source_constraints_path`. If the source type is `unknown` or constraints
+   are missing despite visible extracted evidence, rerun the source extraction
+   and import rather than replaying a stale truth file into SketchUp.
 4. If the designer wants SketchUp updated and the bridge is available, call
    `execute_project_model` with `clean_before_execute=true` and
    `clean_scope="all"`. Import replay should remove stale generated walls,
@@ -83,6 +208,47 @@ into outside blank source area or contradicts a visible room-area label. Treat
 that as a source interpretation/generation issue: update the extracted
 interpretation or rerun import with `source_interpretation_path` so candidate
 spaces are rejected before truth is written.
+
+Do not put source-specific interpretation into this shipped skill. Source facts
+such as "this drawing's thin double line means a window" or "this import source
+uses a special balcony symbol" belong in import evidence and, if useful for
+future turns, a project/session dynamic runtime skill generated inside the
+active design project.
+
+Do not treat normal project validation or clean SketchUp replay as proof that
+the model matches the source. They prove the structured model and live scene are
+internally executable. Source-specific fidelity requires source-scoped evidence
+checks: boundary steps or notches, opening intervals, window/glazing intervals,
+opening host-wall orientation, exterior outline segments, boundary closure and
+boundary opening type, edge alignments, outside/negative regions, room-label
+areas, and symbol legends should be represented as import evidence and checked
+by supported review/validation tools before reporting the import as
+source-checked. If a visual mismatch is obvious but no source-fidelity validator
+can express it yet, treat that as a product capability gap instead of hiding the
+case in prose.
+
+Do not treat hand-authored project evidence or dynamic-skill notes as automatic
+floor-plan recognition. They can diagnose a mismatch or preserve a correction
+for the same project, but automatic import E2E should run source-fidelity
+validation with extracted-evidence provenance required.
+
+When running E2E import validation or retrying after a visible mismatch, follow
+this source-first loop:
+
+1. Regenerate extraction from the original source file, not from previous truth,
+   a previous `.skp`, a previous failed interpretation, or dynamic skill prose.
+2. Write source constraints with extracted provenance only when they were
+   produced by the source extraction pass. Designer corrections, maintainer
+   notes, and dynamic-skill guidance must use non-extracted provenance.
+3. Validate with `require_extracted_evidence=true` before claiming automatic
+   recognition. If the validator cannot express a visible mismatch yet, treat
+   that as a product capability gap.
+4. Run a full clean SketchUp replay and capture a top-view screenshot before
+   reporting the generated `.skp` as visually checked.
+5. If the top-view comparison exposes a mismatch, classify the generic failure
+   class and improve the extractor, validator, import generation, or bridge
+   execution path. Do not make E2E pass by writing the expected answer into a
+   project/session dynamic skill.
 
 For floor-plan images, treat the source image as an extraction aid, not as the
 final SketchUp object. Unless the designer explicitly asks for an overlay review,
@@ -134,13 +300,11 @@ whole import by default.
    updates the space footprint, and records source-backed repair history.
 4. If a space footprint edge exists in `design_model.json` but the explicit wall
    list missed a long segment, call `review_imported_boundary_coverage`, then
-   `repair_imported_boundary_coverage`. The review also auto-classifies
-   semantically unlikely short gaps, such as a short horizontal living-room to
-   balcony edge with no explicit opening evidence, as false-opening candidates.
-   The repair fills high-confidence long missing-wall gaps and those semantic
-   false-opening gaps, records source-backed repair history, and marks the
-   project for clean replay. Do not ask the designer to confirm those candidates
-   one by one before the first repair pass.
+   `repair_imported_boundary_coverage`. The repair fills high-confidence
+   missing-wall gaps, records source-backed repair history, and marks the
+   project for clean replay. Short gaps should stay candidates unless there is
+   source-backed wall-continuity evidence; do not infer a wall from room names
+   alone.
 5. If the generated shell encloses an extra pocket that is not part of any
    imported room or balcony footprint, call
    `review_imported_wall_space_consistency`, then
@@ -165,9 +329,19 @@ whole import by default.
    marker inside the hosted wall opening. If the door is present but attached
    to the wrong wall, repair the source interpretation/generation path so the
    host wall matches the intended adjacent spaces, such as
-   `bedroom + hallway`, instead of patching only the current truth.
-7. Call `plan_project_execution` again.
-8. Execute the project with `clean_before_execute=true` and `clean_scope="all"`
+   `bedroom + hallway`, instead of patching only the current truth. If the
+   mismatch is specific to one imported source, store the correction in
+   `imports/<import_id>/` evidence and, when it should guide future turns for
+   this same project, the project/session dynamic runtime skill. Do not promote
+   that source-specific correction into this shipped skill.
+7. If the repair teaches a project-specific interpretation, update the import
+   evidence and the project/session dynamic runtime skill for that import
+   source. When the correction affects future output, encode it as a structured
+   source constraint as well as dynamic-skill guidance, then rerun import from
+   source evidence. Do not update the shipped runtime skill with source-specific
+   facts.
+8. Call `plan_project_execution` again.
+9. Execute the project with `clean_before_execute=true` and `clean_scope="all"`
    when the designer wants SketchUp updated, so stale geometry does not remain
    beside the repaired truth.
 
@@ -183,10 +357,6 @@ The top-left exterior corner has a missing notch. Restore it from the source.
 
 ```text
 The living room boundary is missing a wall segment compared with the source.
-```
-
-```text
-The balcony B boundary should be a solid wall, not an opening.
 ```
 
 ```text
@@ -223,3 +393,9 @@ truth.
 - Use millimeters for all dimensions.
 - Do not leave duplicate old import geometry or raw source images in SketchUp
   after a normal import/re-import.
+- Do not overfit import extraction or repair to one source image. Regression
+  examples may preserve a bug, but reusable behavior must be based on general
+  geometry, topology, scale, provenance, or source-evidence rules.
+- Do not confuse project/session dynamic runtime skills with shipped runtime
+  skills. Dynamic skills may be specific to one project or import source;
+  shipped skills must remain generic product behavior.

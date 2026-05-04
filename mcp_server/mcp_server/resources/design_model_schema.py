@@ -451,6 +451,13 @@ DESIGN_MODEL_SCHEMA: Dict[str, Any] = {
                                 "Optional space id the door leaf should open toward."
                             ),
                         },
+                        "access_from_space": {
+                            "type": "string",
+                            "description": (
+                                "Optional space id or exterior marker describing the "
+                                "source-side approach to this opening."
+                            ),
+                        },
                         "open_side": {
                             "type": "string",
                             "enum": ["normal", "opposite"],

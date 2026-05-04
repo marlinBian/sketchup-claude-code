@@ -91,6 +91,7 @@ from mcp_server.tools.import_pipeline import (
     review_imported_boundary_coverage as review_imported_boundary_coverage_file,
     review_imported_wall_space_consistency as review_imported_wall_space_consistency_file,
     review_model_against_import_source as review_model_against_import_source_file,
+    validate_import_source_constraints as validate_import_source_constraints_file,
 )
 from mcp_server.tools.render_brief import build_render_brief
 from mcp_server.tools.export_tools import save_skp_model as save_skp_model_file
@@ -1835,6 +1836,36 @@ async def get_import_summary(
 
 
 @mcp.tool()
+async def validate_import_source_constraints(
+    project_path: str,
+    import_id: str,
+    constraints_path: str | None = None,
+    tolerance: float = 80,
+    require_executed: bool = False,
+    require_extracted_evidence: bool = False,
+) -> TextContent:
+    """Validate imported truth against project-local source-fidelity constraints."""
+    try:
+        result = validate_import_source_constraints_file(
+            project_path,
+            import_id,
+            constraints_path=constraints_path,
+            tolerance=tolerance,
+            require_executed=require_executed,
+            require_extracted_evidence=require_extracted_evidence,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(
+            type="text",
+            text=f"Import source constraint validation failed: {str(e)}",
+        )
+
+
+@mcp.tool()
 async def list_import_sessions(
     project_path: str,
 ) -> TextContent:
@@ -1950,8 +1981,8 @@ async def review_imported_boundary_coverage(
     import_id: str,
     min_gap_length: float = 50,
     max_opening_gap_length: float = 1200,
-    infer_semantic_short_gaps: bool = True,
-    max_semantic_gap_length: float = 900,
+    infer_source_evidence_short_gaps: bool = True,
+    max_source_evidence_gap_length: float = 900,
     coordinate_match_tolerance: float = 1,
     require_structural_endpoints: bool = True,
 ) -> TextContent:
@@ -1962,8 +1993,8 @@ async def review_imported_boundary_coverage(
             import_id,
             min_gap_length=min_gap_length,
             max_opening_gap_length=max_opening_gap_length,
-            infer_semantic_short_gaps=infer_semantic_short_gaps,
-            max_semantic_gap_length=max_semantic_gap_length,
+            infer_source_evidence_short_gaps=infer_source_evidence_short_gaps,
+            max_source_evidence_gap_length=max_source_evidence_gap_length,
             coordinate_match_tolerance=coordinate_match_tolerance,
             require_structural_endpoints=require_structural_endpoints,
         )
@@ -1984,8 +2015,8 @@ async def repair_imported_boundary_coverage(
     import_id: str,
     min_gap_length: float = 50,
     max_opening_gap_length: float = 1200,
-    infer_semantic_short_gaps: bool = True,
-    max_semantic_gap_length: float = 900,
+    infer_source_evidence_short_gaps: bool = True,
+    max_source_evidence_gap_length: float = 900,
     coordinate_match_tolerance: float = 1,
     require_structural_endpoints: bool = True,
     max_repairs: int = 20,
@@ -1998,8 +2029,8 @@ async def repair_imported_boundary_coverage(
             import_id,
             min_gap_length=min_gap_length,
             max_opening_gap_length=max_opening_gap_length,
-            infer_semantic_short_gaps=infer_semantic_short_gaps,
-            max_semantic_gap_length=max_semantic_gap_length,
+            infer_source_evidence_short_gaps=infer_source_evidence_short_gaps,
+            max_source_evidence_gap_length=max_source_evidence_gap_length,
             coordinate_match_tolerance=coordinate_match_tolerance,
             require_structural_endpoints=require_structural_endpoints,
             max_repairs=max_repairs,

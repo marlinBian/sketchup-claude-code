@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from mcp_server.project_init import init_project
 from mcp_server.project_state import read_project_state
 from mcp_server.resources.design_model_schema import load_design_model
@@ -19,6 +21,7 @@ from mcp_server.tools.import_pipeline import (
     review_imported_boundary_coverage,
     review_imported_wall_space_consistency,
     review_model_against_import_source,
+    validate_import_source_constraints,
 )
 from mcp_server.tools.project_executor import build_project_execution_plan
 
@@ -282,6 +285,86 @@ def make_blocked_passage_interpretation(tmp_path):
     return path
 
 
+def make_open_passage_boundary_gap_interpretation(tmp_path):
+    """Create a fixture where a living room and hallway intentionally share an open edge."""
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "living_candidate",
+                "space_id": "living_001",
+                "type": "living_room",
+                "name": "Living Room",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [4000, 0, 0], [4000, 3000, 0], [0, 3000, 0]],
+            },
+            {
+                "id": "storage_candidate",
+                "space_id": "storage_001",
+                "type": "storage",
+                "name": "Storage",
+                "confidence": 0.7,
+                "footprint": [
+                    [0, 3000, 0],
+                    [1200, 3000, 0],
+                    [1200, 4200, 0],
+                    [0, 4200, 0],
+                ],
+            },
+            {
+                "id": "passage_candidate",
+                "space_id": "passage_001",
+                "type": "hallway",
+                "name": "Passage",
+                "confidence": 0.7,
+                "footprint": [
+                    [1200, 3000, 0],
+                    [2500, 3000, 0],
+                    [2500, 4200, 0],
+                    [1200, 4200, 0],
+                ],
+            },
+        ],
+        "walls": [
+            {
+                "wall_id": "w_storage_south",
+                "path": [[0, 3000, 0], [1200, 3000, 0]],
+                "space_refs": ["living_001", "storage_001"],
+                "confidence": 0.68,
+            },
+            {
+                "wall_id": "w_living_north_right",
+                "path": [[2500, 3000, 0], [4000, 3000, 0]],
+                "space_refs": ["living_001"],
+                "confidence": 0.68,
+            },
+            {
+                "wall_id": "w_storage_passage",
+                "path": [[1200, 3000, 0], [1200, 4200, 0]],
+                "space_refs": ["storage_001", "passage_001"],
+                "confidence": 0.68,
+            },
+            {
+                "wall_id": "w_passage_east",
+                "path": [[2500, 3000, 0], [2500, 4200, 0]],
+                "space_refs": ["passage_001"],
+                "confidence": 0.68,
+            },
+            {
+                "wall_id": "w_passage_north",
+                "path": [[1200, 4200, 0], [2500, 4200, 0]],
+                "space_refs": ["passage_001"],
+                "confidence": 0.68,
+            },
+        ],
+        "openings": [],
+    }
+    path = tmp_path / "open_passage_boundary_gap_interpretation.json"
+    path.write_text(json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
 def make_wrong_bedroom_door_host_interpretation(tmp_path):
     """Create a fixture where a bedroom door is attached to the wrong wall."""
     interpretation = {
@@ -351,6 +434,174 @@ def make_wrong_bedroom_door_host_interpretation(tmp_path):
         ],
     }
     path = tmp_path / "wrong_bedroom_door_host_interpretation.json"
+    path.write_text(json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def make_entry_door_boundary_interpretation(tmp_path):
+    """Create a fixture where an entry door is already on an exterior wall."""
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "living_candidate",
+                "space_id": "living_001",
+                "type": "living_room",
+                "name": "Living Room",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [4000, 0, 0], [4000, 3000, 0], [0, 3000, 0]],
+            },
+            {
+                "id": "kitchen_candidate",
+                "space_id": "kitchen_001",
+                "type": "kitchen",
+                "name": "Kitchen",
+                "confidence": 0.7,
+                "footprint": [[1000, 3000, 0], [3000, 3000, 0], [3000, 4500, 0], [1000, 4500, 0]],
+            },
+        ],
+        "walls": [
+            {
+                "wall_id": "w_ext_living_west",
+                "path": [[0, 0, 0], [0, 3000, 0]],
+                "space_refs": ["living_001"],
+                "confidence": 0.7,
+            },
+            {
+                "wall_id": "w_living_kitchen",
+                "path": [[1000, 3000, 0], [3000, 3000, 0]],
+                "space_refs": ["living_001", "kitchen_001"],
+                "confidence": 0.7,
+            },
+        ],
+        "openings": [
+            {
+                "id": "entry_door_001",
+                "type": "door",
+                "host_wall": "w_ext_living_west",
+                "offset": 900,
+                "width": 900,
+                "height": 2100,
+                "sill_height": 0,
+                "open_to_space": "living_001",
+            }
+        ],
+    }
+    path = tmp_path / "entry_door_boundary_interpretation.json"
+    path.write_text(json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def make_balcony_access_wrong_exterior_host_interpretation(tmp_path):
+    """Create a fixture where balcony access is incorrectly placed on exterior wall."""
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "kitchen_candidate",
+                "space_id": "kitchen_001",
+                "type": "kitchen",
+                "name": "Kitchen",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [3000, 0, 0], [3000, 2400, 0], [0, 2400, 0]],
+            },
+            {
+                "id": "balcony_candidate",
+                "space_id": "balcony_001",
+                "type": "balcony",
+                "name": "Balcony",
+                "confidence": 0.72,
+                "footprint": [
+                    [3000, 0, 0],
+                    [4300, 0, 0],
+                    [4300, 2400, 0],
+                    [3000, 2400, 0],
+                ],
+            },
+        ],
+        "walls": [
+            {
+                "wall_id": "w_kitchen_balcony",
+                "path": [[3000, 0, 0], [3000, 2400, 0]],
+                "space_refs": ["kitchen_001", "balcony_001"],
+                "confidence": 0.72,
+            },
+            {
+                "wall_id": "w_balcony_exterior",
+                "path": [[4300, 0, 0], [4300, 2400, 0]],
+                "space_refs": ["balcony_001"],
+                "confidence": 0.72,
+            },
+        ],
+        "openings": [
+            {
+                "id": "balcony_access_001",
+                "type": "door",
+                "host_wall": "w_balcony_exterior",
+                "offset": 999,
+                "width": 100,
+                "source_interval": [650, 1410],
+                "height": 2100,
+                "sill_height": 0,
+                "open_to_space": "balcony_001",
+                "access_from_space": "kitchen_001",
+            }
+        ],
+    }
+    path = tmp_path / "balcony_access_wrong_exterior_host_interpretation.json"
+    path.write_text(json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def make_overlapping_hosted_openings_interpretation(tmp_path):
+    """Create a fixture where two source openings overlap on one host wall."""
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "room_candidate",
+                "space_id": "room_001",
+                "type": "living_room",
+                "name": "Room",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [3000, 0, 0], [3000, 2500, 0], [0, 2500, 0]],
+            }
+        ],
+        "walls": [
+            {
+                "wall_id": "w_room_east",
+                "path": [[3000, 0, 0], [3000, 2500, 0]],
+                "space_refs": ["room_001"],
+                "confidence": 0.7,
+            }
+        ],
+        "openings": [
+            {
+                "id": "room_glazing_001",
+                "type": "window",
+                "host_wall": "w_room_east",
+                "offset": 200,
+                "width": 1300,
+                "height": 1200,
+                "sill_height": 800,
+                "confidence": 0.68,
+            },
+            {
+                "id": "room_door_001",
+                "type": "door",
+                "host_wall": "w_room_east",
+                "offset": 600,
+                "width": 700,
+                "height": 2100,
+                "sill_height": 0,
+                "confidence": 0.62,
+            },
+        ],
+    }
+    path = tmp_path / "overlapping_hosted_openings_interpretation.json"
     path.write_text(json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return path
 
@@ -446,15 +697,15 @@ def create_shell_overreach(project):
     )
 
 
-def create_semantic_false_opening_gap(project):
-    """Create a short living-balcony boundary gap that should be auto-filled."""
+def create_source_evidence_short_boundary_gap(project):
+    """Create a short boundary gap without source wall evidence."""
     design_model_path = project / "design_model.json"
     design_model = json.loads(design_model_path.read_text(encoding="utf-8"))
     source = {
         "kind": "import_floorplan",
         "import_id": "import_001",
         "confidence": 0.7,
-        "assumptions": ["Semantic false-opening fixture."],
+        "assumptions": ["Short gap fixture without source wall evidence."],
     }
     living = design_model["spaces"]["import_001_space_001"]
     living["type"] = "living_room"
@@ -489,6 +740,221 @@ def create_semantic_false_opening_gap(project):
     design_model_path.write_text(
         json.dumps(design_model, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
+    )
+
+
+def test_interpreted_image_import_requires_real_source_file(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    surrogate_source = tmp_path / "uploaded_floorplan_source_note.txt"
+    surrogate_source.write_text(
+        "The user attached a floor-plan image in chat.",
+        encoding="utf-8",
+    )
+    interpretation_path = tmp_path / "source_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(
+            {
+                "version": "1.0",
+                "scale": {"units": "mm", "source": "vision", "confidence": 0.6},
+                "source": {"provenance": {"origin": "vision_extracted"}},
+                "space_candidates": [
+                    {
+                        "id": "room_candidate",
+                        "space_id": "room_001",
+                        "type": "other",
+                        "confidence": 0.7,
+                        "footprint": [
+                            [0, 0, 0],
+                            [1000, 0, 0],
+                            [1000, 1000, 0],
+                            [0, 1000, 0],
+                        ],
+                    }
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="recognized source type"):
+        import_floorplan_to_model(
+            project,
+            source_path=surrogate_source,
+            import_id="import_001",
+            source_interpretation_path=interpretation_path,
+        )
+
+
+def test_interpreted_image_import_normalizes_y_down_coordinates(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, name="floorplan.png")
+    interpretation_path = tmp_path / "source_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(
+            {
+                "version": "1.0",
+                "scale": {
+                    "units": "mm",
+                    "source": "visible_dimensions",
+                    "confidence": 0.72,
+                    "width": 2000,
+                    "depth": 3000,
+                    "coordinate_system": (
+                        "x east, y south, origin at north-west source corner"
+                    ),
+                },
+                "source": {"provenance": {"origin": "vision_extracted"}},
+                "negative_regions": [
+                    {
+                        "id": "outside_blank",
+                        "kind": "outside_plan",
+                        "footprint": [
+                            [0, 2000, 0],
+                            [500, 2000, 0],
+                            [500, 2500, 0],
+                            [0, 2500, 0],
+                        ],
+                    }
+                ],
+                "boundary_closure_constraints": [
+                    {
+                        "id": "room_top_boundary_closure",
+                        "path": [[0, 0, 0], [2000, 0, 0]],
+                        "space_refs": ["room_001"],
+                    }
+                ],
+                "space_candidates": [
+                    {
+                        "id": "room_candidate",
+                        "space_id": "room_001",
+                        "type": "bedroom",
+                        "name": "Room",
+                        "confidence": 0.76,
+                        "label_anchor": [1000, 500, 0],
+                        "footprint": [
+                            [0, 0, 0],
+                            [2000, 0, 0],
+                            [2000, 1000, 0],
+                            [0, 1000, 0],
+                        ],
+                    }
+                ],
+                "walls": [
+                    {
+                        "wall_id": "w_room_top",
+                        "path": [[0, 0, 0], [2000, 0, 0]],
+                        "space_refs": ["room_001"],
+                    },
+                    {
+                        "wall_id": "w_room_right",
+                        "path": [[2000, 0, 0], [2000, 1000, 0]],
+                        "space_refs": ["room_001"],
+                    }
+                ],
+                "openings": [
+                    {
+                        "id": "window_001",
+                        "type": "window",
+                        "host_wall": "w_room_top",
+                        "source_interval": [500, 1300],
+                        "source_anchor": [900, 0, 0],
+                        "height": 1200,
+                        "sill_height": 900,
+                    },
+                    {
+                        "id": "window_right",
+                        "type": "window",
+                        "host_wall": "w_room_right",
+                        "source_interval": [250, 750],
+                        "source_anchor": [2000, 500, 0],
+                        "height": 1200,
+                        "sill_height": 900,
+                    }
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+
+    design_model = json.loads((project / "design_model.json").read_text())
+    assert result["summary"]["coordinate_transform"]["type"] == (
+        "image_y_down_to_model_y_up"
+    )
+    assert "source_y_down_coordinates_transformed" in result["quality_flags"]
+    assert (
+        "source_constraints_derived_from_interpretation"
+        in result["quality_flags"]
+    )
+    assert design_model["spaces"]["room_001"]["footprint"] == [
+        [0.0, 3000.0, 0.0],
+        [2000.0, 3000.0, 0.0],
+        [2000.0, 2000.0, 0.0],
+        [0.0, 2000.0, 0.0],
+    ]
+    assert design_model["walls"]["w_room_top"]["path"] == [
+        [0.0, 3000.0, 0.0],
+        [2000.0, 3000.0, 0.0],
+    ]
+    assert design_model["walls"]["w_room_right"]["path"] == [
+        [2000.0, 3000.0, 0.0],
+        [2000.0, 2000.0, 0.0],
+    ]
+    assert design_model["openings"]["window_001"]["source"]["opening_evidence"][
+        "source_anchor"
+    ] == [900.0, 3000.0, 0.0]
+    assert design_model["openings"]["window_right"]["offset"] == 250.0
+    assert design_model["openings"]["window_right"]["width"] == 500.0
+    assert design_model["openings"]["window_right"]["source"]["opening_evidence"][
+        "source_interval"
+    ] == [2250.0, 2750.0]
+    assert design_model["openings"]["window_right"]["source"]["opening_evidence"][
+        "source_interval_coordinate_system"
+    ] == "model_y_up"
+    constraints_path = (
+        project
+        / design_model["import_sessions"]["import_001"]["source_constraints_path"]
+    )
+    constraints = json.loads(constraints_path.read_text(encoding="utf-8"))
+    assert constraints["derived_from_source_interpretation"] is True
+    assert constraints["negative_region_constraints"][0]["footprint"] == [
+        [0.0, 1000.0, 0.0],
+        [500.0, 1000.0, 0.0],
+        [500.0, 500.0, 0.0],
+        [0.0, 500.0, 0.0],
+    ]
+    assert constraints["boundary_closure_constraints"][0]["path"] == [
+        [0.0, 3000.0, 0.0],
+        [2000.0, 3000.0, 0.0],
+    ]
+    assert constraints["boundary_closure_constraints"][0]["provenance"] == {
+        "origin": "vision_extracted"
+    }
+    assert constraints["opening_constraints"][0]["source_anchor"] == [
+        900.0,
+        3000.0,
+        0.0,
+    ]
+    assert constraints["opening_constraints"][1]["source_interval"] == [
+        2250.0,
+        2750.0,
+    ]
+    assert constraints["opening_constraints"][1]["source_interval_mode"] == (
+        "wall_coordinate"
     )
 
 
@@ -728,6 +1194,1673 @@ def test_interpreted_import_repairs_private_room_door_host_wall(tmp_path):
     assert design_model["metadata"]["execution_sync"]["details"][
         "stale_execution_feedback"
     ]["removed_bridge_operations"] == ["wall_w_bedroom_south_with_openings"]
+
+
+def test_interpreted_import_keeps_entry_door_on_exterior_boundary(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "plan.png")
+    interpretation = make_entry_door_boundary_interpretation(tmp_path)
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation,
+    )
+    design_model = json.loads((project / "design_model.json").read_text(encoding="utf-8"))
+    extracted = json.loads(
+        (
+            project
+            / "imports"
+            / "import_001"
+            / "extracted"
+            / "interpretation.json"
+        ).read_text(encoding="utf-8")
+    )
+    plan = build_project_execution_plan(project)
+
+    door = design_model["openings"]["entry_door_001"]
+    west_wall_operation = next(
+        operation
+        for operation in plan["bridge_operations"]
+        if operation["payload"].get("wall_id") == "w_ext_living_west"
+    )
+
+    assert "source_door_host_repaired_during_generation" not in result["quality_flags"]
+    assert extracted["door_host_repair"]["status"] == "unchanged"
+    assert door["host_wall"] == "w_ext_living_west"
+    assert door["offset"] == 900.0
+    assert door["open_to_space"] == "living_001"
+    assert west_wall_operation["operation_type"] == "create_wall_with_openings"
+
+
+def test_interpreted_import_prefers_shared_boundary_for_balcony_access(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "plan.png")
+    interpretation = make_balcony_access_wrong_exterior_host_interpretation(tmp_path)
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation,
+    )
+    design_model = json.loads((project / "design_model.json").read_text(encoding="utf-8"))
+    extracted = json.loads(
+        (
+            project
+            / "imports"
+            / "import_001"
+            / "extracted"
+            / "interpretation.json"
+        ).read_text(encoding="utf-8")
+    )
+    plan = build_project_execution_plan(project)
+
+    door = design_model["openings"]["balcony_access_001"]
+    shared_wall_operation = next(
+        operation
+        for operation in plan["bridge_operations"]
+        if operation["payload"].get("wall_id") == "w_kitchen_balcony"
+    )
+
+    assert "source_door_host_repaired_during_generation" in result["quality_flags"]
+    assert extracted["door_host_repair"]["status"] == "repaired"
+    assert door["host_wall"] == "w_kitchen_balcony"
+    assert door["offset"] == 650.0
+    assert door["width"] == 760.0
+    assert door["access_from_space"] == "kitchen_001"
+    assert door["open_to_space"] == "balcony_001"
+    assert door["source"]["repairs"][0]["from_host_wall"] == "w_balcony_exterior"
+    assert shared_wall_operation["operation_type"] == "create_wall_with_openings"
+    assert shared_wall_operation["payload"]["openings"][0]["open_to_space"] == "balcony_001"
+
+
+def test_validate_import_source_constraints_passes_opening_and_wall_constraints(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "plan.png")
+    interpretation = make_balcony_access_wrong_exterior_host_interpretation(tmp_path)
+
+    import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation,
+    )
+    constraints_path = project / "imports" / "import_001" / "constraints.json"
+    constraints_path.write_text(
+        json.dumps(
+            {
+                "version": "1.0",
+                "import_id": "import_001",
+                "opening_constraints": [
+                    {
+                        "id": "balcony_access_001",
+                        "type": "door",
+                        "host_wall": "w_kitchen_balcony",
+                        "open_to_space": "balcony_001",
+                        "access_from_space": "kitchen_001",
+                        "interval": [650, 1410],
+                        "interval_tolerance": 1,
+                    }
+                ],
+                "wall_constraints": [
+                    {
+                        "id": "w_kitchen_balcony",
+                        "path": [[3000, 0, 0], [3000, 2400, 0]],
+                        "path_tolerance": 1,
+                        "space_refs": ["kitchen_001", "balcony_001"],
+                    }
+                ],
+                "negative_region_constraints": [
+                    {
+                        "id": "outside_right",
+                        "bounds": {
+                            "min": [4400, 0, 0],
+                            "max": [5200, 2400, 0],
+                        },
+                        "max_wall_overlap_length": 0,
+                    }
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = validate_import_source_constraints(project, "import_001")
+    design_model = json.loads((project / "design_model.json").read_text(encoding="utf-8"))
+    manifest = json.loads(
+        (project / "imports" / "import_001" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert result["status"] == "passed"
+    assert result["checked_count"] == 3
+    assert result["failure_count"] == 0
+    assert design_model["import_sessions"]["import_001"]["source_fidelity"]["status"] == "passed"
+    assert manifest["source_fidelity"]["status"] == "passed"
+
+
+def test_validate_import_source_constraints_reports_opening_mismatch(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "plan.png")
+    interpretation = make_balcony_access_wrong_exterior_host_interpretation(tmp_path)
+
+    import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation,
+    )
+    constraints_path = project / "imports" / "import_001" / "constraints.json"
+    constraints_path.write_text(
+        json.dumps(
+            {
+                "version": "1.0",
+                "import_id": "import_001",
+                "opening_constraints": [
+                    {
+                        "id": "balcony_access_001",
+                        "host_wall": "w_balcony_exterior",
+                        "interval": [0, 500],
+                        "interval_tolerance": 1,
+                    }
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = validate_import_source_constraints(project, "import_001")
+    codes = {failure["code"] for failure in result["failures"]}
+
+    assert result["status"] == "failed"
+    assert "opening_host_wall_mismatch" in codes
+    assert "opening_interval_mismatch" in codes
+
+
+def test_validate_import_source_constraints_checks_opening_anchor_and_host_refs(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "plan.png")
+    interpretation = make_balcony_access_wrong_exterior_host_interpretation(tmp_path)
+
+    import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation,
+    )
+    constraints_path = project / "imports" / "import_001" / "constraints.json"
+    constraints_path.write_text(
+        json.dumps(
+            {
+                "version": "1.0",
+                "import_id": "import_001",
+                "opening_constraints": [
+                    {
+                        "id": "balcony_access_001",
+                        "host_wall": "w_kitchen_balcony",
+                        "open_to_space": "balcony_001",
+                        "access_from_space": "kitchen_001",
+                        "require_host_space_refs": True,
+                        "source_anchor": {"point": [3000, 1030, 0], "mode": "center"},
+                        "anchor_tolerance": 1,
+                    }
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = validate_import_source_constraints(project, "import_001")
+
+    assert result["status"] == "passed"
+    assert result["checked_count"] == 1
+
+
+def test_validate_import_source_constraints_reports_opening_host_axis_mismatch(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "host-axis-plan.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "room_candidate",
+                "space_id": "room_001",
+                "type": "bedroom",
+                "name": "Room",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [3000, 0, 0], [3000, 2400, 0], [0, 2400, 0]],
+            }
+        ],
+        "walls": [
+            {
+                "wall_id": "w_room_south",
+                "path": [[0, 0, 0], [3000, 0, 0]],
+                "space_refs": ["room_001"],
+                "confidence": 0.72,
+            }
+        ],
+        "openings": [
+            {
+                "id": "door_001",
+                "type": "door",
+                "host_wall": "w_room_south",
+                "source_interval": [400, 1200],
+                "height": 2100,
+                "sill_height": 0,
+                "open_to_space": "room_001",
+            }
+        ],
+        "constraints": {
+            "opening_constraints": [
+                {
+                    "id": "door_001",
+                    "source_wall_orientation": "vertical",
+                }
+            ]
+        },
+    }
+    interpretation_path = tmp_path / "host_axis_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+    codes = {failure["code"] for failure in result["source_fidelity"]["failures"]}
+
+    assert result["source_fidelity"]["status"] == "failed"
+    assert "opening_host_axis_mismatch" in codes
+
+
+def test_validate_import_source_constraints_reports_edge_alignment_mismatch(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "stacked-edge-plan.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "upper_candidate",
+                "space_id": "upper_001",
+                "type": "balcony",
+                "name": "Upper",
+                "confidence": 0.76,
+                "footprint": [[0, 1200, 0], [1200, 1200, 0], [1200, 2400, 0], [0, 2400, 0]],
+            },
+            {
+                "id": "lower_candidate",
+                "space_id": "lower_001",
+                "type": "balcony",
+                "name": "Lower",
+                "confidence": 0.76,
+                "footprint": [[160, 0, 0], [1360, 0, 0], [1360, 1200, 0], [160, 1200, 0]],
+            },
+        ],
+        "walls": [],
+        "openings": [],
+        "constraints": {
+            "alignment_constraints": [
+                {
+                    "id": "stacked_left_edges",
+                    "space_ids": ["upper_001", "lower_001"],
+                    "axis": "x",
+                    "edge": "min",
+                    "alignment_tolerance": 20,
+                }
+            ]
+        },
+    }
+    interpretation_path = tmp_path / "edge_alignment_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+    codes = {failure["code"] for failure in result["source_fidelity"]["failures"]}
+
+    assert result["source_fidelity"]["status"] == "failed"
+    assert "edge_alignment_mismatch" in codes
+
+
+def test_validate_import_source_constraints_reports_exterior_outline_gap(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "outline-gap-plan.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "room_candidate",
+                "space_id": "room_001",
+                "type": "living_room",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [3000, 0, 0], [3000, 2400, 0], [0, 2400, 0]],
+            }
+        ],
+        "walls": [
+            {
+                "wall_id": "w_room_south",
+                "path": [[0, 0, 0], [3000, 0, 0]],
+                "space_refs": ["room_001"],
+                "confidence": 0.72,
+            }
+        ],
+        "openings": [],
+        "constraints": {
+            "exterior_outline_constraints": [
+                {
+                    "id": "source_exterior_outline",
+                    "segments": [
+                        {"path": [[0, 0, 0], [3000, 0, 0]]},
+                        {"path": [[3000, 0, 0], [3000, 2400, 0]]},
+                    ],
+                    "path_tolerance": 1,
+                }
+            ]
+        },
+    }
+    interpretation_path = tmp_path / "outline_gap_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+    codes = {failure["code"] for failure in result["source_fidelity"]["failures"]}
+
+    assert result["source_fidelity"]["status"] == "failed"
+    assert "exterior_outline_segment_missing" in codes
+
+
+def test_validate_import_source_constraints_accepts_split_outline_coverage(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "split-outline-plan.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "room_candidate",
+                "space_id": "room_001",
+                "type": "living_room",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [2000, 0, 0], [2000, 1200, 0], [0, 1200, 0]],
+            }
+        ],
+        "walls": [
+            {
+                "wall_id": "w_south_left",
+                "path": [[0, 0, 0], [1000, 0, 0]],
+                "space_refs": ["room_001"],
+                "confidence": 0.72,
+            },
+            {
+                "wall_id": "w_south_right",
+                "path": [[1000, 0, 0], [2000, 0, 0]],
+                "space_refs": ["room_001"],
+                "confidence": 0.72,
+            },
+        ],
+        "openings": [],
+        "constraints": {
+            "exterior_outline_constraints": [
+                {
+                    "id": "source_split_outline",
+                    "path": [[0, 0, 0], [2000, 0, 0]],
+                    "path_tolerance": 1,
+                }
+            ]
+        },
+    }
+    interpretation_path = tmp_path / "split_outline_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+
+    assert result["source_fidelity"]["status"] == "passed"
+
+
+def test_interpreted_import_preserves_source_constrained_shell_segment(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "constrained-shell-plan.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "room_candidate",
+                "space_id": "room_001",
+                "type": "bathroom",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [1000, 0, 0], [1000, 1000, 0], [0, 1000, 0]],
+            }
+        ],
+        "walls": [
+            {
+                "wall_id": "w_source_notch_riser",
+                "path": [[-200, 1000, 0], [-200, 1320, 0]],
+                "confidence": 0.72,
+            }
+        ],
+        "openings": [],
+        "constraints": {
+            "wall_constraints": [
+                {
+                    "id": "w_source_notch_riser",
+                    "path": [[-200, 1000, 0], [-200, 1320, 0]],
+                    "path_tolerance": 1,
+                }
+            ],
+            "exterior_outline_constraints": [
+                {
+                    "id": "source_notch_outline",
+                    "path": [[-200, 1000, 0], [-200, 1320, 0]],
+                    "path_tolerance": 1,
+                }
+            ],
+        },
+    }
+    interpretation_path = tmp_path / "constrained_shell_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+    design_model = json.loads((project / "design_model.json").read_text(encoding="utf-8"))
+    extracted = json.loads(
+        (
+            project
+            / "imports"
+            / "import_001"
+            / "extracted"
+            / "interpretation.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert "w_source_notch_riser" in design_model["walls"]
+    assert result["source_fidelity"]["status"] == "passed"
+    assert extracted["shell_trim"]["status"] == "unchanged"
+    assert [
+        segment["wall_id"]
+        for segment in extracted["shell_trim"]["preserved_source_constrained_segments"]
+    ] == ["w_source_notch_riser"]
+
+
+def test_interpreted_import_uses_footprint_overlap_for_negative_notch(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "negative-notch-plan.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "negative_regions": [
+            {
+                "id": "top_left_notch",
+                "kind": "outside_plan_notch",
+                "footprint": [[0, 1000, 0], [200, 1000, 0], [200, 1300, 0], [0, 1300, 0]],
+            }
+        ],
+        "space_candidates": [
+            {
+                "id": "notched_room_candidate",
+                "space_id": "notched_room_001",
+                "type": "bathroom",
+                "confidence": 0.76,
+                "footprint": [
+                    [0, 0, 0],
+                    [1000, 0, 0],
+                    [1000, 1300, 0],
+                    [200, 1300, 0],
+                    [200, 1000, 0],
+                    [0, 1000, 0],
+                ],
+            }
+        ],
+        "walls": [],
+        "openings": [],
+        "constraints": {
+            "negative_region_constraints": [
+                {
+                    "id": "top_left_notch",
+                    "bounds": {"min": [0, 1000, 0], "max": [200, 1300, 0]},
+                    "max_space_overlap_m2": 0.001,
+                }
+            ]
+        },
+    }
+    interpretation_path = tmp_path / "negative_notch_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+
+    assert result["source_fidelity"]["status"] == "passed"
+    assert result["summary"]["accepted_candidate_count"] == 1
+    assert result["summary"]["rejected_candidate_count"] == 0
+
+
+def test_interpreted_import_removes_redundant_wall_fully_covered_by_segments(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "redundant-wall-plan.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "room_candidate",
+                "space_id": "room_001",
+                "type": "living_room",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [2000, 0, 0], [2000, 1200, 0], [0, 1200, 0]],
+            }
+        ],
+        "walls": [
+            {"wall_id": "w_broad", "path": [[0, 0, 0], [2000, 0, 0]], "confidence": 0.62},
+            {"wall_id": "w_left", "path": [[0, 0, 0], [900, 0, 0]], "confidence": 0.7},
+            {"wall_id": "w_right", "path": [[900, 0, 0], [2000, 0, 0]], "confidence": 0.7},
+        ],
+        "openings": [],
+    }
+    interpretation_path = tmp_path / "redundant_wall_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+    design_model = json.loads((project / "design_model.json").read_text(encoding="utf-8"))
+    extracted = json.loads(
+        (
+            project
+            / "imports"
+            / "import_001"
+            / "extracted"
+            / "interpretation.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert "source_redundant_walls_removed_during_generation" in result["quality_flags"]
+    assert "w_broad" not in design_model["walls"]
+    assert {"w_left", "w_right"}.issubset(design_model["walls"])
+    assert extracted["redundant_walls"]["removed_walls"] == [
+        {"wall_id": "w_broad", "covered_by": ["w_left", "w_right"]}
+    ]
+
+
+def test_interpreted_import_rejects_candidate_when_label_anchor_is_outside(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "label-anchor-plan.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+                {
+                    "id": "wrong_strip",
+                    "space_id": "balcony_001",
+                    "type": "balcony",
+                    "label_area_m2": 1.44,
+                "label_anchor": [500, 600, 0],
+                "confidence": 0.9,
+                "footprint": [[1200, 0, 0], [2400, 0, 0], [2400, 1200, 0], [1200, 1200, 0]],
+            },
+                {
+                    "id": "label_containing_strip",
+                    "space_id": "balcony_001",
+                    "type": "balcony",
+                    "label_area_m2": 1.44,
+                "label_anchor": [500, 600, 0],
+                "confidence": 0.7,
+                "footprint": [[0, 0, 0], [1200, 0, 0], [1200, 1200, 0], [0, 1200, 0]],
+            },
+        ],
+        "walls": [],
+        "openings": [],
+        "constraints": {
+            "space_constraints": [
+                {
+                    "id": "balcony_001",
+                    "label_anchor": [500, 600, 0],
+                }
+            ]
+        },
+    }
+    interpretation_path = tmp_path / "label_anchor_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+    design_model = json.loads((project / "design_model.json").read_text(encoding="utf-8"))
+    extracted = json.loads(
+        (
+            project
+            / "imports"
+            / "import_001"
+            / "extracted"
+            / "interpretation.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert result["source_fidelity"]["status"] == "passed"
+    assert design_model["spaces"]["balcony_001"]["source"]["candidate_id"] == "label_containing_strip"
+    rejected = [
+        review
+        for review in extracted["candidate_reviews"]
+        if review["candidate_id"] == "wrong_strip"
+    ][0]
+    assert rejected["status"] == "rejected"
+    assert {issue["code"] for issue in rejected["issues"]} == {
+        "label_anchor_outside_footprint",
+    }
+
+
+def test_validate_import_source_constraints_reports_space_label_anchor_outside(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "label-anchor-mismatch-plan.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "room_candidate",
+                "space_id": "room_001",
+                "type": "living_room",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [1000, 0, 0], [1000, 1000, 0], [0, 1000, 0]],
+            }
+        ],
+        "walls": [],
+        "openings": [],
+        "constraints": {
+            "space_constraints": [
+                {
+                    "id": "room_001",
+                    "label_anchor": [1500, 500, 0],
+                }
+            ]
+        },
+    }
+    interpretation_path = tmp_path / "label_anchor_mismatch_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+    codes = {failure["code"] for failure in result["source_fidelity"]["failures"]}
+
+    assert result["source_fidelity"]["status"] == "failed"
+    assert "space_label_anchor_outside_footprint" in codes
+
+
+def test_validate_import_source_constraints_reports_negative_region_space_overlap(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "negative-space-plan.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "room_candidate",
+                "space_id": "room_001",
+                "type": "living_room",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [2000, 0, 0], [2000, 2000, 0], [0, 2000, 0]],
+            }
+        ],
+        "walls": [],
+        "openings": [],
+        "constraints": {
+            "negative_region_constraints": [
+                {
+                    "id": "source_outside_region",
+                    "bounds": {"min": [1000, 0, 0], "max": [3000, 2000, 0]},
+                    "forbid_spaces": True,
+                    "coordinate_tolerance": 1,
+                }
+            ]
+        },
+    }
+    interpretation_path = tmp_path / "negative_space_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+    codes = {failure["code"] for failure in result["source_fidelity"]["failures"]}
+
+    assert result["source_fidelity"]["status"] == "failed"
+    assert "negative_region_space_overlap" in codes
+
+
+def test_validate_import_source_constraints_reports_boundary_opening_type_missing(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "boundary-window-plan.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "room_candidate",
+                "space_id": "room_001",
+                "type": "bedroom",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [3000, 0, 0], [3000, 2400, 0], [0, 2400, 0]],
+            }
+        ],
+        "walls": [
+            {
+                "wall_id": "w_room_east",
+                "path": [[3000, 0, 0], [3000, 2400, 0]],
+                "space_refs": ["room_001"],
+                "confidence": 0.72,
+            }
+        ],
+        "openings": [],
+        "constraints": {
+            "boundary_closure_constraints": [
+                {
+                    "id": "room_east_window_run",
+                    "path": [[3000, 400, 0], [3000, 1800, 0]],
+                    "required_opening_type": "window",
+                    "path_tolerance": 1,
+                }
+            ]
+        },
+    }
+    interpretation_path = tmp_path / "boundary_window_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+    codes = {failure["code"] for failure in result["source_fidelity"]["failures"]}
+
+    assert result["source_fidelity"]["status"] == "failed"
+    assert "boundary_opening_type_missing" in codes
+
+
+def test_validate_import_source_constraints_reports_boundary_closure_missing(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "boundary-gap-plan.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "balcony_candidate",
+                "space_id": "balcony_001",
+                "type": "balcony",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [2000, 0, 0], [2000, 1200, 0], [0, 1200, 0]],
+            }
+        ],
+        "walls": [],
+        "openings": [],
+        "constraints": {
+            "boundary_closure_constraints": [
+                {
+                    "id": "balcony_source_bottom_edge",
+                    "path": [[0, 0, 0], [2000, 0, 0]],
+                    "path_tolerance": 1,
+                }
+            ]
+        },
+    }
+    interpretation_path = tmp_path / "boundary_gap_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+    codes = {failure["code"] for failure in result["source_fidelity"]["failures"]}
+
+    assert result["source_fidelity"]["status"] == "failed"
+    assert "boundary_closure_missing" in codes
+
+
+def test_validate_import_source_constraints_reports_space_topology_mismatch(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "gap-between-spaces.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "kitchen_candidate",
+                "space_id": "kitchen_001",
+                "type": "kitchen",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [3000, 0, 0], [3000, 2400, 0], [0, 2400, 0]],
+            },
+            {
+                "id": "balcony_candidate",
+                "space_id": "balcony_001",
+                "type": "balcony",
+                "confidence": 0.72,
+                "footprint": [[4300, 0, 0], [5600, 0, 0], [5600, 2400, 0], [4300, 2400, 0]],
+            },
+        ],
+        "walls": [
+            {
+                "wall_id": "w_kitchen_east",
+                "path": [[3000, 0, 0], [3000, 2400, 0]],
+                "space_refs": ["kitchen_001"],
+                "confidence": 0.72,
+            },
+            {
+                "wall_id": "w_balcony_west",
+                "path": [[4300, 0, 0], [4300, 2400, 0]],
+                "space_refs": ["balcony_001"],
+                "confidence": 0.72,
+            },
+        ],
+        "openings": [
+            {
+                "id": "balcony_access_001",
+                "type": "door",
+                "host_wall": "w_balcony_west",
+                "source_interval": [650, 1410],
+                "height": 2100,
+                "sill_height": 0,
+                "open_to_space": "balcony_001",
+                "access_from_space": "kitchen_001",
+            }
+        ],
+        "constraints": {
+            "opening_constraints": [
+                {
+                    "id": "balcony_access_001",
+                    "open_to_space": "balcony_001",
+                    "access_from_space": "kitchen_001",
+                    "require_host_space_refs": True,
+                }
+            ],
+            "space_constraints": [
+                {
+                    "id": "balcony_001",
+                    "bounds": {"min": [3000, 0, 0], "max": [4300, 2400, 0]},
+                    "bounds_tolerance": 1,
+                }
+            ],
+            "adjacency_constraints": [
+                {
+                    "id": "kitchen_balcony_source_access",
+                    "space_ids": ["kitchen_001", "balcony_001"],
+                    "require_shared_wall": True,
+                    "require_opening": True,
+                    "opening_id": "balcony_access_001",
+                }
+            ],
+        },
+    }
+    interpretation_path = tmp_path / "gap_between_spaces_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+    codes = {failure["code"] for failure in result["source_fidelity"]["failures"]}
+
+    assert result["source_fidelity"]["status"] == "failed"
+    assert "opening_host_space_refs_mismatch" in codes
+    assert "space_bounds_mismatch" in codes
+    assert "adjacency_shared_wall_missing" in codes
+
+
+def test_interpreted_import_persists_and_checks_embedded_source_constraints(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "plan.png")
+    interpretation = json.loads(
+        make_balcony_access_wrong_exterior_host_interpretation(tmp_path).read_text(
+            encoding="utf-8"
+        )
+    )
+    interpretation["constraints"] = {
+        "opening_constraints": [
+            {
+                "id": "balcony_access_001",
+                "host_wall": "w_kitchen_balcony",
+                "access_from_space": "kitchen_001",
+                "open_to_space": "balcony_001",
+                "source_interval": [650, 1410],
+                "interval_tolerance": 1,
+            }
+        ]
+    }
+    interpretation_path = tmp_path / "interpretation_with_constraints.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+    constraints_path = project / "imports" / "import_001" / "constraints.json"
+    extracted = json.loads(
+        (
+            project
+            / "imports"
+            / "import_001"
+            / "extracted"
+            / "interpretation.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert constraints_path.exists()
+    assert result["source_fidelity"]["status"] == "passed"
+    assert extracted["source_constraints_path"] == "imports/import_001/constraints.json"
+
+
+def test_interpreted_opening_source_interval_does_not_require_width(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "interval-only-plan.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "room_candidate",
+                "space_id": "room_001",
+                "type": "living_room",
+                "name": "Room",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [3000, 0, 0], [3000, 2400, 0], [0, 2400, 0]],
+            }
+        ],
+        "walls": [
+            {
+                "wall_id": "w_room_south",
+                "path": [[0, 0, 0], [3000, 0, 0]],
+                "space_refs": ["room_001"],
+                "confidence": 0.72,
+            }
+        ],
+        "openings": [
+            {
+                "id": "door_001",
+                "type": "door",
+                "host_wall": "w_room_south",
+                "source_interval": [400, 1200],
+                "height": 2100,
+                "sill_height": 0,
+                "open_to_space": "room_001",
+            }
+        ],
+    }
+    interpretation_path = tmp_path / "interval_only_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+    design_model, errors = load_design_model(str(project / "design_model.json"))
+
+    assert errors == []
+    opening = design_model["openings"]["door_001"]
+    assert opening["offset"] == 400
+    assert opening["width"] == 800
+
+
+def test_source_constraints_allow_negative_region_boundary_walls(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "negative-boundary-plan.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "room_candidate",
+                "space_id": "room_001",
+                "type": "living_room",
+                "name": "Room",
+                "confidence": 0.76,
+                "footprint": [[1000, 0, 0], [2200, 0, 0], [2200, 1000, 0], [1000, 1000, 0]],
+            }
+        ],
+        "walls": [
+            {
+                "wall_id": "w_room_west",
+                "path": [[1000, 0, 0], [1000, 1000, 0]],
+                "space_refs": ["room_001"],
+                "confidence": 0.72,
+            }
+        ],
+        "openings": [],
+        "constraints": {
+            "negative_region_constraints": [
+                {
+                    "id": "outside_left",
+                    "bounds": {"min": [0, 0, 0], "max": [1000, 1000, 0]},
+                    "max_wall_overlap_length": 0,
+                    "forbid_boundary_enclosure": True,
+                    "coordinate_tolerance": 1,
+                }
+            ]
+        },
+    }
+    interpretation_path = tmp_path / "negative_boundary_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+
+    assert result["source_fidelity"]["status"] == "passed"
+
+
+def test_validate_import_source_constraints_reports_negative_region_boundary_enclosure(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "negative-boundary-enclosure-plan.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "room_candidate",
+                "space_id": "room_001",
+                "type": "living_room",
+                "name": "Room",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [1000, 0, 0], [1000, 1000, 0], [0, 1000, 0]],
+            }
+        ],
+        "walls": [
+            {
+                "wall_id": "w_shared_east",
+                "path": [[1000, 0, 0], [1000, 1000, 0]],
+                "space_refs": ["room_001"],
+                "confidence": 0.72,
+            },
+            {
+                "wall_id": "w_negative_bottom",
+                "path": [[1000, 0, 0], [2000, 0, 0]],
+                "space_refs": [],
+                "confidence": 0.62,
+            },
+            {
+                "wall_id": "w_negative_east",
+                "path": [[2000, 0, 0], [2000, 1000, 0]],
+                "space_refs": [],
+                "confidence": 0.62,
+            },
+            {
+                "wall_id": "w_negative_top",
+                "path": [[1000, 1000, 0], [2000, 1000, 0]],
+                "space_refs": [],
+                "confidence": 0.62,
+            },
+        ],
+        "openings": [],
+        "constraints": {
+            "wall_constraints": [
+                {"id": "w_shared_east", "path": [[1000, 0, 0], [1000, 1000, 0]]},
+                {"id": "w_negative_bottom", "path": [[1000, 0, 0], [2000, 0, 0]]},
+                {"id": "w_negative_east", "path": [[2000, 0, 0], [2000, 1000, 0]]},
+                {"id": "w_negative_top", "path": [[1000, 1000, 0], [2000, 1000, 0]]},
+            ],
+            "negative_region_constraints": [
+                {
+                    "id": "outside_right",
+                    "bounds": {"min": [1000, 0, 0], "max": [2000, 1000, 0]},
+                    "forbid_spaces": True,
+                    "forbid_boundary_enclosure": True,
+                    "coordinate_tolerance": 1,
+                }
+            ]
+        },
+    }
+    interpretation_path = tmp_path / "negative_boundary_enclosure_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+    codes = {failure["code"] for failure in result["source_fidelity"]["failures"]}
+
+    assert result["source_fidelity"]["status"] == "failed"
+    assert "negative_region_boundary_enclosure" in codes
+
+
+def test_positive_boundary_adjacent_to_negative_region_can_close_without_enclosing(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "positive-boundary-near-outside-plan.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "balcony_candidate",
+                "space_id": "balcony_001",
+                "type": "balcony",
+                "name": "Balcony",
+                "confidence": 0.76,
+                "footprint": [[0, 1000, 0], [1000, 1000, 0], [1000, 2000, 0], [0, 2000, 0]],
+            }
+        ],
+        "walls": [
+            {
+                "wall_id": "w_balcony_outside_boundary",
+                "path": [[0, 1000, 0], [1000, 1000, 0]],
+                "space_refs": ["balcony_001"],
+                "confidence": 0.72,
+            }
+        ],
+        "openings": [
+            {
+                "id": "balcony_boundary_window",
+                "type": "window",
+                "host_wall": "w_balcony_outside_boundary",
+                "source_interval": [100, 900],
+                "height": 2200,
+                "sill_height": 0,
+                "open_to_space": "balcony_001",
+            }
+        ],
+        "constraints": {
+            "boundary_closure_constraints": [
+                {
+                    "id": "balcony_external_edge",
+                    "path": [[0, 1000, 0], [1000, 1000, 0]],
+                    "space_refs": ["balcony_001"],
+                    "required_opening_type": "window",
+                    "path_tolerance": 1,
+                }
+            ],
+            "negative_region_constraints": [
+                {
+                    "id": "outside_below_balcony",
+                    "bounds": {"min": [0, 0, 0], "max": [1000, 1000, 0]},
+                    "forbid_spaces": True,
+                    "forbid_boundary_enclosure": True,
+                    "coordinate_tolerance": 1,
+                }
+            ],
+        },
+    }
+    interpretation_path = tmp_path / "positive_boundary_near_negative_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+
+    assert result["source_fidelity"]["status"] == "passed"
+
+
+def test_source_fidelity_can_require_extracted_constraint_evidence(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "manual-constraint-plan.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "room_candidate",
+                "space_id": "room_001",
+                "type": "other",
+                "name": "Room",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [2000, 0, 0], [2000, 2000, 0], [0, 2000, 0]],
+            }
+        ],
+        "walls": [
+            {
+                "wall_id": "w_room_south",
+                "path": [[0, 0, 0], [2000, 0, 0]],
+                "space_refs": ["room_001"],
+            }
+        ],
+        "constraints": {
+            "wall_constraints": [
+                {
+                    "id": "w_room_south",
+                    "path": [[0, 0, 0], [2000, 0, 0]],
+                    "path_tolerance": 1,
+                }
+            ]
+        },
+    }
+    interpretation_path = tmp_path / "manual_constraint_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+    result = validate_import_source_constraints(
+        project,
+        "import_001",
+        require_extracted_evidence=True,
+        update_state=False,
+    )
+    codes = {failure["code"] for failure in result["failures"]}
+
+    assert result["status"] == "failed"
+    assert "constraint_evidence_not_extracted" in codes
+    assert result["evidence_origin"]["origin_counts"] == {"missing": 1}
+
+
+def test_source_fidelity_accepts_extracted_constraint_evidence(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "extracted-constraint-plan.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "room_candidate",
+                "space_id": "room_001",
+                "type": "other",
+                "name": "Room",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [2000, 0, 0], [2000, 2000, 0], [0, 2000, 0]],
+            }
+        ],
+        "walls": [
+            {
+                "wall_id": "w_room_south",
+                "path": [[0, 0, 0], [2000, 0, 0]],
+                "space_refs": ["room_001"],
+            }
+        ],
+        "constraints": {
+            "provenance": {"origin": "vision_extracted"},
+            "wall_constraints": [
+                {
+                    "id": "w_room_south",
+                    "path": [[0, 0, 0], [2000, 0, 0]],
+                    "path_tolerance": 1,
+                }
+            ],
+        },
+    }
+    interpretation_path = tmp_path / "extracted_constraint_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+    result = validate_import_source_constraints(
+        project,
+        "import_001",
+        require_extracted_evidence=True,
+        update_state=False,
+    )
+
+    assert result["status"] == "passed"
+    assert result["evidence_origin"]["origin_counts"] == {"vision_extracted": 1}
+
+
+def test_source_fidelity_requires_strong_extracted_door_evidence(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "weak-door-evidence-plan.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "room_candidate",
+                "space_id": "room_001",
+                "type": "bedroom",
+                "name": "Room",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [2400, 0, 0], [2400, 2000, 0], [0, 2000, 0]],
+            },
+            {
+                "id": "hall_candidate",
+                "space_id": "hallway_001",
+                "type": "hallway",
+                "name": "Hallway",
+                "confidence": 0.76,
+                "footprint": [[0, -900, 0], [2400, -900, 0], [2400, 0, 0], [0, 0, 0]],
+            },
+        ],
+        "walls": [
+            {
+                "wall_id": "w_room_south",
+                "path": [[0, 0, 0], [2400, 0, 0]],
+                "space_refs": ["room_001", "hallway_001"],
+            }
+        ],
+        "openings": [
+            {
+                "id": "room_door_001",
+                "type": "door",
+                "host_wall": "w_room_south",
+                "source_interval": [600, 1400],
+                "height": 2100,
+                "sill_height": 0,
+                "open_to_space": "room_001",
+                "access_from_space": "hallway_001",
+            }
+        ],
+        "constraints": {
+            "provenance": {"origin": "vision_extracted"},
+            "opening_constraints": [
+                {
+                    "id": "room_door_001",
+                    "type": "door",
+                    "host_wall": "w_room_south",
+                    "open_to_space": "room_001",
+                    "interval": [600, 1400],
+                }
+            ],
+        },
+    }
+    interpretation_path = tmp_path / "weak_door_evidence_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+    result = validate_import_source_constraints(
+        project,
+        "import_001",
+        require_extracted_evidence=True,
+        update_state=False,
+    )
+    codes = {failure["code"] for failure in result["failures"]}
+
+    assert result["status"] == "failed"
+    assert "opening_source_host_axis_missing" in codes
+    assert "opening_source_access_space_missing" in codes
+    assert "opening_host_space_refs_not_required" in codes
+
+
+def test_source_fidelity_accepts_strong_extracted_door_evidence(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "strong-door-evidence-plan.png")
+    interpretation = {
+        "version": "1.0",
+        "scale": {"units": "mm", "source": "visible_dimensions", "confidence": 0.72},
+        "space_candidates": [
+            {
+                "id": "room_candidate",
+                "space_id": "room_001",
+                "type": "bedroom",
+                "name": "Room",
+                "confidence": 0.76,
+                "footprint": [[0, 0, 0], [2400, 0, 0], [2400, 2000, 0], [0, 2000, 0]],
+            },
+            {
+                "id": "hall_candidate",
+                "space_id": "hallway_001",
+                "type": "hallway",
+                "name": "Hallway",
+                "confidence": 0.76,
+                "footprint": [[0, -900, 0], [2400, -900, 0], [2400, 0, 0], [0, 0, 0]],
+            },
+        ],
+        "walls": [
+            {
+                "wall_id": "w_room_south",
+                "path": [[0, 0, 0], [2400, 0, 0]],
+                "space_refs": ["room_001", "hallway_001"],
+            }
+        ],
+        "openings": [
+            {
+                "id": "room_door_001",
+                "type": "door",
+                "host_wall": "w_room_south",
+                "source_interval": [600, 1400],
+                "height": 2100,
+                "sill_height": 0,
+                "open_to_space": "room_001",
+                "access_from_space": "hallway_001",
+            }
+        ],
+        "constraints": {
+            "provenance": {"origin": "vision_extracted"},
+            "opening_constraints": [
+                {
+                    "id": "room_door_001",
+                    "type": "door",
+                    "host_wall": "w_room_south",
+                    "host_wall_axis": "horizontal",
+                    "open_to_space": "room_001",
+                    "access_from_space": "hallway_001",
+                    "require_host_space_refs": True,
+                    "interval": [600, 1400],
+                    "interval_tolerance": 1,
+                }
+            ],
+        },
+    }
+    interpretation_path = tmp_path / "strong_door_evidence_interpretation.json"
+    interpretation_path.write_text(
+        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation_path,
+    )
+    result = validate_import_source_constraints(
+        project,
+        "import_001",
+        require_extracted_evidence=True,
+        update_state=False,
+    )
+
+    assert result["status"] == "passed"
+    assert result["evidence_origin"]["origin_counts"] == {"vision_extracted": 1}
+
+
+def test_interpreted_import_normalizes_overlapping_hosted_openings(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "plan.png")
+    interpretation = make_overlapping_hosted_openings_interpretation(tmp_path)
+
+    result = import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation,
+    )
+    design_model = json.loads((project / "design_model.json").read_text(encoding="utf-8"))
+    extracted = json.loads(
+        (
+            project
+            / "imports"
+            / "import_001"
+            / "extracted"
+            / "interpretation.json"
+        ).read_text(encoding="utf-8")
+    )
+    plan = build_project_execution_plan(project)
+
+    door = design_model["openings"]["room_door_001"]
+    window = design_model["openings"]["room_glazing_001"]
+    wall_operation = next(
+        operation
+        for operation in plan["bridge_operations"]
+        if operation["payload"].get("wall_id") == "w_room_east"
+    )
+    intervals = [
+        (opening["offset"], opening["offset"] + opening["width"])
+        for opening in wall_operation["payload"]["openings"]
+    ]
+
+    assert "source_opening_conflicts_normalized_during_generation" in (
+        result["quality_flags"]
+    )
+    assert extracted["opening_conflicts"]["status"] == "normalized"
+    assert extracted["opening_conflicts"]["adjusted_openings"][0]["opening_id"] == (
+        "room_glazing_001"
+    )
+    assert door["offset"] == 600.0
+    assert door["width"] == 700.0
+    assert window["offset"] == 200.0
+    assert window["width"] == 400.0
+    assert wall_operation["operation_type"] == "create_wall_with_openings"
+    assert intervals == [(200.0, 600.0), (600.0, 1300.0)]
 
 
 def test_interpreted_import_prefers_label_area_over_ambiguous_blank_region(tmp_path):
@@ -1073,7 +3206,7 @@ def test_boundary_coverage_review_and_repair_adds_missing_wall(tmp_path):
     assert plan["skipped_count"] == 0
 
 
-def test_boundary_coverage_auto_fills_semantic_false_opening(tmp_path):
+def test_boundary_coverage_does_not_auto_fill_source_evidence_short_gap(tmp_path):
     project = tmp_path / "project"
     init_project(project, template="empty")
     source = make_source(tmp_path)
@@ -1084,40 +3217,73 @@ def test_boundary_coverage_auto_fills_semantic_false_opening(tmp_path):
         width=6000,
         depth=4000,
     )
-    create_semantic_false_opening_gap(project)
+    create_source_evidence_short_boundary_gap(project)
 
     review = review_imported_boundary_coverage(project, "import_001")
     repair = repair_imported_boundary_coverage(
         project,
         "import_001",
-        notes="Auto-fill a semantic false opening on a living-balcony boundary.",
+        notes="Do not auto-fill a short gap without source evidence.",
     )
     design_model = json.loads((project / "design_model.json").read_text(encoding="utf-8"))
-    added_wall_id = repair["added_walls"][0]
-    semantic_gap = next(
+    short_gap = next(
         gap
         for gap in review["gaps"]
-        if gap["classification"] == "candidate_false_opening_or_missing_wall"
+        if gap["interval"] == [3400.0, 3900.0]
     )
 
-    assert review["recommended_repair_count"] == 1
-    assert semantic_gap["interval"] == [3400.0, 3900.0]
-    assert semantic_gap["semantic_repair"]["repair_recommended"] is True
-    assert semantic_gap["semantic_repair"]["adjacent_space_types"] == [
-        "balcony",
-        "living_room",
-    ]
-    assert repair["status"] == "repaired"
-    assert repair["repaired_gaps"][0]["classification"] == (
-        "candidate_false_opening_or_missing_wall"
+    assert review["recommended_repair_count"] == 0
+    assert repair["status"] == "unchanged"
+    assert repair["added_walls"] == []
+    assert short_gap["interval"] == [3400.0, 3900.0]
+    assert short_gap["classification"] == "candidate_opening_or_intentional_gap"
+    assert short_gap["source_evidence_repair"]["repair_recommended"] is False
+    assert "space adjacency alone is insufficient" in (
+        short_gap["source_evidence_repair"]["reasons"][0]
     )
-    assert design_model["walls"][added_wall_id]["path"] == [
-        [3400.0, 0.0, 0.0],
-        [3900.0, 0.0, 0.0],
-    ]
-    assert "import_false_opening_repaired" in (
+    assert "source_backed_boundary_wall_added" not in (
         design_model["import_sessions"]["import_001"]["quality_flags"]
     )
+
+
+def test_boundary_coverage_keeps_living_hallway_circulation_gap_open(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, "plan.png")
+    interpretation = make_open_passage_boundary_gap_interpretation(tmp_path)
+
+    import_floorplan_to_model(
+        project,
+        source_path=source,
+        import_id="import_001",
+        source_interpretation_path=interpretation,
+    )
+
+    review = review_imported_boundary_coverage(project, "import_001")
+    repair = repair_imported_boundary_coverage(
+        project,
+        "import_001",
+        notes="Keep doorless circulation edges open.",
+    )
+    circulation_gap = next(
+        gap
+        for gap in review["gaps"]
+        if gap["interval"] == [1200.0, 2500.0]
+    )
+
+    assert review["status"] == "gaps_found"
+    assert review["recommended_repair_count"] == 0
+    assert circulation_gap["classification"] == (
+        "candidate_circulation_opening_or_intentional_gap"
+    )
+    assert circulation_gap["circulation_gap"] is True
+    assert circulation_gap["repair_recommended"] is False
+    assert {
+        space["type"]
+        for space in circulation_gap["adjacent_spaces"]
+    } == {"living_room", "hallway"}
+    assert repair["status"] == "unchanged"
+    assert repair["added_walls"] == []
 
 
 def test_shell_overreach_review_and_repair_trim_phantom_pocket(tmp_path):

@@ -7,6 +7,10 @@ should not clone the harness repository to create a design project.
 
 ```text
 my-design-project/
+  .agents/
+    skills/
+  .claude/
+    skills/
   design_model.json
   design_rules.json
   assets.lock.json
@@ -52,6 +56,13 @@ license metadata, and procedural fallback information.
 `assets/components/` is the project-local cache root for component geometry. The
 initial implementation creates this directory and records target cache paths.
 External downloads are still explicit actions, not automatic background work.
+
+`.agents/skills/` and `.claude/skills/` are project-local runtime skill
+locations for agent CLIs that support project skills. Initialization installs
+packaged baseline runtime skills there. Runtime may later add project/session
+dynamic skills, such as import-source guidance or project-local memory. Those
+dynamic skills belong to this design project; they are not product source files
+and they do not replace `design_model.json`.
 
 `imports/` stores source material and evidence for imported projects. Import is
 autonomous-first: a source file should generate a best-effort editable working

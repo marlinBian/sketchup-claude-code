@@ -206,6 +206,19 @@ Useful interpretation fields:
   `label_area_m2`, `dimension_constraints`, and confidence.
 - `walls` and `openings`: explicit structural candidates after the space
   candidates have been scored.
+- `constraints`: source-scoped validation rules that must be checked after
+  truth generation and clean replay. Use opening constraints for required
+  source openings, intervals, anchors, host-wall orientation, and host-wall
+  space references; use space constraints for footprint bounds and room-label
+  areas; use adjacency constraints when the source shows two spaces connected
+  through a door, window, or open passage; use exterior outline constraints for
+  visible shell steps, notches, recesses, and wall-mass outline segments; use
+  boundary closure constraints for source edges that must be covered by a wall
+  or must contain a door/window/opening; use negative-region constraints with
+  space-overlap limits when a blank or exterior source area must not become a
+  room, balcony, platform, or other positive space; use alignment constraints
+  when repeated exterior columns, stacked balconies, glazing runs, or other
+  visible edges should stay on the same plan line.
 
 `import_floorplan_to_model` can consume this interpretation with
 `source_interpretation_path`. During generation it rejects space candidates
@@ -215,6 +228,16 @@ After accepted spaces are selected, shell walls that extend outside all
 accepted footprints are trimmed before the truth is saved. This catches errors
 such as an imported balcony expanding into blank outside space instead of
 matching its visible area label.
+
+Clean SketchUp replay proves the bridge executed current truth, but it does not
+prove the truth matches the source. Source fidelity is a separate gate:
+`validate_import_source_constraints` should fail when a required source opening
+is missing, an opening is hosted on a wall that does not connect the indicated
+spaces or match the source wall orientation, a source anchor/interval moves,
+visible exterior outline segments are simplified away, a required boundary edge
+is not closed or lacks the source-indicated door/window/opening type, visible
+aligned edges drift apart, a space footprint overlaps an outside/negative
+region, or a required source adjacency disappears.
 
 ## MCP Tool Direction
 
@@ -287,12 +310,21 @@ path is `review_imported_boundary_coverage` and the repair path is
 missing-wall candidates: uncovered segments longer than normal door/opening
 gaps and supported by nearby structural wall endpoints by default. Shorter
 uncovered segments normally remain classified as possible openings or
-intentional gaps, but the review can promote a short segment to
-`candidate_false_opening_or_missing_wall` when semantic space context makes an
-opening unlikely. The first implemented rule promotes a short horizontal
-living-room to balcony boundary gap with no explicit opening owner; this fixes
-false openings such as a balcony edge that should remain a solid wall without
-asking the designer to inspect numeric candidates one by one.
+intentional gaps unless source-backed wall-continuity evidence supports a
+missing wall. Semantic room names alone are not enough to turn a short gap into
+a wall, because that would overfit a single source's layout vocabulary instead
+of using observable geometry, topology, and source evidence.
+
+If one source needs a specific interpretation, such as a local symbol legend or
+a correction learned from the designer, keep that information in the import
+evidence and, when it should guide later turns, in a project/session dynamic
+runtime skill generated inside the active design project. Do not promote that
+source-specific content into shipped runtime skills or product code unless the
+pattern has been generalized and tested across variants. Dynamic import skills
+should point to `imports/<import_id>/constraints.json` for machine-checkable
+source evidence. They should not rely on prose for geometry that can be
+validated as outline segments, negative/outside regions, boundary closure,
+opening intervals, or symbol legends.
 
 Imported walls also need the inverse consistency check: every meaningful
 imported wall segment should be explainable by at least one imported room,
@@ -322,25 +354,41 @@ Validation reports should separate hard schema errors from quality flags.
 
 ## Current Implementation Slice
 
-The current implementation avoids heavy external dependencies and establishes
-the import contract before adding real OCR, CAD parsing, or image
-interpretation:
+The current implementation avoids heavy external dependencies while accepting a
+structured extraction produced by an agent vision pass, CAD/vector parser, OCR
+tool, or future deterministic extractor. If no richer extraction is available,
+it can still generate a low-confidence rectangular working model, but
+source-checked image/PDF/CAD import requires a real registered source file plus
+`source_interpretation.json` and source-scoped constraints.
 
 1. Create `imports/<import_id>/` with `source/`, `previews/`, `evidence/`, and
    `extracted/`.
 2. Register DWG, DXF, PDF, image, SketchUp, or unknown sources with hashes and
    source type.
-3. Write a manifest and `extracted/interpretation.json` for retained evidence.
-4. Generate a deterministic editable rectangular shell as the first working
+3. Reject structured interpretations that are attached only to text notes,
+   screenshots of prior output, or other unknown placeholder sources. Automatic
+   image/PDF/CAD recognition must point at the actual source file.
+4. Normalize raster/PDF Y-down source coordinates into model-space Y-up
+   coordinates before writing truth. Host-wall source intervals are interpreted
+   as wall-coordinate intervals unless explicitly marked as offset values.
+5. Write a manifest and `extracted/interpretation.json` for retained evidence.
+   If extracted constraints are not nested under `constraints`, copy supported
+   top-level constraint lists and derive wall, opening, and negative-region
+   constraints from extracted provenance.
+6. Generate a deterministic editable rectangular shell as the first working
    model when richer extraction is unavailable.
-5. Write imported `spaces`, `walls`, `openings`, `import_sessions`, and
+7. Write imported `spaces`, `walls`, `openings`, `import_sessions`, and
    `quality_flags` into `design_model.json`.
-6. Produce a headless bridge trace for imported walls and hosted opening
+8. Preserve project/source-specific runtime guidance through project-local
+   dynamic skills when needed, without promoting those facts into shipped
+   runtime skills.
+9. Produce a headless bridge trace for imported walls and hosted opening
    operations that create wall pieces, sills, headers, and thin door/window
    markers.
-7. Expose list, summary, rescale, wall-alignment normalization, corner-notch
+10. Expose list, summary, rescale, wall-alignment normalization, corner-notch
    repair, boundary coverage review/repair, review, and repair tools through MCP
    and CLI.
 
-Richer extractors should replace only the interpretation stage. They must keep
-the same manifest, generated truth, quality flag, and repair contracts.
+Richer extractors should replace only the extraction stage. They must keep the
+same manifest, generated truth, quality flag, source-fidelity constraint, and
+repair contracts.

@@ -113,6 +113,16 @@ designer gives known dimensions, pass them as `width` and `depth` in
 millimeters. If dimensions are not available, let the tool estimate scale and
 report quality flags.
 
+If the import creates source-specific knowledge that should guide later turns
+in the same project, create or update a project/session dynamic runtime skill in
+the active design project, such as
+`.agents/skills/import-source-<import_id>/SKILL.md` and the corresponding
+Claude skill location when supported. Use it for local symbol legends, known
+designer corrections, project-specific naming, and import-source assumptions.
+Follow the `project-runtime-memory` skill for dynamic skill scope, format, and
+guardrails. Do not add those source-specific facts to shipped product runtime
+skills. `design_model.json` remains the canonical editable truth.
+
 After import, call `plan_project_execution` to verify that imported walls and
 hosted openings produce `create_wall_with_openings` bridge operations. Use
 `execute_project_model(clean_before_execute=True, clean_scope="all")` only when
@@ -129,8 +139,8 @@ is a better overall width, depth, or scale factor. Use
 corner notch missing from the generated model. Use
 `review_imported_boundary_coverage` and `repair_imported_boundary_coverage` when
 the imported footprint contains a room edge but the explicit wall list missed a
-long wall segment, or when the tool auto-classifies a short semantic
-false-opening candidate. Use `review_imported_wall_space_consistency` and
+long wall segment or a short gap has source-backed wall-continuity evidence.
+Use `review_imported_wall_space_consistency` and
 `repair_imported_shell_overreach` when explicit imported walls enclose an extra
 area that no imported room or balcony footprint claims. Use
 `repair_imported_region` for other specific corrections.

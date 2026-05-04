@@ -81,6 +81,10 @@ This is a SketchUp Agent Harness design project.
   is the rendered/executed view, not the source of truth.
 - Use project-local runtime skills from `.agents/skills/` for Codex and
   `.claude/skills/` for Claude when those agent CLIs support project skills.
+- Packaged runtime skills define generic product workflows. Project/session
+  dynamic runtime skills may be added under `.agents/skills/` and
+  `.claude/skills/` during runtime to remember source-specific import
+  interpretations, designer corrections, or project-local preferences.
 - Prefer MCP tools over manual JSON edits when tools exist.
 - Use millimeters for dimensions and coordinates.
 - Treat packaged component fallback boxes as placeholders, not final production
@@ -106,6 +110,9 @@ quality flags for later repair.
 Use `rescale_imported_model` when a better overall dimension is known. Use
 `review_model_against_import_source` and `repair_imported_region` when a
 specific imported wall, opening, or region differs from the source.
+When an import correction should guide future turns for this same project or
+source, keep it in import evidence and a project-local dynamic runtime skill
+rather than changing packaged product skills.
 
 ## Useful Inspection Tools
 

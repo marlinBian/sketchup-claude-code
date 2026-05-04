@@ -84,15 +84,15 @@ def create_shell_overreach(project):
     )
 
 
-def create_semantic_false_opening_gap(project):
-    """Create a short living-balcony boundary gap that should be auto-filled."""
+def create_source_evidence_short_boundary_gap(project):
+    """Create a short boundary gap without source wall evidence."""
     design_model_path = project / "design_model.json"
     design_model = json.loads(design_model_path.read_text(encoding="utf-8"))
     source = {
         "kind": "import_floorplan",
         "import_id": "import_001",
         "confidence": 0.7,
-        "assumptions": ["Semantic false-opening fixture."],
+        "assumptions": ["Short gap fixture without source wall evidence."],
     }
     living = design_model["spaces"]["import_001_space_001"]
     living["type"] = "living_room"
@@ -145,14 +145,44 @@ async def test_import_floorplan_to_model_tool_writes_project_truth(tmp_path):
         depth=3600,
     )
     data = json.loads(response.text)
+    constraints_path = project / "imports" / "import_001" / "constraints.json"
+    constraints_path.write_text(
+        json.dumps(
+            {
+                "version": "1.0",
+                "import_id": "import_001",
+                "provenance": {"origin": "vision_extracted"},
+                "opening_constraints": [
+                    {
+                        "id": "import_001_door_001",
+                        "host_wall": "import_001_wall_south",
+                        "host_wall_axis": "horizontal",
+                        "interval": [2050, 2950],
+                    }
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    constraint_response = await server.validate_import_source_constraints(
+        project_path=str(project),
+        import_id="import_001",
+        require_extracted_evidence=True,
+    )
     state_response = await server.get_import_summary(str(project), "import_001")
     list_response = await server.list_import_sessions(str(project))
+    constraint_data = json.loads(constraint_response.text)
     state = json.loads(state_response.text)
     listed = json.loads(list_response.text)
 
     assert data["status"] == "imported"
     assert data["summary"]["wall_count"] == 4
+    assert constraint_data["status"] == "passed"
     assert state["model_import_sessions"]["import_001"]["scale"]["width"] == 5000.0
+    assert state["model_import_sessions"]["import_001"]["source_fidelity"]["status"] == "passed"
     assert listed["count"] == 1
     assert listed["imports"][0]["import_id"] == "import_001"
 
@@ -289,7 +319,7 @@ async def test_boundary_coverage_tools_review_and_repair_missing_wall(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_boundary_coverage_tool_auto_repairs_semantic_false_opening(tmp_path):
+async def test_boundary_coverage_tool_does_not_auto_repair_source_evidence_short_gap(tmp_path):
     from mcp_server import server
 
     project = tmp_path / "project"
@@ -302,7 +332,7 @@ async def test_boundary_coverage_tool_auto_repairs_semantic_false_opening(tmp_pa
         width=6000,
         depth=4000,
     )
-    create_semantic_false_opening_gap(project)
+    create_source_evidence_short_boundary_gap(project)
 
     review_response = await server.review_imported_boundary_coverage(
         project_path=str(project),
@@ -315,14 +345,11 @@ async def test_boundary_coverage_tool_auto_repairs_semantic_false_opening(tmp_pa
     review = json.loads(review_response.text)
     repair = json.loads(repair_response.text)
 
-    assert review["recommended_repair_count"] == 1
-    assert review["gaps"][0]["classification"] == (
-        "candidate_false_opening_or_missing_wall"
-    )
-    assert repair["status"] == "repaired"
-    assert repair["repaired_gaps"][0]["classification"] == (
-        "candidate_false_opening_or_missing_wall"
-    )
+    assert review["recommended_repair_count"] == 0
+    assert review["gaps"][0]["classification"] == "candidate_opening_or_intentional_gap"
+    assert review["gaps"][0]["source_evidence_repair"]["repair_recommended"] is False
+    assert repair["status"] == "unchanged"
+    assert repair["added_walls"] == []
 
 
 @pytest.mark.asyncio
@@ -381,6 +408,31 @@ def test_cli_import_floorplan_summary_and_rescale(tmp_path, capsys):
         ]
     )
     import_output = json.loads(capsys.readouterr().out)
+    constraints_path = project / "imports" / "import_001" / "constraints.json"
+    constraints_path.write_text(
+        json.dumps(
+            {
+                "version": "1.0",
+                "import_id": "import_001",
+                "opening_constraints": [
+                    {
+                        "id": "import_001_door_001",
+                        "host_wall": "import_001_wall_south",
+                        "host_wall_axis": "horizontal",
+                        "interval": [2550, 3450],
+                    }
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    source_constraint_code = main(
+        ["validate-import-constraints", str(project), "import_001", "--strict"]
+    )
+    source_constraint_output = json.loads(capsys.readouterr().out)
     create_offset_right_boundary(project)
     normalize_code = main(
         [
@@ -458,6 +510,7 @@ def test_cli_import_floorplan_summary_and_rescale(tmp_path, capsys):
     rescale_output = json.loads(capsys.readouterr().out)
 
     assert exit_code == 0
+    assert source_constraint_code == 0
     assert normalize_code == 0
     assert corner_notch_code == 0
     assert boundary_review_code == 0
@@ -468,6 +521,7 @@ def test_cli_import_floorplan_summary_and_rescale(tmp_path, capsys):
     assert list_code == 0
     assert rescale_code == 0
     assert import_output["status"] == "imported"
+    assert source_constraint_output["status"] == "passed"
     assert normalize_output["status"] == "normalized"
     assert corner_notch_output["status"] == "repaired"
     assert boundary_review_output["recommended_repair_count"] == 1

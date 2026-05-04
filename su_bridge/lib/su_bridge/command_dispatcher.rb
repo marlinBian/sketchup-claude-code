@@ -18,6 +18,15 @@ module SuBridge
       save_selected_component
     ]).freeze
 
+    TRANSACTIONAL_OPERATIONS = Set.new(%w[
+      create_face create_box create_wall create_group
+      create_wall_with_openings
+      create_door create_window create_stairs
+      delete_entity set_material apply_material apply_style
+      move_entity rotate_entity scale_entity copy_entity
+      place_component place_lighting save_selected_component
+    ]).freeze
+
     OPERATION_HANDLERS = {
       "create_face" => :handle_create_face,
       "create_box" => :handle_create_box,
@@ -87,10 +96,14 @@ module SuBridge
         )
       end
 
-      result = UndoManager.with_transaction(
-        name: operation_type,
-        rollback_on_failure: rollback_on_failure
-      ) do
+      result = if TRANSACTIONAL_OPERATIONS.include?(operation_type)
+        UndoManager.with_transaction(
+          name: operation_type,
+          rollback_on_failure: rollback_on_failure
+        ) do
+          send(handler, payload)
+        end
+      else
         send(handler, payload)
       end
 
@@ -488,15 +501,15 @@ module SuBridge
       when "top", "floor_plan_top"
         set_top_camera(view)
       when "panoramic"
-        set_camera_position(view, [0, 0, 1500], [5000, 0, 1000], [0, 0, 1])
+        set_bounds_camera(view, [-1, -1])
       when "living_room_birdseye"
-        set_camera_position(view, [2500, -3000, 4000], [2500, 2500, 800], [0, 0, 1])
+        set_bounds_camera(view, [0, -1])
       when "master_bedroom"
-        set_camera_position(view, [2000, 3000, 1200], [4000, 2000, 1000], [0, 0, 1])
+        set_bounds_camera(view, [1, 1])
       when "dining_area"
-        set_camera_position(view, [1600, 1000, 1500], [1600, 4000, 800], [0, 0, 1])
+        set_bounds_camera(view, [-1, 0])
       when "front_entrance"
-        set_camera_position(view, [0, -2000, 1600], [2000, 3000, 800], [0, 0, 1])
+        set_bounds_camera(view, [-1, -1])
       else
         if eye && target
           set_camera_position(view, eye, target, up || [0, 0, 1])
@@ -516,6 +529,36 @@ module SuBridge
 
     def set_camera_position(view, eye, target, up)
       view.camera.set(Geom::Point3d.new(*eye), Geom::Point3d.new(*target), Geom::Vector3d.new(*up))
+    end
+
+    def set_bounds_camera(view, direction)
+      bounds = sketchup.active_model.bounds
+      min = bounds.min
+      max = bounds.max
+      center = [
+        (min.x + max.x) / 2.0,
+        (min.y + max.y) / 2.0,
+        (min.z + max.z) / 2.0,
+      ]
+      span = [
+        (max.x - min.x).abs,
+        (max.y - min.y).abs,
+        (max.z - min.z).abs,
+      ].max
+      direction_length = Math.sqrt(direction[0] * direction[0] + direction[1] * direction[1])
+      direction_length = 1.0 if direction_length <= 0.0
+      unit_direction = [direction[0] / direction_length, direction[1] / direction_length]
+      distance = [span * 1.4, 500.0].max
+      height = [span * 0.9, 300.0].max
+      eye = [
+        center[0] + unit_direction[0] * distance,
+        center[1] + unit_direction[1] * distance,
+        max.z + height,
+      ]
+
+      set_camera_position(view, eye, center, [0, 0, 1])
+      view.camera.perspective = true if view.camera.respond_to?(:perspective=)
+      view.zoom_extents if view.respond_to?(:zoom_extents)
     end
 
     def set_top_camera(view)

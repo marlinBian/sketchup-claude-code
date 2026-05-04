@@ -41,12 +41,18 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
   from the import, call
   `execute_project_model(clean_before_execute=True, clean_scope="all")` so old
   source images, template entities, and stale generated geometry are removed.
+  If the source needs persistent project-local interpretation, use
+  `project-runtime-memory` to create or update a dynamic runtime skill in the
+  active design project rather than adding source-specific facts to shipped
+  skills.
 - Rescale imported source: "this plan should be 8200 mm wide",
   "这个户型整体宽度应该是 8200 毫米". Use `rescale_imported_model` or
   `repair_imported_region` rather than asking the designer to edit JSON.
 - Repair imported mismatch: "this door differs from the source",
   "这个门和原图不一致". Use `review_model_against_import_source`, then
-  `repair_imported_region` with the specific correction.
+  `repair_imported_region` with the specific correction. If the correction
+  should guide future turns for the same project/source, update the project
+  dynamic runtime skill through `project-runtime-memory`.
 - Normalize imported exterior wall alignment: "this straight exterior wall is
   offset", "这条外墙应该是直的". Use
   `normalize_imported_wall_alignment` when imported near-boundary wall segments
@@ -57,10 +63,10 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
 - Repair imported boundary coverage: "this room boundary is missing a wall",
   "这里漏了一段墙". Use `review_imported_boundary_coverage`, then
   `repair_imported_boundary_coverage` when an imported space footprint edge
-  exists but the explicit wall list missed a wall segment. The review can also
-  auto-promote semantically unlikely short gaps, for example "balcony B should
-  be a solid wall", "阳台B这里应该是实墙", from possible openings into repairable
-  false-opening candidates.
+  exists but the explicit wall list missed a wall segment. Long gaps can be
+  repaired automatically when wall-continuity evidence is strong; short gaps
+  should remain opening/intentional-gap candidates unless the source evidence
+  supports a wall.
 - Repair imported shell overreach: "the import has an extra enclosed area",
   "这里多包了一块空间", "右下角多出一块区域". Use
   `review_imported_wall_space_consistency`, then
@@ -103,6 +109,10 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
 - Save version: "save this version", "保存一下".
   Use `save_project_version` when a project path is available. `save_version`
   is only a compatibility alias.
+- Remember project-local guidance: "remember that this source uses this symbol",
+  "以后这个项目按这个规则理解". Use `project-runtime-memory` to create or
+  update a project/session dynamic runtime skill in the active design project.
+  Do not put this scoped guidance into shipped product skills.
 - Compare versions: "compare these two drafts", "对比两个方案".
   Use `compare_project_versions` for saved versions or a saved version against
   current project truth.
@@ -147,5 +157,7 @@ search_components(query="toilet", category="fixture", limit=5)
 - Do not ask multiple survey-style questions before using implemented defaults.
 - Do not turn import into a preflight approval workflow; import should generate
   working truth first and support source-backed repair later.
+- Do not turn one user's floor plan into reusable extraction rules. Prefer
+  general geometry, topology, scale, provenance, and source-evidence logic.
 - Do not mix Chinese into code identifiers, schema keys, or tool names.
 - Do not treat rendered images as source of truth.

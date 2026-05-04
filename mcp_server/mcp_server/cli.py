@@ -42,6 +42,7 @@ from mcp_server.tools.import_pipeline import (
     rescale_imported_model,
     review_imported_boundary_coverage,
     review_imported_wall_space_consistency,
+    validate_import_source_constraints,
 )
 
 
@@ -386,6 +387,45 @@ def build_parser() -> argparse.ArgumentParser:
     import_summary_parser.add_argument("project_path", help="Design project directory")
     import_summary_parser.add_argument("--import-id", help="Optional import session ID")
 
+    validate_import_constraints_parser = subparsers.add_parser(
+        "validate-import-constraints",
+        help="Validate imported truth against source-scoped constraints",
+    )
+    validate_import_constraints_parser.add_argument(
+        "project_path",
+        help="Design project directory",
+    )
+    validate_import_constraints_parser.add_argument("import_id", help="Import session ID")
+    validate_import_constraints_parser.add_argument(
+        "--constraints",
+        dest="constraints_path",
+        help="Optional constraints JSON path. Defaults to imports/<import_id>/constraints.json.",
+    )
+    validate_import_constraints_parser.add_argument(
+        "--tolerance",
+        type=float,
+        default=80,
+        help="Default geometric tolerance in mm",
+    )
+    validate_import_constraints_parser.add_argument(
+        "--require-executed",
+        action="store_true",
+        help="Require constrained openings to have successful SketchUp execution feedback",
+    )
+    validate_import_constraints_parser.add_argument(
+        "--require-extracted-evidence",
+        action="store_true",
+        help=(
+            "Fail when source constraints are missing extracted evidence provenance. "
+            "Use this for automatic-recognition E2E checks."
+        ),
+    )
+    validate_import_constraints_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Return a non-zero exit code when constraints are missing or failed",
+    )
+
     list_imports_parser = subparsers.add_parser(
         "list-imports",
         help="List import sessions registered in a design project",
@@ -489,15 +529,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Classify uncovered gaps at or below this length as possible openings",
     )
     boundary_review_parser.add_argument(
-        "--no-infer-semantic-short-gaps",
+        "--no-infer-source-evidence-short-gaps",
         action="store_true",
-        help="Disable automatic semantic repair recommendations for short false openings",
+        help="Disable source-evidence-backed recommendations for short boundary gaps",
     )
     boundary_review_parser.add_argument(
-        "--max-semantic-gap-length",
+        "--max-source-evidence-gap-length",
         type=float,
         default=900,
-        help="Maximum short gap length in mm for semantic false-opening inference",
+        help="Maximum short gap length in mm for short-gap evidence review",
     )
     boundary_review_parser.add_argument(
         "--coordinate-match-tolerance",
@@ -530,15 +570,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Treat larger uncovered gaps as missing-wall candidates",
     )
     boundary_repair_parser.add_argument(
-        "--no-infer-semantic-short-gaps",
+        "--no-infer-source-evidence-short-gaps",
         action="store_true",
-        help="Disable automatic repair of semantically unlikely short opening gaps",
+        help="Disable source-evidence-backed repair of short boundary gaps",
     )
     boundary_repair_parser.add_argument(
-        "--max-semantic-gap-length",
+        "--max-source-evidence-gap-length",
         type=float,
         default=900,
-        help="Maximum short gap length in mm for semantic false-opening repair",
+        help="Maximum short gap length in mm for short-gap evidence repair",
     )
     boundary_repair_parser.add_argument(
         "--coordinate-match-tolerance",
@@ -966,6 +1006,19 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
+        if args.command == "validate-import-constraints":
+            result = validate_import_source_constraints(
+                args.project_path,
+                args.import_id,
+                constraints_path=args.constraints_path,
+                tolerance=args.tolerance,
+                require_executed=args.require_executed,
+                require_extracted_evidence=args.require_extracted_evidence,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            if args.strict and result["status"] != "passed":
+                return 2
+            return 0
         if args.command == "list-imports":
             imports = list_import_sessions(args.project_path)
             print(
@@ -1021,8 +1074,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.import_id,
                 min_gap_length=args.min_gap_length,
                 max_opening_gap_length=args.max_opening_gap_length,
-                infer_semantic_short_gaps=not args.no_infer_semantic_short_gaps,
-                max_semantic_gap_length=args.max_semantic_gap_length,
+                infer_source_evidence_short_gaps=not args.no_infer_source_evidence_short_gaps,
+                max_source_evidence_gap_length=args.max_source_evidence_gap_length,
                 coordinate_match_tolerance=args.coordinate_match_tolerance,
                 require_structural_endpoints=not args.allow_unsupported_endpoints,
             )
@@ -1034,8 +1087,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.import_id,
                 min_gap_length=args.min_gap_length,
                 max_opening_gap_length=args.max_opening_gap_length,
-                infer_semantic_short_gaps=not args.no_infer_semantic_short_gaps,
-                max_semantic_gap_length=args.max_semantic_gap_length,
+                infer_source_evidence_short_gaps=not args.no_infer_source_evidence_short_gaps,
+                max_source_evidence_gap_length=args.max_source_evidence_gap_length,
                 coordinate_match_tolerance=args.coordinate_match_tolerance,
                 require_structural_endpoints=not args.allow_unsupported_endpoints,
                 max_repairs=args.max_repairs,

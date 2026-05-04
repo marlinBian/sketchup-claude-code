@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from mcp_server.resources.design_model_schema import load_design_model, save_design_model
 from mcp_server.resources.import_manifest_schema import (
@@ -33,17 +34,106 @@ DEFAULT_COORDINATE_MATCH_TOLERANCE = 1.0
 DEFAULT_MIN_WALL_LENGTH = 20.0
 DEFAULT_MIN_BOUNDARY_GAP_LENGTH = 50.0
 DEFAULT_MIN_SHELL_OVERREACH_LENGTH = 250.0
+DEFAULT_MIN_HOSTED_OPENING_WIDTH = 300.0
 DEFAULT_MAX_OPENING_GAP_LENGTH = 1200.0
-DEFAULT_MAX_SEMANTIC_SHORT_GAP_LENGTH = 900.0
+DEFAULT_MAX_CIRCULATION_GAP_LENGTH = 1800.0
+DEFAULT_MAX_SOURCE_EVIDENCE_SHORT_GAP_LENGTH = 900.0
 DEFAULT_LABEL_AREA_TOLERANCE_RATIO = 0.35
 DEFAULT_NEGATIVE_SPACE_OVERLAP_TOLERANCE_M2 = 0.05
+DEFAULT_NEGATIVE_REGION_BOUNDARY_COVERAGE_RATIO = 0.5
 DEFAULT_DIMENSION_CONSTRAINT_TOLERANCE = 120.0
 DEFAULT_STRONG_LABEL_AREA_TOLERANCE_RATIO = 0.08
 DEFAULT_STRONG_DIMENSION_TOLERANCE = 80.0
 VALID_CORNER_NOTCHES = {"top_left", "top_right", "bottom_left", "bottom_right"}
+EXTRACTED_EVIDENCE_ORIGINS = {
+    "agent_extracted_from_source",
+    "cad_extracted",
+    "deterministic_extractor",
+    "image_extracted",
+    "ocr_extracted",
+    "pdf_extracted",
+    "source_extracted",
+    "tool_extracted",
+    "vision_extracted",
+}
+SOURCE_CONSTRAINT_LIST_KEYS = (
+    "opening_constraints",
+    "openings",
+    "door_constraints",
+    "window_constraints",
+    "wall_constraints",
+    "walls",
+    "boundary_constraints",
+    "exterior_outline_constraints",
+    "outline_constraints",
+    "wall_mass_outline_constraints",
+    "source_outline_constraints",
+    "boundary_closure_constraints",
+    "space_boundary_constraints",
+    "required_boundary_constraints",
+    "negative_region_constraints",
+    "negative_regions",
+    "outside_regions",
+    "space_constraints",
+    "space_footprint_constraints",
+    "spaces",
+    "adjacency_constraints",
+    "space_adjacency_constraints",
+    "required_adjacencies",
+    "alignment_constraints",
+    "edge_alignment_constraints",
+)
+SOURCE_INTERPRETATION_DIRECT_CONSTRAINT_KEYS = (
+    "opening_constraints",
+    "door_constraints",
+    "window_constraints",
+    "wall_constraints",
+    "boundary_constraints",
+    "exterior_outline_constraints",
+    "outline_constraints",
+    "wall_mass_outline_constraints",
+    "source_outline_constraints",
+    "boundary_closure_constraints",
+    "space_boundary_constraints",
+    "required_boundary_constraints",
+    "negative_region_constraints",
+    "space_constraints",
+    "space_footprint_constraints",
+    "adjacency_constraints",
+    "space_adjacency_constraints",
+    "required_adjacencies",
+    "alignment_constraints",
+    "edge_alignment_constraints",
+)
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".heic"}
 CAD_EXTENSIONS = {".dwg", ".dxf"}
+INTERPRETATION_SOURCE_TYPES = {"image", "pdf", "dwg", "dxf", "sketchup"}
+Y_DOWN_COORDINATE_TOKENS = ("y south", "y_down", "y-down", "y down", "image y")
+Y_UP_COORDINATE_TOKENS = ("y north", "y_up", "y-up", "y up", "model y")
+POINT_FIELD_KEYS = {
+    "anchor",
+    "center",
+    "end",
+    "label_anchor",
+    "label_point",
+    "max",
+    "min",
+    "position",
+    "source_anchor",
+    "source_label_anchor",
+    "source_point",
+    "start",
+    "text_anchor",
+}
+POINT_SEQUENCE_KEYS = {
+    "footprint",
+    "outline",
+    "path",
+    "polygon",
+    "polyline",
+    "segment",
+}
 
 
 def utc_now() -> str:
@@ -418,6 +508,146 @@ def bounds_overlap_area_mm2(
     return (max_x - min_x) * (max_y - min_y)
 
 
+def clip_polygon_to_half_plane(
+    points: list[list[float]],
+    *,
+    boundary: str,
+    value: float,
+) -> list[list[float]]:
+    """Clip an XY polygon to one axis-aligned half-plane."""
+    if not points:
+        return []
+
+    def inside(point: list[float]) -> bool:
+        if boundary == "left":
+            return point[0] >= value
+        if boundary == "right":
+            return point[0] <= value
+        if boundary == "bottom":
+            return point[1] >= value
+        if boundary == "top":
+            return point[1] <= value
+        raise ValueError(f"unknown clip boundary: {boundary}")
+
+    def intersection(start: list[float], end: list[float]) -> list[float]:
+        dx = end[0] - start[0]
+        dy = end[1] - start[1]
+        if boundary in {"left", "right"}:
+            ratio = 0.0 if dx == 0 else (value - start[0]) / dx
+            return [value, start[1] + ratio * dy, 0.0]
+        ratio = 0.0 if dy == 0 else (value - start[1]) / dy
+        return [start[0] + ratio * dx, value, 0.0]
+
+    clipped: list[list[float]] = []
+    previous = points[-1]
+    previous_inside = inside(previous)
+    for current in points:
+        current_inside = inside(current)
+        if current_inside:
+            if not previous_inside:
+                clipped.append(intersection(previous, current))
+            clipped.append([float(current[0]), float(current[1]), 0.0])
+        elif previous_inside:
+            clipped.append(intersection(previous, current))
+        previous = current
+        previous_inside = current_inside
+    return clipped
+
+
+def polygon_overlap_with_bounds_area_mm2(
+    footprint: list[list[float]],
+    bounds: tuple[float, float, float, float],
+) -> float:
+    """Return actual polygon overlap area with axis-aligned bounds."""
+    min_x, max_x, min_y, max_y = bounds
+    clipped = [[float(point[0]), float(point[1]), 0.0] for point in footprint]
+    for boundary, value in (
+        ("left", min_x),
+        ("right", max_x),
+        ("bottom", min_y),
+        ("top", max_y),
+    ):
+        clipped = clip_polygon_to_half_plane(
+            clipped,
+            boundary=boundary,
+            value=value,
+        )
+        if not clipped:
+            return 0.0
+    return polygon_area_mm2(clipped)
+
+
+def point_on_segment_2d(
+    point: list[float],
+    start: list[float],
+    end: list[float],
+    *,
+    tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
+) -> bool:
+    """Return whether a point lies on an XY segment within tolerance."""
+    px, py = float(point[0]), float(point[1])
+    sx, sy = float(start[0]), float(start[1])
+    ex, ey = float(end[0]), float(end[1])
+    cross = (px - sx) * (ey - sy) - (py - sy) * (ex - sx)
+    if abs(cross) > tolerance * max(abs(ex - sx), abs(ey - sy), 1.0):
+        return False
+    return (
+        min(sx, ex) - tolerance <= px <= max(sx, ex) + tolerance
+        and min(sy, ey) - tolerance <= py <= max(sy, ey) + tolerance
+    )
+
+
+def point_in_polygon_2d(
+    point: list[float],
+    polygon: list[list[float]],
+    *,
+    tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
+) -> bool:
+    """Return whether an XY point is inside or on a polygon boundary."""
+    if len(polygon) < 3:
+        return False
+    px, py = float(point[0]), float(point[1])
+    inside = False
+    previous = polygon[-1]
+    for current in polygon:
+        if point_on_segment_2d(
+            point,
+            previous,
+            current,
+            tolerance=tolerance,
+        ):
+            return True
+        y1 = float(previous[1])
+        y2 = float(current[1])
+        x1 = float(previous[0])
+        x2 = float(current[0])
+        if (y1 > py) != (y2 > py):
+            intersection_x = x1 + (py - y1) * (x2 - x1) / (y2 - y1)
+            if intersection_x >= px - tolerance:
+                inside = not inside
+        previous = current
+    return inside
+
+
+def normalize_label_anchor(value: Any) -> list[float] | None:
+    """Return a source label anchor point from a candidate or constraint."""
+    raw = (
+        value.get("label_anchor")
+        or value.get("label_point")
+        or value.get("text_anchor")
+        or value.get("source_label_anchor")
+        if isinstance(value, dict)
+        else None
+    )
+    if isinstance(raw, dict):
+        raw = raw.get("point") or raw.get("position")
+    if not isinstance(raw, list) or len(raw) < 2:
+        return None
+    if len(raw) == 2:
+        raw = [raw[0], raw[1], 0]
+    return normalize_3d_point(raw, label="source label anchor")
+
+
 def footprint_from_payload(value: Any, *, label: str) -> list[list[float]]:
     """Return a normalized 3D footprint from a source interpretation payload."""
     if not isinstance(value, list) or len(value) < 3:
@@ -452,6 +682,609 @@ def load_source_interpretation(path: str | Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("source interpretation must be a JSON object.")
     return data
+
+
+def require_known_source_for_interpretation(
+    source_type: str,
+    manifest: dict[str, Any],
+) -> None:
+    """Reject source interpretations that are not tied to a real source file."""
+    if source_type in INTERPRETATION_SOURCE_TYPES:
+        return
+    source = manifest.get("source", {}) if isinstance(manifest, dict) else {}
+    filename = source.get("filename") or source.get("stored_path") or "unknown source"
+    raise ValueError(
+        "source_interpretation_path requires a registered source file with a "
+        f"recognized source type, got {source_type!r} for {filename!r}. "
+        "Do not use text notes or chat-only placeholders as automatic image "
+        "import sources; register the actual image, PDF, CAD, or SketchUp file."
+    )
+
+
+def coordinate_system_text(interpretation: dict[str, Any]) -> str:
+    """Return the source interpretation coordinate-system description."""
+    scale = interpretation.get("scale", {})
+    value = None
+    if isinstance(scale, dict):
+        value = (
+            scale.get("coordinate_system")
+            or scale.get("source_coordinate_system")
+            or scale.get("orientation")
+        )
+    value = value or interpretation.get("coordinate_system")
+    return str(value or "").strip().lower()
+
+
+def coordinate_system_is_y_down(interpretation: dict[str, Any]) -> bool:
+    """Return whether the interpretation uses image/PDF-style Y-down space."""
+    text = coordinate_system_text(interpretation)
+    if not text:
+        return False
+    if any(token in text for token in Y_UP_COORDINATE_TOKENS):
+        return False
+    return any(token in text for token in Y_DOWN_COORDINATE_TOKENS)
+
+
+def numeric_point(value: Any) -> list[float] | None:
+    """Return a numeric 3D point from a source value when possible."""
+    if not isinstance(value, list) or len(value) < 2:
+        return None
+    try:
+        x = float(value[0])
+        y = float(value[1])
+        z = float(value[2]) if len(value) >= 3 else 0.0
+    except (TypeError, ValueError):
+        return None
+    return [x, y, z]
+
+
+def collect_plan_points(value: Any, *, key: str | None = None) -> list[list[float]]:
+    """Collect source plan points from known geometry fields."""
+    points: list[list[float]] = []
+    if isinstance(value, dict):
+        for child_key, child_value in value.items():
+            points.extend(collect_plan_points(child_value, key=str(child_key)))
+        return points
+    if not isinstance(value, list):
+        return points
+
+    if key in POINT_FIELD_KEYS:
+        point = numeric_point(value)
+        if point is not None:
+            return [point]
+    if key in POINT_SEQUENCE_KEYS:
+        for item in value:
+            point = numeric_point(item)
+            if point is not None:
+                points.append(point)
+            elif isinstance(item, (dict, list)):
+                points.extend(collect_plan_points(item))
+        return points
+    for item in value:
+        if isinstance(item, dict):
+            points.extend(collect_plan_points(item))
+    return points
+
+
+def interpretation_plan_depth(interpretation: dict[str, Any]) -> tuple[float, str]:
+    """Return the plan depth used for Y-down to Y-up conversion."""
+    scale = interpretation.get("scale", {})
+    if isinstance(scale, dict):
+        for key in ("depth", "height", "source_depth", "plan_depth"):
+            value = scale.get(key)
+            if value is not None:
+                depth = float(value)
+                if depth > 0:
+                    return depth, f"scale.{key}"
+    points = collect_plan_points(interpretation)
+    if points:
+        max_y = max(point[1] for point in points)
+        if max_y > 0:
+            return max_y, "inferred_from_source_geometry"
+    raise ValueError(
+        "Cannot transform image/PDF Y-down source coordinates without a positive "
+        "plan depth in source_interpretation.scale.depth or source geometry."
+    )
+
+
+def transform_y_down_point(point: list[Any], depth: float) -> list[float]:
+    """Transform one image-space Y-down point into model-space Y-up coordinates."""
+    normalized = numeric_point(point)
+    if normalized is None:
+        raise ValueError(f"invalid source point for coordinate transform: {point!r}")
+    return [normalized[0], depth - normalized[1], normalized[2]]
+
+
+def transform_y_down_bounds(bounds: Any, depth: float) -> Any:
+    """Transform a source bounds payload from Y-down to Y-up coordinates."""
+    if isinstance(bounds, dict):
+        min_point = bounds.get("min")
+        max_point = bounds.get("max")
+        if min_point is None or max_point is None:
+            return {
+                key: transform_y_down_value(key, value, depth)
+                for key, value in bounds.items()
+            }
+        transformed = [
+            transform_y_down_point(min_point, depth),
+            transform_y_down_point(max_point, depth),
+        ]
+        min_x = min(point[0] for point in transformed)
+        max_x = max(point[0] for point in transformed)
+        min_y = min(point[1] for point in transformed)
+        max_y = max(point[1] for point in transformed)
+        min_z = min(point[2] for point in transformed)
+        max_z = max(point[2] for point in transformed)
+        result = dict(bounds)
+        result["min"] = [min_x, min_y, min_z]
+        result["max"] = [max_x, max_y, max_z]
+        return result
+    if isinstance(bounds, list) and len(bounds) == 4:
+        try:
+            min_x = min(float(bounds[0]), float(bounds[2]))
+            max_x = max(float(bounds[0]), float(bounds[2]))
+            first_y = depth - float(bounds[1])
+            second_y = depth - float(bounds[3])
+            return [min_x, min(first_y, second_y), max_x, max(first_y, second_y)]
+        except (TypeError, ValueError):
+            return bounds
+    return bounds
+
+
+def transform_y_down_point_sequence(values: Any, depth: float) -> Any:
+    """Transform a sequence containing source points or segment objects."""
+    if not isinstance(values, list):
+        return values
+    transformed: list[Any] = []
+    for item in values:
+        point = numeric_point(item)
+        if point is not None:
+            transformed.append(transform_y_down_point(item, depth))
+        elif isinstance(item, dict):
+            transformed.append(
+                {
+                    key: transform_y_down_value(key, value, depth)
+                    for key, value in item.items()
+                }
+            )
+        elif isinstance(item, list):
+            transformed.append(transform_y_down_point_sequence(item, depth))
+        else:
+            transformed.append(item)
+    return transformed
+
+
+def transform_y_down_value(key: str, value: Any, depth: float) -> Any:
+    """Transform known coordinate-bearing fields from Y-down to Y-up."""
+    if key == "bounds":
+        return transform_y_down_bounds(value, depth)
+    if key in POINT_FIELD_KEYS:
+        if isinstance(value, dict):
+            return {
+                child_key: transform_y_down_value(child_key, child_value, depth)
+                for child_key, child_value in value.items()
+            }
+        point = numeric_point(value)
+        return transform_y_down_point(value, depth) if point is not None else value
+    if key in POINT_SEQUENCE_KEYS or key == "segments":
+        return transform_y_down_point_sequence(value, depth)
+    if isinstance(value, dict):
+        return {
+            child_key: transform_y_down_value(child_key, child_value, depth)
+            for child_key, child_value in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            transform_y_down_value("", item, depth) if isinstance(item, dict) else item
+            for item in value
+        ]
+    return value
+
+
+def source_interval_mode(value: dict[str, Any]) -> str:
+    """Return the declared interval semantics for source opening evidence."""
+    for key in ("interval_mode", "source_interval_mode", "host_interval_mode"):
+        if value.get(key):
+            return str(value[key]).strip().lower()
+    return "wall_coordinate"
+
+
+def interval_is_offset_mode(value: dict[str, Any]) -> bool:
+    """Return whether an opening interval already represents wall offset."""
+    return source_interval_mode(value) in {
+        "offset",
+        "wall_offset",
+        "distance_from_start",
+        "distance",
+    }
+
+
+def normalize_interval_values(interval: Any) -> list[float] | None:
+    """Return a sorted numeric two-value interval."""
+    if not isinstance(interval, (list, tuple)) or len(interval) != 2:
+        return None
+    try:
+        first = float(interval[0])
+        second = float(interval[1])
+    except (TypeError, ValueError):
+        return None
+    if first == second:
+        return None
+    return [min(first, second), max(first, second)]
+
+
+def transform_y_down_opening_intervals(
+    interpretation: dict[str, Any],
+    *,
+    depth: float,
+) -> None:
+    """Transform vertical-wall source intervals after Y-down point conversion."""
+    walls_by_id = {
+        str(wall.get("wall_id") or wall.get("id")): wall
+        for wall in interpretation.get("walls", interpretation.get("wall_candidates", []))
+        if isinstance(wall, dict) and (wall.get("wall_id") or wall.get("id"))
+    }
+    for opening in interpretation.get("openings", []):
+        if not isinstance(opening, dict) or interval_is_offset_mode(opening):
+            continue
+        host_wall = walls_by_id.get(str(opening.get("host_wall", "")))
+        if not isinstance(host_wall, dict):
+            continue
+        host_axis = wall_axis(host_wall.get("path", []))
+        if host_axis is None or wall_variable_axis(host_axis) != "y":
+            continue
+        for key in ("source_interval", "interval", "host_interval"):
+            interval = normalize_interval_values(opening.get(key))
+            if interval is None:
+                continue
+            transformed = [depth - interval[1], depth - interval[0]]
+            opening[key] = [min(transformed), max(transformed)]
+        opening["source_interval_mode"] = "wall_coordinate"
+        opening["source_interval_coordinate_system"] = "model_y_up"
+
+
+def normalize_source_interpretation_coordinates(
+    interpretation: dict[str, Any],
+    *,
+    source_type: str,
+) -> tuple[dict[str, Any], dict[str, Any] | None, list[str]]:
+    """Normalize source interpretation coordinates before truth generation."""
+    if not coordinate_system_is_y_down(interpretation):
+        return interpretation, None, []
+    if source_type not in {"image", "pdf"}:
+        return interpretation, None, []
+
+    depth, depth_source = interpretation_plan_depth(interpretation)
+    transformed = copy.deepcopy(interpretation)
+    for key, value in list(transformed.items()):
+        transformed[key] = transform_y_down_value(key, value, depth)
+    transform_y_down_opening_intervals(transformed, depth=depth)
+
+    scale = transformed.setdefault("scale", {})
+    if isinstance(scale, dict):
+        original_coordinate_system = coordinate_system_text(interpretation)
+        scale["source_coordinate_system"] = original_coordinate_system
+        scale["coordinate_system"] = "x east, y north, origin at transformed source south edge"
+        scale["coordinate_transform"] = {
+            "type": "image_y_down_to_model_y_up",
+            "source_depth": depth,
+            "source_depth_from": depth_source,
+        }
+    assumptions = transformed.setdefault("assumptions", [])
+    if isinstance(assumptions, list):
+        assumptions.append(
+            "Image/PDF Y-down source coordinates were transformed into model Y-up coordinates before truth generation."
+        )
+    transform_info = {
+        "type": "image_y_down_to_model_y_up",
+        "source_depth": depth,
+        "source_depth_from": depth_source,
+    }
+    return transformed, transform_info, ["source_y_down_coordinates_transformed"]
+
+
+def import_constraints_path(project_path: str | Path, import_id: str) -> Path:
+    """Return the project-local source constraints path for one import."""
+    return import_session_path(project_path, import_safe_id(import_id)) / "constraints.json"
+
+
+def load_import_constraints(
+    project_path: str | Path,
+    import_id: str,
+    *,
+    constraints_path: str | Path | None = None,
+) -> tuple[dict[str, Any] | None, Path]:
+    """Load optional source-fidelity constraints for one import."""
+    root = Path(project_path).expanduser().resolve()
+    chosen_id = import_safe_id(import_id)
+    path = (
+        Path(constraints_path).expanduser().resolve()
+        if constraints_path is not None
+        else import_constraints_path(root, chosen_id)
+    )
+    if not path.exists():
+        return None, path
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise ValueError(f"import constraints are not valid JSON: {error}") from error
+    if not isinstance(data, dict):
+        raise ValueError("import constraints must be a JSON object.")
+    data_import_id = data.get("import_id")
+    if data_import_id and import_safe_id(str(data_import_id)) != chosen_id:
+        raise ValueError(
+            f"constraints import_id {data_import_id!r} does not match {chosen_id!r}."
+        )
+    return data, path
+
+
+def source_interpretation_default_origin(interpretation: dict[str, Any]) -> str | None:
+    """Return the default extracted-evidence origin for source interpretation."""
+    for value in (
+        interpretation.get("provenance"),
+        interpretation.get("source", {}).get("provenance")
+        if isinstance(interpretation.get("source"), dict)
+        else None,
+    ):
+        origin = evidence_origin_from_value(value)
+        if origin:
+            return origin
+    return None
+
+
+def constraint_provenance_from_source(
+    value: dict[str, Any],
+    *,
+    default_origin: str | None,
+) -> dict[str, Any] | None:
+    """Return provenance for a derived source constraint."""
+    for key in ("provenance", "evidence", "source_provenance"):
+        provenance = value.get(key)
+        if isinstance(provenance, dict):
+            result = dict(provenance)
+            if default_origin and not evidence_origin_from_value(result):
+                result["origin"] = default_origin
+            return result
+        origin = evidence_origin_from_value(provenance)
+        if origin:
+            return {"origin": origin}
+    if default_origin:
+        return {"origin": default_origin}
+    return None
+
+
+def source_wall_axis_for_path(path: Any) -> str | None:
+    """Return source wall orientation token for one path."""
+    if not isinstance(path, list) or len(path) < 2:
+        return None
+    axis = wall_axis(path)
+    if axis == "x":
+        return "vertical"
+    if axis == "y":
+        return "horizontal"
+    return None
+
+
+def copy_direct_constraints_from_interpretation(
+    interpretation: dict[str, Any],
+    *,
+    default_origin: str | None,
+) -> dict[str, list[dict[str, Any]]]:
+    """Copy already-structured top-level source constraints from extraction."""
+    copied_by_key: dict[str, list[dict[str, Any]]] = {}
+    for key in SOURCE_INTERPRETATION_DIRECT_CONSTRAINT_KEYS:
+        value = interpretation.get(key)
+        if not isinstance(value, list):
+            continue
+        copied: list[dict[str, Any]] = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            provenance = constraint_provenance_from_source(
+                item,
+                default_origin=default_origin,
+            )
+            if provenance is None:
+                continue
+            constraint = dict(item)
+            if not any(
+                constraint.get(provenance_key) is not None
+                for provenance_key in (
+                    "provenance",
+                    "evidence",
+                    "source_provenance",
+                    "origin",
+                    "evidence_origin",
+                    "extraction_origin",
+                )
+            ):
+                constraint["provenance"] = provenance
+            copied.append(constraint)
+        if copied:
+            copied_by_key[key] = copied
+    return copied_by_key
+
+
+def derive_source_constraints_from_interpretation(
+    interpretation: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Derive machine-checkable source constraints from extracted interpretation.
+
+    This does not invent missing evidence. It only converts explicit extracted
+    negative regions, walls, and openings into validator-readable constraints.
+    """
+    default_origin = source_interpretation_default_origin(interpretation)
+    constraints: dict[str, Any] = {
+        "version": "1.0",
+        "provenance": {"origin": default_origin} if default_origin else {},
+        "derived_from_source_interpretation": True,
+    }
+    direct_constraints = copy_direct_constraints_from_interpretation(
+        interpretation,
+        default_origin=default_origin,
+    )
+    constraints.update(direct_constraints)
+
+    wall_constraints: list[dict[str, Any]] = []
+    for wall in interpretation.get("walls", interpretation.get("wall_candidates", [])):
+        if not isinstance(wall, dict):
+            continue
+        provenance = constraint_provenance_from_source(
+            wall,
+            default_origin=default_origin,
+        )
+        if provenance is None:
+            continue
+        path = wall.get("path")
+        if not isinstance(path, list) or len(path) < 2:
+            continue
+        constraint: dict[str, Any] = {
+            "id": str(
+                wall.get("wall_id")
+                or wall.get("target_id")
+                or wall.get("id")
+                or f"wall_constraint_{len(wall_constraints) + 1}"
+            ),
+            "path": path,
+            "path_tolerance": float(wall.get("path_tolerance", 80)),
+        }
+        if isinstance(wall.get("space_refs"), list):
+            constraint["space_refs"] = wall["space_refs"]
+        constraint["provenance"] = provenance
+        wall_constraints.append(constraint)
+
+    opening_constraints: list[dict[str, Any]] = []
+    walls_by_id = {
+        str(wall.get("wall_id") or wall.get("id")): wall
+        for wall in interpretation.get("walls", interpretation.get("wall_candidates", []))
+        if isinstance(wall, dict) and (wall.get("wall_id") or wall.get("id"))
+    }
+    for opening in interpretation.get("openings", []):
+        if not isinstance(opening, dict):
+            continue
+        opening_id = opening.get("opening_id") or opening.get("id")
+        if not opening_id:
+            continue
+        provenance = constraint_provenance_from_source(
+            opening,
+            default_origin=default_origin,
+        )
+        if provenance is None:
+            continue
+        constraint = {
+            "id": str(opening_id),
+            "type": str(opening.get("type", "opening")),
+        }
+        for key in (
+            "host_wall",
+            "open_to_space",
+            "access_from_space",
+            "open_side",
+            "swing_direction",
+            "source_anchor",
+            "source_interval",
+            "source_interval_mode",
+            "source_interval_coordinate_system",
+            "interval",
+            "interval_mode",
+        ):
+            if opening.get(key) is not None:
+                constraint[key] = opening[key]
+        host_wall = str(opening.get("host_wall", ""))
+        host_axis = source_wall_axis_for_path(walls_by_id.get(host_wall, {}).get("path"))
+        if host_axis:
+            constraint["host_wall_axis"] = host_axis
+        if (
+            (constraint.get("source_interval") is not None or constraint.get("interval") is not None)
+            and "interval_mode" not in constraint
+            and "source_interval_mode" not in constraint
+        ):
+            constraint["interval_mode"] = "wall_coordinate"
+        if opening.get("open_to_space") and opening.get("access_from_space"):
+            constraint["require_host_space_refs"] = True
+        constraint["provenance"] = provenance
+        opening_constraints.append(constraint)
+
+    negative_region_constraints: list[dict[str, Any]] = []
+    for region in interpretation.get("negative_regions", []):
+        if not isinstance(region, dict):
+            continue
+        provenance = constraint_provenance_from_source(
+            region,
+            default_origin=default_origin,
+        )
+        if provenance is None:
+            continue
+        raw_footprint = region.get("footprint") or region.get("polygon")
+        bounds = region.get("bounds")
+        if raw_footprint is None and not isinstance(bounds, dict):
+            continue
+        constraint = {
+            "id": str(
+                region.get("id")
+                or region.get("constraint_id")
+                or f"negative_region_{len(negative_region_constraints) + 1}"
+            ),
+            "forbid_spaces": True,
+            "forbid_boundary_enclosure": True,
+            "coordinate_tolerance": float(region.get("coordinate_tolerance", 80)),
+        }
+        if raw_footprint is not None:
+            constraint["footprint"] = raw_footprint
+        if isinstance(bounds, dict):
+            constraint["bounds"] = bounds
+        constraint["provenance"] = provenance
+        negative_region_constraints.append(constraint)
+
+    if wall_constraints:
+        constraints.setdefault("wall_constraints", []).extend(wall_constraints)
+    if opening_constraints:
+        constraints.setdefault("opening_constraints", []).extend(opening_constraints)
+    if negative_region_constraints:
+        constraints.setdefault("negative_region_constraints", []).extend(
+            negative_region_constraints
+        )
+
+    has_constraints = any(
+        isinstance(constraints.get(key), list) and constraints[key]
+        for key in SOURCE_CONSTRAINT_LIST_KEYS
+    )
+    return constraints if has_constraints else None
+
+
+def write_interpretation_constraints_if_present(
+    project_path: str | Path,
+    import_id: str,
+    interpretation: dict[str, Any],
+) -> str | None:
+    """Persist source interpretation constraints into the import session."""
+    constraints = interpretation.get("constraints")
+    derived_constraints = False
+    if not isinstance(constraints, dict):
+        constraints = derive_source_constraints_from_interpretation(interpretation)
+        derived_constraints = constraints is not None
+    if not isinstance(constraints, dict):
+        return None
+    root = Path(project_path).expanduser().resolve()
+    chosen_id = import_safe_id(import_id)
+    payload = {
+        "version": str(constraints.get("version", "1.0")),
+        "import_id": str(constraints.get("import_id", chosen_id)),
+        **{
+            key: value
+        for key, value in constraints.items()
+        if key not in {"version", "import_id"}
+        },
+    }
+    if derived_constraints:
+        payload["derived_from_source_interpretation"] = True
+    path = import_constraints_path(root, chosen_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return project_relative_path(root, path)
 
 
 def interpretation_negative_regions(
@@ -584,6 +1417,15 @@ def review_space_candidate(
     issues: list[dict[str, Any]] = []
     area_delta_ratio: float | None = None
     dimension_deltas: list[dict[str, Any]] = []
+    label_anchor = normalize_label_anchor(candidate)
+    if label_anchor is not None and not point_in_polygon_2d(label_anchor, footprint):
+        issues.append(
+            {
+                "code": "label_anchor_outside_footprint",
+                "severity": "reject",
+                "label_anchor": label_anchor,
+            }
+        )
 
     label_area_m2 = (
         candidate.get("label_area_m2")
@@ -646,7 +1488,10 @@ def review_space_candidate(
         )
     )
     for region in negative_regions:
-        overlap_m2 = bounds_overlap_area_mm2(bounds, region["bounds"]) / 1_000_000
+        overlap_m2 = (
+            polygon_overlap_with_bounds_area_mm2(footprint, region["bounds"])
+            / 1_000_000
+        )
         if overlap_m2 > negative_space_overlap_tolerance_m2:
             if strong_positive_evidence and region.get("enforcement") != "hard":
                 issues.append(
@@ -681,6 +1526,7 @@ def review_space_candidate(
         "confidence": float(candidate.get("confidence", 0.5)),
         "computed_area_m2": area_m2,
         "label_area_m2": label_area_m2,
+        "label_anchor": label_anchor,
         "area_delta_ratio": area_delta_ratio,
         "dimension_deltas": dimension_deltas,
         "selection_score": candidate_selection_score(
@@ -771,10 +1617,20 @@ def wall_payload_from_interpretation(
     return wall_id, payload
 
 
+def opening_source_interval(opening: dict[str, Any]) -> tuple[float, float] | None:
+    """Return a source-backed hosted opening interval when the extractor provides one."""
+    interval = opening.get("source_interval") or opening.get("interval")
+    normalized = normalize_interval_values(interval)
+    if normalized is None:
+        return None
+    return normalized[0], normalized[1]
+
+
 def opening_payload_from_interpretation(
     import_id: str,
     opening: dict[str, Any],
     *,
+    walls: dict[str, dict[str, Any]],
     assumptions: list[str],
     index: int,
 ) -> tuple[str, dict[str, Any]]:
@@ -782,11 +1638,33 @@ def opening_payload_from_interpretation(
     opening_id = str(
         opening.get("opening_id") or opening.get("id") or f"{import_id}_opening_{index + 1:03d}"
     )
+    source_interval = opening_source_interval(opening)
+    offset = float(opening.get("offset", 0))
+    if source_interval is not None:
+        host_wall = walls.get(str(opening.get("host_wall", "")))
+        host_axis = (
+            wall_axis(host_wall.get("path", [])) if isinstance(host_wall, dict) else None
+        )
+        if (
+            host_axis is not None
+            and not interval_is_offset_mode(opening)
+            and isinstance(host_wall, dict)
+        ):
+            offset = interval_offset_from_wall_start(
+                host_wall.get("path", []),
+                host_axis,
+                source_interval,
+            )
+        else:
+            offset = source_interval[0]
+        width = source_interval[1] - source_interval[0]
+    else:
+        width = float(opening["width"])
     payload: dict[str, Any] = {
         "type": opening.get("type", "opening"),
         "host_wall": opening["host_wall"],
-        "offset": float(opening.get("offset", 0)),
-        "width": float(opening["width"]),
+        "offset": offset,
+        "width": width,
         "height": float(opening["height"]),
         "sill_height": float(opening.get("sill_height", 0)),
         "representation": "hosted",
@@ -802,9 +1680,164 @@ def opening_payload_from_interpretation(
         payload["swing_direction"] = opening["swing_direction"]
     if opening.get("open_to_space"):
         payload["open_to_space"] = opening["open_to_space"]
+    if opening.get("access_from_space"):
+        payload["access_from_space"] = opening["access_from_space"]
     if opening.get("open_side"):
         payload["open_side"] = opening["open_side"]
+    source_evidence = {}
+    for key in (
+        "source_anchor",
+        "source_interval",
+        "source_interval_mode",
+        "source_interval_coordinate_system",
+        "is_entry",
+        "is_exterior",
+    ):
+        if key in opening:
+            source_evidence[key] = opening[key]
+    if source_evidence:
+        payload["source"]["opening_evidence"] = source_evidence
     return opening_id, payload
+
+
+def generation_opening_priority(opening: dict[str, Any]) -> int:
+    """Return semantic priority for resolving hosted opening interval conflicts."""
+    opening_type = str(opening.get("type", "opening"))
+    if opening_type == "door":
+        return 3
+    if opening_type == "opening":
+        return 2
+    if opening_type == "window":
+        return 1
+    return 0
+
+
+def generation_opening_confidence(opening: dict[str, Any]) -> float:
+    """Return source confidence for ordering generation-time opening repairs."""
+    source = opening.get("source", {})
+    if not isinstance(source, dict):
+        return 0.0
+    return float(source.get("confidence", 0.0))
+
+
+def normalize_generation_opening_conflicts(
+    design_model: dict[str, Any],
+    import_id: str,
+    *,
+    min_opening_width: float = DEFAULT_MIN_HOSTED_OPENING_WIDTH,
+    coordinate_match_tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
+) -> dict[str, Any]:
+    """Clip or remove overlapping hosted openings before bridge execution."""
+    openings = design_model.get("openings", {})
+    walls = design_model.get("walls", {})
+    adjusted_openings: list[dict[str, Any]] = []
+    removed_openings: list[dict[str, Any]] = []
+    inspected_hosts: list[str] = []
+
+    openings_by_host: dict[str, list[tuple[str, dict[str, Any]]]] = {}
+    for opening_id, opening in openings.items():
+        if not isinstance(opening, dict):
+            continue
+        source = opening.get("source", {})
+        if not isinstance(source, dict) or source.get("import_id") != import_id:
+            continue
+        host_wall = str(opening.get("host_wall", ""))
+        if host_wall:
+            openings_by_host.setdefault(host_wall, []).append((opening_id, opening))
+
+    for host_wall, hosted_openings in sorted(openings_by_host.items()):
+        if len(hosted_openings) < 2:
+            continue
+        wall = walls.get(host_wall)
+        if not isinstance(wall, dict):
+            continue
+        length = wall_length(wall.get("path", []))
+        if length <= coordinate_match_tolerance:
+            continue
+
+        inspected_hosts.append(host_wall)
+        accepted_intervals: list[tuple[float, float, str]] = []
+        for opening_id, opening in sorted(
+            hosted_openings,
+            key=lambda item: (
+                -generation_opening_priority(item[1]),
+                -generation_opening_confidence(item[1]),
+                float(item[1].get("offset", 0.0)),
+                item[0],
+            ),
+        ):
+            original_offset = float(opening.get("offset", 0.0))
+            original_width = float(opening.get("width", 0.0))
+            raw_start = max(0.0, original_offset)
+            raw_end = min(length, original_offset + original_width)
+            if raw_end - raw_start < min_opening_width:
+                openings.pop(opening_id, None)
+                removed_openings.append(
+                    {
+                        "opening_id": opening_id,
+                        "host_wall": host_wall,
+                        "reason": "opening interval is too small or outside host wall",
+                    }
+                )
+                continue
+
+            available_spans = subtract_intervals(
+                (raw_start, raw_end),
+                [(start, end) for start, end, _ in accepted_intervals],
+                tolerance=coordinate_match_tolerance,
+            )
+            available_spans = [
+                span
+                for span in available_spans
+                if span[1] - span[0] >= min_opening_width
+            ]
+            if not available_spans:
+                openings.pop(opening_id, None)
+                removed_openings.append(
+                    {
+                        "opening_id": opening_id,
+                        "host_wall": host_wall,
+                        "reason": "opening fully overlapped higher-priority host openings",
+                    }
+                )
+                continue
+
+            chosen_start, chosen_end = max(
+                available_spans,
+                key=lambda span: (span[1] - span[0], -abs(span[0] - raw_start)),
+            )
+            chosen_width = chosen_end - chosen_start
+            if (
+                abs(chosen_start - original_offset) > coordinate_match_tolerance
+                or abs(chosen_width - original_width) > coordinate_match_tolerance
+            ):
+                opening["offset"] = round(chosen_start, 3)
+                opening["width"] = round(chosen_width, 3)
+                adjusted_openings.append(
+                    {
+                        "opening_id": opening_id,
+                        "host_wall": host_wall,
+                        "from": {
+                            "offset": original_offset,
+                            "width": original_width,
+                        },
+                        "to": {
+                            "offset": opening["offset"],
+                            "width": opening["width"],
+                        },
+                        "reason": "opening clipped to avoid overlap with higher-priority host openings",
+                    }
+                )
+            accepted_intervals.append((chosen_start, chosen_end, opening_id))
+            accepted_intervals.sort(key=lambda interval: (interval[0], interval[1]))
+
+    return {
+        "status": "normalized" if adjusted_openings or removed_openings else "unchanged",
+        "inspected_hosts": inspected_hosts,
+        "adjusted_openings": adjusted_openings,
+        "removed_openings": removed_openings,
+        "min_opening_width": min_opening_width,
+    }
 
 
 def wall_variable_axis(axis: str) -> str:
@@ -922,6 +1955,22 @@ def should_infer_circulation_opening(first: dict[str, Any], second: dict[str, An
     if "hallway" not in types:
         return False
     return bool(types & {"living_room", "dining_room", "kitchen", "office", "other"})
+
+
+def is_circulation_gap(
+    adjacent_spaces: list[dict[str, Any]],
+    *,
+    length: float,
+    max_length: float = DEFAULT_MAX_CIRCULATION_GAP_LENGTH,
+) -> bool:
+    """Return whether a boundary gap can remain open for normal circulation."""
+    if length > max_length:
+        return False
+    for first_index, first in enumerate(adjacent_spaces):
+        for second in adjacent_spaces[first_index + 1 :]:
+            if should_infer_circulation_opening(first, second):
+                return True
+    return False
 
 
 def infer_generation_circulation_openings(
@@ -1084,13 +2133,58 @@ def wall_space_refs(wall: dict[str, Any]) -> list[str]:
     return [str(ref) for ref in refs]
 
 
+def opening_access_from_space(opening: dict[str, Any]) -> str | None:
+    """Return the source-side space used to access an opening when known."""
+    for key in ("access_from_space", "from_space", "source_space"):
+        value = opening.get(key)
+        if value:
+            return str(value)
+    source = opening.get("source", {})
+    if isinstance(source, dict):
+        evidence = source.get("opening_evidence", {})
+        if isinstance(evidence, dict) and evidence.get("access_from_space"):
+            return str(evidence["access_from_space"])
+    return None
+
+
+def opening_is_exterior_access(opening_id: str, opening: dict[str, Any]) -> bool:
+    """Return whether a door is explicitly source-backed exterior access."""
+    access_from = normalized_label_token(opening_access_from_space(opening) or "")
+    if access_from in {"exterior", "outside", "outdoor", "entry"}:
+        return True
+    source = opening.get("source", {})
+    evidence = source.get("opening_evidence", {}) if isinstance(source, dict) else {}
+    explicit_flags = (
+        opening.get("is_entry"),
+        opening.get("is_exterior"),
+        opening.get("entry"),
+        opening.get("exterior"),
+    )
+    if isinstance(evidence, dict):
+        explicit_flags += (
+            evidence.get("is_entry"),
+            evidence.get("is_exterior"),
+        )
+    if any(bool(flag) for flag in explicit_flags):
+        return True
+    opening_token = normalized_label_token(opening_id)
+    if opening.get("name"):
+        opening_token += normalized_label_token(opening["name"])
+    return any(
+        token in opening_token
+        for token in ("entrydoor", "frontdoor", "exteriordoor")
+    )
+
+
 def door_host_wall_score(
     wall: dict[str, Any],
     *,
+    opening_id: str,
     wall_id: str,
     current_host_wall: str,
     target_space_id: str,
     spaces: dict[str, dict[str, Any]],
+    opening: dict[str, Any],
 ) -> float:
     """Return a semantic score for hosting a target-space door on one wall."""
     refs = wall_space_refs(wall)
@@ -1098,12 +2192,23 @@ def door_host_wall_score(
         return -1.0
 
     target_type = str(spaces.get(target_space_id, {}).get("type", "other"))
+    access_from_space = opening_access_from_space(opening)
+    exterior_access = opening_is_exterior_access(opening_id, opening)
+    known_other_refs = [ref for ref in refs if ref != target_space_id and ref in spaces]
     other_types = {
         str(spaces.get(ref, {}).get("type", "other"))
         for ref in refs
         if ref != target_space_id
     }
     score = 1000.0
+    if access_from_space:
+        if access_from_space in spaces:
+            if access_from_space in refs:
+                score += 260.0
+            else:
+                score -= 140.0
+        elif normalized_label_token(access_from_space) in {"exterior", "outside", "outdoor"}:
+            score += 180.0 if not known_other_refs else -80.0
     if "hallway" in other_types:
         score += 150.0 if target_type in {"bedroom", "bathroom", "storage"} else 90.0
     if other_types & {"living_room", "dining_room", "kitchen", "office"}:
@@ -1111,10 +2216,31 @@ def door_host_wall_score(
     if other_types & {"bedroom", "bathroom", "storage"}:
         score += 10.0
     if target_type == "balcony":
-        score += 25.0 if "living_room" in other_types else 0.0
+        if other_types & {"living_room", "dining_room", "kitchen", "bedroom", "office"}:
+            score += 190.0
+        elif not known_other_refs and not exterior_access:
+            score -= 120.0
+    if exterior_access and not known_other_refs:
+        score += 220.0
     if wall_id == current_host_wall:
         score += 5.0
     return score
+
+
+def is_single_space_boundary_host(
+    wall: dict[str, Any] | None,
+    *,
+    target_space_id: str,
+    spaces: dict[str, dict[str, Any]],
+) -> bool:
+    """Return whether a door is already hosted on a target-space boundary wall."""
+    if not isinstance(wall, dict):
+        return False
+    refs = wall_space_refs(wall)
+    if target_space_id not in refs:
+        return False
+    known_other_refs = [ref for ref in refs if ref != target_space_id and ref in spaces]
+    return not known_other_refs
 
 
 def point_on_wall_at_distance(path: list[Any], distance: float) -> list[float]:
@@ -1259,10 +2385,12 @@ def normalize_generation_door_hosts(
         current_score = (
             door_host_wall_score(
                 current_wall,
+                opening_id=opening_id,
                 wall_id=current_host_wall,
                 current_host_wall=current_host_wall,
                 target_space_id=target_space_id,
                 spaces=spaces,
+                opening=opening,
             )
             if isinstance(current_wall, dict)
             else -1.0
@@ -1271,10 +2399,12 @@ def normalize_generation_door_hosts(
             (
                 door_host_wall_score(
                     wall,
+                    opening_id=opening_id,
                     wall_id=wall_id,
                     current_host_wall=current_host_wall,
                     target_space_id=target_space_id,
                     spaces=spaces,
+                    opening=opening,
                 ),
                 wall_id,
                 wall,
@@ -1289,10 +2419,22 @@ def normalize_generation_door_hosts(
             continue
         scored_candidates.sort(reverse=True, key=lambda item: item[0])
         best_score, best_wall_id, best_wall = scored_candidates[0]
-        if best_wall_id == current_host_wall or best_score < current_score + min_score_delta:
+        if (
+            best_wall_id == current_host_wall
+            or best_score < current_score + min_score_delta
+            or (
+                opening_is_exterior_access(opening_id, opening)
+                and is_single_space_boundary_host(
+                    current_wall if isinstance(current_wall, dict) else None,
+                    target_space_id=target_space_id,
+                    spaces=spaces,
+                )
+            )
+        ):
             opening["open_to_space"] = target_space_id
+            side_wall = current_wall if isinstance(current_wall, dict) else best_wall
             open_side = door_open_side_for_space(
-                best_wall,
+                side_wall,
                 spaces[target_space_id],
                 coordinate_match_tolerance=coordinate_match_tolerance,
             )
@@ -1374,6 +2516,7 @@ def trim_generation_shell_overreach(
     design_model: dict[str, Any],
     import_id: str,
     *,
+    source_constraints: dict[str, Any] | None = None,
     min_segment_length: float = DEFAULT_MIN_SHELL_OVERREACH_LENGTH,
     coordinate_match_tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
     min_wall_length: float = DEFAULT_MIN_WALL_LENGTH,
@@ -1394,14 +2537,52 @@ def trim_generation_shell_overreach(
             "split_walls": [],
             "removed_openings": [],
             "adjusted_openings": [],
+            "preserved_source_constrained_segments": [],
             "segments": [],
         }
 
     remove_intervals_by_wall: dict[str, list[tuple[float, float]]] = {}
+    source_protected_wall_ids = source_constraint_wall_ids(source_constraints or {})
+    source_protected_segments = source_constraint_protected_segments(
+        source_constraints or {}
+    )
+    preserved_source_constrained_segments: list[dict[str, Any]] = []
     for segment in overreach_segments:
-        remove_intervals_by_wall.setdefault(segment["wall_id"], []).append(
-            (float(segment["interval"][0]), float(segment["interval"][1]))
+        wall = design_model.get("walls", {}).get(segment["wall_id"])
+        if not isinstance(wall, dict):
+            continue
+        overreach_interval = (
+            float(segment["interval"][0]),
+            float(segment["interval"][1]),
         )
+        protected_coverage = source_constraint_coverage_for_overreach_segment(
+            segment,
+            wall,
+            protected_wall_ids=source_protected_wall_ids,
+            protected_segments=source_protected_segments,
+            tolerance=coordinate_match_tolerance,
+        )
+        removable_intervals = subtract_intervals(
+            overreach_interval,
+            protected_coverage,
+            tolerance=coordinate_match_tolerance,
+        )
+        if not removable_intervals:
+            preserved_source_constrained_segments.append(segment)
+            continue
+        for removable_interval in removable_intervals:
+            if removable_interval[1] - removable_interval[0] <= min_segment_length:
+                preserved_segment = dict(segment)
+                preserved_segment["interval"] = [
+                    removable_interval[0],
+                    removable_interval[1],
+                ]
+                preserved_segment["length"] = removable_interval[1] - removable_interval[0]
+                preserved_source_constrained_segments.append(preserved_segment)
+                continue
+            remove_intervals_by_wall.setdefault(segment["wall_id"], []).append(
+                removable_interval
+            )
 
     trimmed_walls: list[str] = []
     removed_walls: list[str] = []
@@ -1481,7 +2662,70 @@ def trim_generation_shell_overreach(
         "split_walls": split_walls,
         "removed_openings": removed_openings,
         "adjusted_openings": sorted(set(adjusted_openings)),
+        "preserved_source_constrained_segments": preserved_source_constrained_segments,
         "segments": overreach_segments,
+    }
+
+
+def remove_generation_redundant_wall_overlaps(
+    design_model: dict[str, Any],
+    import_id: str,
+    *,
+    source_constraints: dict[str, Any] | None = None,
+    coordinate_match_tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
+) -> dict[str, Any]:
+    """Remove imported walls fully covered by other imported wall segments."""
+    protected_wall_ids = source_constraint_wall_ids(source_constraints or {})
+    hosted_wall_ids = {
+        str(opening.get("host_wall"))
+        for opening in design_model.get("openings", {}).values()
+        if isinstance(opening, dict) and opening.get("host_wall")
+    }
+    removed_walls: list[dict[str, Any]] = []
+    for wall_id, wall in list(design_model.get("walls", {}).items()):
+        wall_id = str(wall_id)
+        if wall_id in protected_wall_ids or wall_id in hosted_wall_ids:
+            continue
+        if not isinstance(wall, dict):
+            continue
+        source = wall.get("source", {})
+        if not isinstance(source, dict) or source.get("import_id") != import_id:
+            continue
+        path = wall.get("path", [])
+        if wall_axis(path, tolerance=coordinate_match_tolerance) is None:
+            continue
+        coverage = imported_wall_coverage_for_segment(
+            design_model,
+            import_id,
+            path,
+            tolerance=coordinate_match_tolerance,
+            exclude_wall_ids={wall_id},
+        )
+        if not coverage["covered"]:
+            continue
+        candidate_length = wall_length(path)
+        covering_lengths = [
+            wall_length(design_model["walls"][covering_id].get("path", []))
+            for covering_id in coverage["matched_wall_ids"]
+            if isinstance(design_model["walls"].get(covering_id), dict)
+        ]
+        if (
+            len(coverage["matched_wall_ids"]) == 1
+            and covering_lengths
+            and covering_lengths[0] > candidate_length + coordinate_match_tolerance
+        ):
+            continue
+        design_model["walls"].pop(wall_id, None)
+        removed_walls.append(
+            {
+                "wall_id": wall_id,
+                "covered_by": coverage["matched_wall_ids"],
+            }
+        )
+
+    return {
+        "status": "removed" if removed_walls else "unchanged",
+        "removed_walls": removed_walls,
     }
 
 
@@ -1581,6 +2825,7 @@ def build_interpreted_import_payloads(
         opening_id, payload = opening_payload_from_interpretation(
             import_id,
             opening,
+            walls=walls,
             assumptions=assumptions,
             index=index,
         )
@@ -1605,11 +2850,31 @@ def build_interpreted_import_payloads(
     if circulation_openings["status"] == "inferred":
         flags.append("source_circulation_openings_inferred_during_generation")
         openings = scratch_model["openings"]
-    shell_trim = trim_generation_shell_overreach(scratch_model, import_id)
+    shell_trim = trim_generation_shell_overreach(
+        scratch_model,
+        import_id,
+        source_constraints=interpretation.get("constraints")
+        if isinstance(interpretation.get("constraints"), dict)
+        else None,
+    )
     if shell_trim["status"] == "trimmed":
         flags.append("source_shell_overreach_trimmed_during_generation")
         walls = scratch_model["walls"]
         openings = scratch_model["openings"]
+    opening_conflicts = normalize_generation_opening_conflicts(scratch_model, import_id)
+    if opening_conflicts["status"] == "normalized":
+        flags.append("source_opening_conflicts_normalized_during_generation")
+        openings = scratch_model["openings"]
+    redundant_walls = remove_generation_redundant_wall_overlaps(
+        scratch_model,
+        import_id,
+        source_constraints=interpretation.get("constraints")
+        if isinstance(interpretation.get("constraints"), dict)
+        else None,
+    )
+    if redundant_walls["status"] == "removed":
+        flags.append("source_redundant_walls_removed_during_generation")
+        walls = scratch_model["walls"]
 
     generated_model = {
         "design_model": DESIGN_MODEL_FILENAME,
@@ -1658,6 +2923,8 @@ def build_interpreted_import_payloads(
             "door_host_repair": door_host_repair,
             "circulation_openings": circulation_openings,
             "shell_trim": shell_trim,
+            "opening_conflicts": opening_conflicts,
+            "redundant_walls": redundant_walls,
             "assumptions": assumptions,
             "quality_flags": dedupe_quality_flags(flags),
             "generated_model": generated_model,
@@ -1819,6 +3086,18 @@ def import_floorplan_to_model(
         if source_interpretation_path is not None
         else None
     )
+    coordinate_transform = None
+    coordinate_quality_flags: list[str] = []
+    if source_interpretation is not None:
+        require_known_source_for_interpretation(source_type, manifest)
+        (
+            source_interpretation,
+            coordinate_transform,
+            coordinate_quality_flags,
+        ) = normalize_source_interpretation_coordinates(
+            source_interpretation,
+            source_type=source_type,
+        )
 
     if source_interpretation is not None:
         payloads = build_interpreted_import_payloads(
@@ -1835,12 +3114,15 @@ def import_floorplan_to_model(
         openings = payloads["openings"]
         generated_model = payloads["generated_model"]
         assumptions = payloads["assumptions"]
-        flags = payloads["quality_flags"]
+        flags = dedupe_quality_flags([*payloads["quality_flags"], *coordinate_quality_flags])
         summary = {
             **payloads["summary"],
             "scale_source": "source_interpretation",
         }
         interpretation = payloads["interpretation"]
+        if coordinate_transform is not None:
+            interpretation["coordinate_transform"] = coordinate_transform
+            summary["coordinate_transform"] = coordinate_transform
         scale_payload = {
             "units": "mm",
             "source": "source_interpretation",
@@ -1851,6 +3133,8 @@ def import_floorplan_to_model(
                 if key not in {"units", "source", "confidence"}
             },
         }
+        if coordinate_transform is not None:
+            scale_payload["coordinate_transform"] = coordinate_transform
         if width is not None:
             scale_payload["width"] = model_width
         if depth is not None:
@@ -1932,6 +3216,25 @@ def import_floorplan_to_model(
             "confidence": confidence,
         }
 
+    raw_interpretation_path = None
+    constraints_path_from_interpretation = None
+    constraints_derived_from_interpretation = False
+    if source_interpretation_path is not None:
+        constraints_path_from_interpretation = write_interpretation_constraints_if_present(
+            root,
+            chosen_id,
+            source_interpretation or {},
+        )
+        constraints_derived_from_interpretation = (
+            constraints_path_from_interpretation is not None
+            and source_interpretation is not None
+            and not isinstance(source_interpretation.get("constraints"), dict)
+        )
+        if constraints_derived_from_interpretation:
+            flags = dedupe_quality_flags(
+                [*flags, "source_constraints_derived_from_interpretation"]
+            )
+
     design_model.setdefault("spaces", {}).update(spaces)
     design_model.setdefault("walls", {}).update(walls)
     design_model.setdefault("openings", {}).update(openings)
@@ -1944,6 +3247,10 @@ def import_floorplan_to_model(
         "quality_flags": flags,
         "generated_model": generated_model,
     }
+    if constraints_path_from_interpretation:
+        design_model["import_sessions"][chosen_id][
+            "source_constraints_path"
+        ] = constraints_path_from_interpretation
     quality_flags = [
         flag
         for flag in design_model.get("quality_flags", [])
@@ -1981,7 +3288,6 @@ def import_floorplan_to_model(
 
     extracted_path = import_session_path(root, chosen_id) / "extracted" / "interpretation.json"
     extracted_path.parent.mkdir(parents=True, exist_ok=True)
-    raw_interpretation_path = None
     if source_interpretation_path is not None:
         raw_interpretation_path = extracted_path.parent / "source_interpretation.json"
         source_file = Path(source_interpretation_path).expanduser().resolve()
@@ -1991,6 +3297,10 @@ def import_floorplan_to_model(
             root,
             raw_interpretation_path,
         )
+        if constraints_path_from_interpretation:
+            interpretation["source_constraints_path"] = constraints_path_from_interpretation
+            if constraints_derived_from_interpretation:
+                interpretation["source_constraints_derived_from_interpretation"] = True
     extracted_path.write_text(
         json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -2012,11 +3322,20 @@ def import_floorplan_to_model(
                 if raw_interpretation_path is not None
                 else None
             ),
+            "source_constraints_path": constraints_path_from_interpretation,
         },
     )
     saved_manifest, manifest_errors = save_import_manifest(manifest_file, manifest)
     if not saved_manifest:
         raise ValueError("; ".join(manifest_errors))
+
+    source_fidelity = None
+    if import_constraints_path(root, chosen_id).exists():
+        source_fidelity = validate_import_source_constraints(
+            root,
+            chosen_id,
+            update_state=True,
+        )
 
     return {
         "project_path": str(root),
@@ -2030,6 +3349,7 @@ def import_floorplan_to_model(
         "quality_flags": flags,
         "removed_previous_entities": removed,
         "source_interpretation_used": source_interpretation is not None,
+        "source_fidelity": source_fidelity,
         "summary": summary,
     }
 
@@ -2180,6 +3500,2196 @@ def point_from_axis_interval(
     if axis == "x":
         return [float(line_coordinate), float(interval_coordinate), float(z)]
     return [float(interval_coordinate), float(line_coordinate), float(z)]
+
+
+def source_constraint_items(
+    constraints: dict[str, Any],
+    *keys: str,
+) -> list[dict[str, Any]]:
+    """Return source constraint objects from the first matching list key."""
+    for key in keys:
+        value = constraints.get(key)
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, dict)]
+    return []
+
+
+def evidence_origin_from_value(value: Any) -> str | None:
+    """Return a normalized evidence-origin label from a constraint payload."""
+    if isinstance(value, str) and value.strip():
+        return value.strip().lower().replace("-", "_")
+    if isinstance(value, dict):
+        for key in (
+            "origin",
+            "evidence_origin",
+            "extraction_origin",
+            "source_origin",
+            "method",
+        ):
+            origin = evidence_origin_from_value(value.get(key))
+            if origin:
+                return origin
+    return None
+
+
+def source_constraint_evidence_origin(
+    constraint: dict[str, Any],
+    *,
+    default_origin: str | None,
+) -> str | None:
+    """Return the best evidence-origin label for one source constraint."""
+    for key in (
+        "evidence_origin",
+        "origin",
+        "extraction_origin",
+        "provenance",
+        "evidence",
+        "source_provenance",
+    ):
+        origin = evidence_origin_from_value(constraint.get(key))
+        if origin:
+            return origin
+    return default_origin
+
+
+def validate_source_constraint_evidence_origins(
+    constraints: dict[str, Any],
+) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
+    """Validate that source constraints came from extraction, not a hand-fed answer."""
+    failures: list[dict[str, Any]] = []
+    checked = 0
+    default_origin = source_constraint_evidence_origin(
+        constraints,
+        default_origin=evidence_origin_from_value(constraints.get("provenance")),
+    )
+    origin_counts: dict[str, int] = {}
+
+    for key in SOURCE_CONSTRAINT_LIST_KEYS:
+        value = constraints.get(key)
+        if not isinstance(value, list):
+            continue
+        for index, constraint in enumerate(value):
+            if not isinstance(constraint, dict):
+                continue
+            checked += 1
+            origin = source_constraint_evidence_origin(
+                constraint,
+                default_origin=default_origin,
+            )
+            normalized_origin = origin or "missing"
+            origin_counts[normalized_origin] = origin_counts.get(normalized_origin, 0) + 1
+            if normalized_origin in EXTRACTED_EVIDENCE_ORIGINS:
+                continue
+            append_constraint_failure(
+                failures,
+                code="constraint_evidence_not_extracted",
+                constraint={
+                    "id": constraint.get("id")
+                    or constraint.get("constraint_id")
+                    or f"{key}[{index}]"
+                },
+                target_id=None,
+                expected={"origin": sorted(EXTRACTED_EVIDENCE_ORIGINS)},
+                actual={
+                    "origin": normalized_origin,
+                    "constraint_group": key,
+                },
+                message=(
+                    "Source constraint is not marked as extracted from the source; "
+                    "it may be a manual or temporary validation answer and cannot "
+                    "prove automatic import recognition."
+                ),
+            )
+
+    summary = {
+        "status": "passed" if not failures else "failed",
+        "checked_count": checked,
+        "failure_count": len(failures),
+        "origin_counts": origin_counts,
+    }
+    return failures, checked, summary
+
+
+def constraint_tolerance(
+    constraint: dict[str, Any],
+    default_tolerance: float,
+    *keys: str,
+) -> float:
+    """Return a numeric tolerance from one constraint."""
+    for key in (*keys, "tolerance", "tolerance_mm"):
+        value = constraint.get(key)
+        if value is not None:
+            return max(0.0, float(value))
+    return default_tolerance
+
+
+def append_constraint_failure(
+    failures: list[dict[str, Any]],
+    *,
+    code: str,
+    constraint: dict[str, Any],
+    target_id: str | None,
+    expected: Any,
+    actual: Any,
+    message: str,
+) -> None:
+    """Append one source-fidelity constraint failure."""
+    failures.append(
+        {
+            "code": code,
+            "constraint_id": constraint.get("constraint_id") or constraint.get("id"),
+            "target_id": target_id,
+            "expected": expected,
+            "actual": actual,
+            "message": message,
+        }
+    )
+
+
+def source_constraint_status(failure_count: int, checked_count: int) -> str:
+    """Return the source-fidelity status for a completed constraint check."""
+    if checked_count == 0:
+        return "no_checks"
+    return "passed" if failure_count == 0 else "failed"
+
+
+def opening_interval(opening: dict[str, Any]) -> tuple[float, float]:
+    """Return the hosted opening interval on its wall."""
+    offset = float(opening.get("offset", 0.0))
+    width = float(opening.get("width", 0.0))
+    return offset, offset + width
+
+
+def opening_anchor_point(
+    opening: dict[str, Any],
+    wall: dict[str, Any],
+    *,
+    mode: str = "center",
+    tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
+) -> list[float] | None:
+    """Return an opening anchor point in plan coordinates for source checks."""
+    path = wall.get("path", [])
+    axis = wall_axis(path, tolerance=tolerance)
+    if axis is None:
+        return None
+    interval = opening_interval_on_wall(opening, wall, axis)
+    if mode == "start":
+        coordinate = interval[0]
+    elif mode == "end":
+        coordinate = interval[1]
+    else:
+        coordinate = (interval[0] + interval[1]) / 2
+    return point_from_axis_interval(
+        axis,
+        segment_line_coordinate(path, axis),
+        coordinate,
+        0.0,
+    )
+
+
+def normalize_anchor_constraint(
+    constraint: dict[str, Any],
+) -> tuple[list[float], str] | None:
+    """Return source anchor point and mode from an opening constraint."""
+    raw_anchor = (
+        constraint.get("source_anchor")
+        or constraint.get("anchor")
+        or constraint.get("source_point")
+    )
+    mode = str(constraint.get("anchor_mode", "center"))
+    if isinstance(raw_anchor, dict):
+        point = raw_anchor.get("point") or raw_anchor.get("position")
+        mode = str(raw_anchor.get("mode", mode))
+    else:
+        point = raw_anchor
+    if not isinstance(point, list) or len(point) < 2:
+        return None
+    if len(point) == 2:
+        point = [point[0], point[1], 0]
+    return normalize_3d_point(point, label="opening source anchor"), mode
+
+
+def points_within_plan_tolerance(
+    actual: list[float],
+    expected: list[float],
+    *,
+    tolerance: float,
+) -> bool:
+    """Return whether two plan points match within XY tolerance."""
+    return (
+        abs(float(actual[0]) - float(expected[0])) <= tolerance
+        and abs(float(actual[1]) - float(expected[1])) <= tolerance
+    )
+
+
+def normalize_source_wall_axis(value: Any) -> str | None:
+    """Return a wall-axis token from source-facing orientation wording."""
+    if value is None:
+        return None
+    token = str(value).strip().lower().replace("-", "_").replace(" ", "_")
+    if token in {"x", "constant_x", "north_south", "n_s", "vertical"}:
+        return "x"
+    if token in {"y", "constant_y", "east_west", "e_w", "horizontal"}:
+        return "y"
+    return None
+
+
+def intervals_within_tolerance(
+    actual: tuple[float, float],
+    expected: tuple[float, float],
+    *,
+    tolerance: float,
+) -> bool:
+    """Return whether two intervals match within tolerance at both ends."""
+    return (
+        abs(actual[0] - expected[0]) <= tolerance
+        and abs(actual[1] - expected[1]) <= tolerance
+    )
+
+
+def point_distance(first: list[Any], second: list[Any]) -> float:
+    """Return 3D Euclidean distance between two points."""
+    return sum(
+        (float(first[index]) - float(second[index])) ** 2 for index in range(3)
+    ) ** 0.5
+
+
+def wall_paths_within_tolerance(
+    actual_path: list[Any],
+    expected_path: list[Any],
+    *,
+    tolerance: float,
+) -> bool:
+    """Return whether two wall paths share endpoints within tolerance."""
+    if len(actual_path) < 2 or len(expected_path) < 2:
+        return False
+    actual = [actual_path[0], actual_path[-1]]
+    expected = [expected_path[0], expected_path[-1]]
+    return (
+        point_distance(actual[0], expected[0]) <= tolerance
+        and point_distance(actual[1], expected[1]) <= tolerance
+    ) or (
+        point_distance(actual[0], expected[1]) <= tolerance
+        and point_distance(actual[1], expected[0]) <= tolerance
+    )
+
+
+def wall_path_covers_segment(
+    actual_path: list[Any],
+    expected_path: list[Any],
+    *,
+    tolerance: float,
+) -> bool:
+    """Return whether one wall path covers a source segment in plan."""
+    actual_axis = wall_axis(actual_path, tolerance=tolerance)
+    expected_axis = wall_axis(expected_path, tolerance=tolerance)
+    if actual_axis is None or actual_axis != expected_axis:
+        return False
+    if (
+        abs(
+            segment_line_coordinate(actual_path, actual_axis)
+            - segment_line_coordinate(expected_path, expected_axis)
+        )
+        > tolerance
+    ):
+        return False
+    actual_interval = segment_interval(actual_path, actual_axis)
+    expected_interval = segment_interval(expected_path, expected_axis)
+    return (
+        actual_interval[0] <= expected_interval[0] + tolerance
+        and actual_interval[1] >= expected_interval[1] - tolerance
+    )
+
+
+def interval_overlap_length(
+    first: tuple[float, float],
+    second: tuple[float, float],
+) -> float:
+    """Return the length of interval overlap."""
+    return max(0.0, min(first[1], second[1]) - max(first[0], second[0]))
+
+
+def wall_overlap_with_bounds(
+    wall: dict[str, Any],
+    bounds: tuple[float, float, float, float],
+    *,
+    tolerance: float,
+) -> float:
+    """Return the axis-aligned wall length inside one rectangular source region."""
+    path = wall.get("path", [])
+    axis = wall_axis(path, tolerance=tolerance)
+    if axis is None:
+        return 0.0
+    line_coordinate = segment_line_coordinate(path, axis)
+    interval = segment_interval(path, axis)
+    if axis == "x":
+        if line_coordinate < bounds[0] - tolerance or line_coordinate > bounds[1] + tolerance:
+            return 0.0
+        if (
+            abs(line_coordinate - bounds[0]) <= tolerance
+            or abs(line_coordinate - bounds[1]) <= tolerance
+        ):
+            return 0.0
+        return interval_overlap_length(interval, (bounds[2], bounds[3]))
+    if line_coordinate < bounds[2] - tolerance or line_coordinate > bounds[3] + tolerance:
+        return 0.0
+    if (
+        abs(line_coordinate - bounds[2]) <= tolerance
+        or abs(line_coordinate - bounds[3]) <= tolerance
+    ):
+        return 0.0
+    return interval_overlap_length(interval, (bounds[0], bounds[1]))
+
+
+def normalize_source_segment(value: Any, *, label: str) -> list[list[float]] | None:
+    """Return one normalized two-point source segment from a constraint value."""
+    raw_segment = value
+    if isinstance(value, dict):
+        raw_segment = (
+            value.get("path")
+            or value.get("segment")
+            or (
+                [value.get("start"), value.get("end")]
+                if value.get("start") and value.get("end")
+                else None
+            )
+        )
+    if not isinstance(raw_segment, list) or len(raw_segment) < 2:
+        return None
+    return [
+        normalize_3d_point(raw_segment[0], label=f"{label}.start"),
+        normalize_3d_point(raw_segment[-1], label=f"{label}.end"),
+    ]
+
+
+def source_constraint_segments(
+    constraint: dict[str, Any],
+    *,
+    label: str,
+) -> list[list[list[float]]]:
+    """Return normalized source segments from a path/segment/polyline constraint."""
+    segments: list[list[list[float]]] = []
+    raw_segments = constraint.get("segments")
+    if isinstance(raw_segments, list):
+        for index, item in enumerate(raw_segments):
+            segment = normalize_source_segment(item, label=f"{label}.segments[{index}]")
+            if segment is not None:
+                segments.append(segment)
+
+    raw_polyline = constraint.get("polyline") or constraint.get("outline")
+    if isinstance(raw_polyline, list) and len(raw_polyline) >= 2:
+        points = [
+            normalize_3d_point(point, label=f"{label}.polyline[{index}]")
+            for index, point in enumerate(raw_polyline)
+        ]
+        for index in range(len(points) - 1):
+            segments.append([points[index], points[index + 1]])
+        if bool(constraint.get("closed", constraint.get("is_closed", False))):
+            segments.append([points[-1], points[0]])
+
+    direct_segment = normalize_source_segment(
+        constraint,
+        label=label,
+    )
+    if direct_segment is not None:
+        segments.append(direct_segment)
+
+    return segments
+
+
+def source_constraint_wall_ids(constraints: dict[str, Any]) -> set[str]:
+    """Return wall ids that source constraints explicitly reference."""
+    if not isinstance(constraints, dict):
+        return set()
+    wall_ids: set[str] = set()
+    for constraint in source_constraint_items(
+        constraints,
+        "wall_constraints",
+        "walls",
+        "boundary_constraints",
+    ):
+        for key in ("wall_id", "target_id", "id"):
+            value = constraint.get(key)
+            if value:
+                wall_ids.add(str(value))
+
+    for constraint in source_constraint_items(
+        constraints,
+        "opening_constraints",
+        "openings",
+        "door_constraints",
+        "window_constraints",
+    ):
+        host_wall = constraint.get("host_wall")
+        if host_wall:
+            wall_ids.add(str(host_wall))
+        allowed_hosts = constraint.get("allowed_host_walls")
+        if isinstance(allowed_hosts, list):
+            wall_ids.update(str(host) for host in allowed_hosts if host)
+    return wall_ids
+
+
+def source_constraint_protected_segments(
+    constraints: dict[str, Any],
+) -> list[list[list[float]]]:
+    """Return source-backed wall/outline segments that generation must not trim."""
+    if not isinstance(constraints, dict):
+        return []
+    protected_segments: list[list[list[float]]] = []
+    for label, items in (
+        (
+            "wall_constraints",
+            source_constraint_items(
+                constraints,
+                "wall_constraints",
+                "walls",
+                "boundary_constraints",
+            ),
+        ),
+        (
+            "exterior_outline_constraints",
+            source_constraint_items(
+                constraints,
+                "exterior_outline_constraints",
+                "outline_constraints",
+                "wall_mass_outline_constraints",
+                "source_outline_constraints",
+            ),
+        ),
+        (
+            "boundary_closure_constraints",
+            source_constraint_items(
+                constraints,
+                "boundary_closure_constraints",
+                "space_boundary_constraints",
+                "required_boundary_constraints",
+            ),
+        ),
+    ):
+        for index, constraint in enumerate(items):
+            protected_segments.extend(
+                source_constraint_segments(
+                    constraint,
+                    label=f"{label}[{index}]",
+                )
+            )
+    return protected_segments
+
+
+def source_constraint_coverage_for_overreach_segment(
+    overreach_segment: dict[str, Any],
+    wall: dict[str, Any],
+    *,
+    protected_wall_ids: set[str],
+    protected_segments: list[list[list[float]]],
+    tolerance: float,
+) -> list[tuple[float, float]]:
+    """Return portions of an overreach segment protected by source constraints."""
+    wall_id = str(overreach_segment.get("wall_id", ""))
+    overreach_interval = (
+        float(overreach_segment["interval"][0]),
+        float(overreach_segment["interval"][1]),
+    )
+    if wall_id in protected_wall_ids:
+        return [overreach_interval]
+
+    axis = str(overreach_segment.get("axis", ""))
+    path = wall.get("path", [])
+    if axis not in {"x", "y"} or wall_axis(path, tolerance=tolerance) != axis:
+        return []
+    line_coordinate = float(overreach_segment.get("line_coordinate", 0.0))
+    coverage: list[tuple[float, float]] = []
+    for expected_segment in protected_segments:
+        expected_axis = wall_axis(expected_segment, tolerance=tolerance)
+        if expected_axis != axis:
+            continue
+        if (
+            abs(segment_line_coordinate(expected_segment, axis) - line_coordinate)
+            > tolerance
+        ):
+            continue
+        expected_interval = segment_interval(expected_segment, axis)
+        overlap_start = max(overreach_interval[0], expected_interval[0])
+        overlap_end = min(overreach_interval[1], expected_interval[1])
+        if overlap_end > overlap_start + tolerance:
+            coverage.append((overlap_start, overlap_end))
+    return merge_intervals(coverage, tolerance=tolerance)
+
+
+def imported_wall_matches_for_segment(
+    design_model: dict[str, Any],
+    import_id: str,
+    expected_path: list[list[float]],
+    *,
+    tolerance: float,
+) -> list[tuple[str, dict[str, Any]]]:
+    """Return imported walls whose path covers a source segment."""
+    matches: list[tuple[str, dict[str, Any]]] = []
+    for wall_id, wall in design_model.get("walls", {}).items():
+        if not isinstance(wall, dict):
+            continue
+        source = wall.get("source", {})
+        if not isinstance(source, dict) or source.get("import_id") != import_id:
+            continue
+        if wall_path_covers_segment(
+            wall.get("path", []),
+            expected_path,
+            tolerance=tolerance,
+        ):
+            matches.append((str(wall_id), wall))
+    return matches
+
+
+def imported_wall_coverage_for_segment(
+    design_model: dict[str, Any],
+    import_id: str,
+    expected_path: list[list[float]],
+    *,
+    tolerance: float,
+    wall_filter: Callable[[str, dict[str, Any]], bool] | None = None,
+    exclude_wall_ids: set[str] | None = None,
+) -> dict[str, Any]:
+    """Return union wall coverage for a source segment."""
+    expected_axis = wall_axis(expected_path, tolerance=tolerance)
+    if expected_axis is None:
+        return {
+            "covered": False,
+            "matched_wall_ids": [],
+            "gaps": [],
+        }
+    expected_line = segment_line_coordinate(expected_path, expected_axis)
+    expected_interval = segment_interval(expected_path, expected_axis)
+    coverage: list[tuple[float, float]] = []
+    matched_wall_ids: list[str] = []
+    excluded = exclude_wall_ids or set()
+    for wall_id, wall in design_model.get("walls", {}).items():
+        if str(wall_id) in excluded:
+            continue
+        if not isinstance(wall, dict):
+            continue
+        source = wall.get("source", {})
+        if not isinstance(source, dict) or source.get("import_id") != import_id:
+            continue
+        if wall_filter is not None and not wall_filter(str(wall_id), wall):
+            continue
+        path = wall.get("path", [])
+        axis = wall_axis(path, tolerance=tolerance)
+        if axis is None or axis != expected_axis:
+            continue
+        if abs(segment_line_coordinate(path, axis) - expected_line) > tolerance:
+            continue
+        actual_interval = segment_interval(path, axis)
+        overlap_start = max(expected_interval[0], actual_interval[0])
+        overlap_end = min(expected_interval[1], actual_interval[1])
+        if overlap_end <= overlap_start + tolerance:
+            continue
+        coverage.append((overlap_start, overlap_end))
+        matched_wall_ids.append(str(wall_id))
+
+    gaps = subtract_intervals(
+        expected_interval,
+        coverage,
+        tolerance=tolerance,
+    )
+    return {
+        "covered": not gaps,
+        "matched_wall_ids": sorted(set(matched_wall_ids)),
+        "gaps": [[start, end] for start, end in gaps],
+    }
+
+
+def footprint_edges(
+    footprint: list[list[float]],
+    *,
+    tolerance: float,
+) -> list[list[list[float]]]:
+    """Return non-zero plan edges for one footprint polygon."""
+    edges: list[list[list[float]]] = []
+    if len(footprint) < 2:
+        return edges
+    for index, start in enumerate(footprint):
+        end = footprint[(index + 1) % len(footprint)]
+        if (
+            abs(float(start[0]) - float(end[0])) <= tolerance
+            and abs(float(start[1]) - float(end[1])) <= tolerance
+        ):
+            continue
+        edges.append([start, end])
+    return edges
+
+
+def segment_plan_length(path: list[list[float]], *, tolerance: float) -> float:
+    """Return the plan length for one supported source segment."""
+    axis = wall_axis(path, tolerance=tolerance)
+    if axis is not None:
+        interval = segment_interval(path, axis)
+        return abs(interval[1] - interval[0])
+    if len(path) < 2:
+        return 0.0
+    start, end = path[0], path[-1]
+    return ((end[0] - start[0]) ** 2 + (end[1] - start[1]) ** 2) ** 0.5
+
+
+def negative_region_boundary_wall_coverage(
+    design_model: dict[str, Any],
+    footprint: list[list[float]],
+    *,
+    import_id: str,
+    tolerance: float,
+) -> dict[str, Any]:
+    """Return imported wall coverage along a negative/outside region boundary."""
+    total_length = 0.0
+    covered_length = 0.0
+    matched_wall_ids: set[str] = set()
+    edge_results: list[dict[str, Any]] = []
+    skipped_edges = 0
+
+    for edge in footprint_edges(footprint, tolerance=tolerance):
+        axis = wall_axis(edge, tolerance=tolerance)
+        edge_length = segment_plan_length(edge, tolerance=tolerance)
+        if edge_length <= tolerance:
+            continue
+        if axis is None:
+            skipped_edges += 1
+            edge_results.append(
+                {
+                    "path": edge,
+                    "axis": None,
+                    "length": edge_length,
+                    "covered_length": 0.0,
+                    "matched_wall_ids": [],
+                    "gaps": [],
+                    "skipped": True,
+                }
+            )
+            continue
+
+        coverage = imported_wall_coverage_for_segment(
+            design_model,
+            import_id,
+            edge,
+            tolerance=tolerance,
+        )
+        gap_length = sum(
+            max(0.0, float(gap[1]) - float(gap[0]))
+            for gap in coverage["gaps"]
+        )
+        edge_covered_length = max(0.0, edge_length - gap_length)
+        total_length += edge_length
+        covered_length += edge_covered_length
+        matched_wall_ids.update(str(wall_id) for wall_id in coverage["matched_wall_ids"])
+        edge_results.append(
+            {
+                "path": edge,
+                "axis": axis,
+                "length": edge_length,
+                "covered_length": edge_covered_length,
+                "covered_ratio": edge_covered_length / edge_length,
+                "matched_wall_ids": coverage["matched_wall_ids"],
+                "gaps": coverage["gaps"],
+            }
+        )
+
+    coverage_ratio = covered_length / total_length if total_length > 0 else 0.0
+    return {
+        "coverage_ratio": coverage_ratio,
+        "covered_length": covered_length,
+        "total_length": total_length,
+        "matched_wall_ids": sorted(matched_wall_ids),
+        "edges": edge_results,
+        "skipped_edges": skipped_edges,
+    }
+
+
+def imported_space_overlap_with_bounds(
+    space: dict[str, Any],
+    bounds: tuple[float, float, float, float],
+) -> float:
+    """Return imported space footprint overlap area with a source region."""
+    raw_footprint = space.get("footprint")
+    if not isinstance(raw_footprint, list) or len(raw_footprint) < 3:
+        space_bounds = space_plan_bounds(space)
+        if space_bounds is None:
+            return 0.0
+        return bounds_overlap_area_mm2(space_bounds, bounds)
+    try:
+        footprint = footprint_from_payload(raw_footprint, label="space.footprint")
+    except ValueError:
+        return 0.0
+    return polygon_overlap_with_bounds_area_mm2(footprint, bounds)
+
+
+def validate_opening_constraints(
+    design_model: dict[str, Any],
+    constraints: list[dict[str, Any]],
+    *,
+    default_tolerance: float,
+    require_executed: bool,
+    require_source_evidence_fields: bool = False,
+) -> tuple[list[dict[str, Any]], int]:
+    """Validate source constraints for doors, windows, and generic openings."""
+    failures: list[dict[str, Any]] = []
+    checked = 0
+    openings = design_model.get("openings", {})
+    walls = design_model.get("walls", {})
+    spaces = design_model.get("spaces", {})
+
+    for constraint in constraints:
+        opening_id = str(
+            constraint.get("opening_id")
+            or constraint.get("target_id")
+            or constraint.get("id")
+            or ""
+        )
+        if not opening_id:
+            continue
+        checked += 1
+        opening = openings.get(opening_id)
+        must_exist = bool(constraint.get("must_exist", True))
+        if not isinstance(opening, dict):
+            if must_exist:
+                append_constraint_failure(
+                    failures,
+                    code="opening_missing",
+                    constraint=constraint,
+                    target_id=opening_id,
+                    expected="existing opening",
+                    actual=None,
+                    message="Expected source-backed opening is missing from design_model.json.",
+                )
+            continue
+
+        opening_type = str(constraint.get("type") or opening.get("type") or "").lower()
+        if require_source_evidence_fields and opening_type == "door":
+            source_host_axis = normalize_source_wall_axis(
+                constraint.get("host_wall_axis")
+                or constraint.get("source_host_axis")
+                or constraint.get("host_axis")
+                or constraint.get("source_wall_orientation")
+                or constraint.get("host_wall_orientation")
+            )
+            if not source_host_axis:
+                append_constraint_failure(
+                    failures,
+                    code="opening_source_host_axis_missing",
+                    constraint=constraint,
+                    target_id=opening_id,
+                    expected="source-derived host wall axis/orientation",
+                    actual=None,
+                    message=(
+                        "Door source constraint lacks host wall orientation evidence; "
+                        "a door can otherwise snap to the wrong adjacent wall."
+                    ),
+                )
+
+            source_interval = (
+                constraint.get("interval")
+                or constraint.get("source_interval")
+                or constraint.get("host_interval")
+            )
+            has_interval = isinstance(source_interval, list) and len(source_interval) == 2
+            has_anchor = normalize_anchor_constraint(constraint) is not None
+            has_source_bounds = any(
+                key in constraint
+                for key in (
+                    "source_bbox",
+                    "bbox",
+                    "source_bounds",
+                    "image_bbox",
+                    "detected_bbox",
+                )
+            )
+            if not has_interval and not has_anchor and not has_source_bounds:
+                append_constraint_failure(
+                    failures,
+                    code="opening_source_anchor_or_interval_missing",
+                    constraint=constraint,
+                    target_id=opening_id,
+                    expected="source-derived host interval, anchor, or detection bounds",
+                    actual=None,
+                    message=(
+                        "Door source constraint lacks localization evidence on the host wall."
+                    ),
+                )
+
+            constrained_open_to = constraint.get("open_to_space")
+            constrained_access_from = constraint.get("access_from_space")
+            if constrained_open_to is None and opening.get("open_to_space") is not None:
+                append_constraint_failure(
+                    failures,
+                    code="opening_source_open_space_missing",
+                    constraint=constraint,
+                    target_id=opening_id,
+                    expected="source-derived open_to_space",
+                    actual=None,
+                    message=(
+                        "Door source constraint does not identify the room the door opens to."
+                    ),
+                )
+            if constrained_access_from is None and opening.get("access_from_space") is not None:
+                append_constraint_failure(
+                    failures,
+                    code="opening_source_access_space_missing",
+                    constraint=constraint,
+                    target_id=opening_id,
+                    expected="source-derived access_from_space",
+                    actual=None,
+                    message=(
+                        "Door source constraint does not identify the access side; "
+                        "the generated host can silently choose the wrong adjacent space."
+                    ),
+                )
+
+            expected_open_to = constrained_open_to or opening.get("open_to_space")
+            expected_access_from = constrained_access_from or opening.get("access_from_space")
+            expected_internal_refs = {
+                str(space_id)
+                for space_id in (expected_open_to, expected_access_from)
+                if space_id
+                and str(space_id) in spaces
+                and normalized_label_token(str(space_id))
+                not in {"exterior", "outside", "outdoor", "entry"}
+            }
+            if (
+                len(expected_internal_refs) >= 2
+                and not bool(constraint.get("require_host_space_refs"))
+            ):
+                append_constraint_failure(
+                    failures,
+                    code="opening_host_space_refs_not_required",
+                    constraint=constraint,
+                    target_id=opening_id,
+                    expected={
+                        "require_host_space_refs": True,
+                        "space_refs": sorted(expected_internal_refs),
+                    },
+                    actual={"require_host_space_refs": constraint.get("require_host_space_refs")},
+                    message=(
+                        "Interior door source constraint must require the host wall to connect "
+                        "the source-indicated room and access space."
+                    ),
+                )
+
+        for field in (
+            "type",
+            "host_wall",
+            "open_to_space",
+            "access_from_space",
+            "open_side",
+            "swing_direction",
+        ):
+            expected = constraint.get(field)
+            if expected is None:
+                continue
+            actual = opening.get(field)
+            if actual != expected:
+                append_constraint_failure(
+                    failures,
+                    code=f"opening_{field}_mismatch",
+                    constraint=constraint,
+                    target_id=opening_id,
+                    expected=expected,
+                    actual=actual,
+                    message=f"Opening field {field!r} does not match source constraint.",
+                )
+
+        allowed_hosts = constraint.get("allowed_host_walls")
+        if isinstance(allowed_hosts, list) and opening.get("host_wall") not in allowed_hosts:
+            append_constraint_failure(
+                failures,
+                code="opening_host_wall_not_allowed",
+                constraint=constraint,
+                target_id=opening_id,
+                expected=allowed_hosts,
+                actual=opening.get("host_wall"),
+                message="Opening host wall is not in the source-allowed host wall set.",
+            )
+
+        expected_host_axis = normalize_source_wall_axis(
+            constraint.get("host_wall_axis")
+            or constraint.get("source_host_axis")
+            or constraint.get("host_axis")
+            or constraint.get("source_wall_orientation")
+            or constraint.get("host_wall_orientation")
+        )
+        if expected_host_axis:
+            wall = walls.get(str(opening.get("host_wall", "")))
+            actual_host_axis = (
+                wall_axis(wall.get("path", [])) if isinstance(wall, dict) else None
+            )
+            if actual_host_axis != expected_host_axis:
+                append_constraint_failure(
+                    failures,
+                    code="opening_host_axis_mismatch",
+                    constraint=constraint,
+                    target_id=opening_id,
+                    expected=expected_host_axis,
+                    actual=actual_host_axis,
+                    message="Opening host wall orientation does not match source evidence.",
+                )
+
+        expected_interval = (
+            constraint.get("interval")
+            or constraint.get("source_interval")
+            or constraint.get("host_interval")
+        )
+        if isinstance(expected_interval, list) and len(expected_interval) == 2:
+            tolerance = constraint_tolerance(
+                constraint,
+                default_tolerance,
+                "interval_tolerance",
+                "interval_tolerance_mm",
+            )
+            expected = (
+                min(float(expected_interval[0]), float(expected_interval[1])),
+                max(float(expected_interval[0]), float(expected_interval[1])),
+            )
+            if not interval_is_offset_mode(constraint):
+                wall = walls.get(str(opening.get("host_wall", "")))
+                axis = wall_axis(wall.get("path", [])) if isinstance(wall, dict) else None
+                actual = (
+                    opening_interval_on_wall(opening, wall, axis)
+                    if isinstance(wall, dict) and axis is not None
+                    else opening_interval(opening)
+                )
+            else:
+                actual = opening_interval(opening)
+            if not intervals_within_tolerance(actual, expected, tolerance=tolerance):
+                append_constraint_failure(
+                    failures,
+                    code="opening_interval_mismatch",
+                    constraint=constraint,
+                    target_id=opening_id,
+                    expected=list(expected),
+                    actual=list(actual),
+                    message="Opening interval on host wall does not match source evidence.",
+                )
+
+        anchor_constraint = normalize_anchor_constraint(constraint)
+        if anchor_constraint is not None:
+            expected_anchor, anchor_mode = anchor_constraint
+            tolerance = constraint_tolerance(
+                constraint,
+                default_tolerance,
+                "anchor_tolerance",
+                "anchor_tolerance_mm",
+            )
+            wall = walls.get(str(opening.get("host_wall", "")))
+            actual_anchor = (
+                opening_anchor_point(
+                    opening,
+                    wall,
+                    mode=anchor_mode,
+                    tolerance=tolerance,
+                )
+                if isinstance(wall, dict)
+                else None
+            )
+            if actual_anchor is None or not points_within_plan_tolerance(
+                actual_anchor,
+                expected_anchor,
+                tolerance=tolerance,
+            ):
+                append_constraint_failure(
+                    failures,
+                    code="opening_anchor_mismatch",
+                    constraint=constraint,
+                    target_id=opening_id,
+                    expected={"point": expected_anchor, "mode": anchor_mode},
+                    actual=actual_anchor,
+                    message="Opening anchor point does not match source evidence.",
+                )
+
+        if bool(constraint.get("require_host_space_refs")):
+            host_wall = walls.get(str(opening.get("host_wall", "")))
+            host_refs = set(wall_space_refs(host_wall)) if isinstance(host_wall, dict) else set()
+            expected_refs = {
+                str(space_id)
+                for space_id in (
+                    constraint.get("open_to_space") or opening.get("open_to_space"),
+                    constraint.get("access_from_space") or opening.get("access_from_space"),
+                )
+                if space_id and str(space_id) in spaces
+            }
+            if not expected_refs.issubset(host_refs):
+                append_constraint_failure(
+                    failures,
+                    code="opening_host_space_refs_mismatch",
+                    constraint=constraint,
+                    target_id=opening_id,
+                    expected=sorted(expected_refs),
+                    actual=sorted(host_refs),
+                    message="Opening host wall does not connect the source-indicated spaces.",
+                )
+
+        for field in ("offset", "width", "height", "sill_height"):
+            expected = constraint.get(field)
+            if expected is None:
+                continue
+            tolerance = constraint_tolerance(
+                constraint,
+                default_tolerance,
+                f"{field}_tolerance",
+                f"{field}_tolerance_mm",
+            )
+            actual = float(opening.get(field, 0.0))
+            if abs(actual - float(expected)) > tolerance:
+                append_constraint_failure(
+                    failures,
+                    code=f"opening_{field}_mismatch",
+                    constraint=constraint,
+                    target_id=opening_id,
+                    expected=expected,
+                    actual=actual,
+                    message=f"Opening numeric field {field!r} is outside tolerance.",
+                )
+
+        if require_executed or constraint.get("require_execution"):
+            execution = opening.get("execution", {})
+            if not isinstance(execution, dict) or execution.get("status") != "success":
+                append_constraint_failure(
+                    failures,
+                    code="opening_not_executed",
+                    constraint=constraint,
+                    target_id=opening_id,
+                    expected="successful execution feedback",
+                    actual=execution,
+                    message="Opening has not been successfully replayed into SketchUp.",
+                )
+
+    return failures, checked
+
+
+def validate_wall_constraints(
+    design_model: dict[str, Any],
+    constraints: list[dict[str, Any]],
+    *,
+    import_id: str,
+    default_tolerance: float,
+) -> tuple[list[dict[str, Any]], int]:
+    """Validate source constraints for wall existence and source path."""
+    failures: list[dict[str, Any]] = []
+    checked = 0
+    walls = design_model.get("walls", {})
+
+    for constraint in constraints:
+        wall_id = str(
+            constraint.get("wall_id")
+            or constraint.get("target_id")
+            or constraint.get("id")
+            or ""
+        )
+        expected_path = constraint.get("path")
+        if not wall_id and not expected_path:
+            continue
+        checked += 1
+
+        if not wall_id and isinstance(expected_path, list) and len(expected_path) >= 2:
+            tolerance = constraint_tolerance(
+                constraint,
+                default_tolerance,
+                "path_tolerance",
+                "path_tolerance_mm",
+            )
+            normalized_path = [
+                normalize_3d_point(point, label=f"wall_constraint.path[{index}]")
+                for index, point in enumerate(expected_path)
+            ]
+            matched_wall_ids = [
+                candidate_id
+                for candidate_id, candidate in walls.items()
+                if isinstance(candidate, dict)
+                and isinstance(candidate.get("source"), dict)
+                and candidate["source"].get("import_id") == import_id
+                and wall_paths_within_tolerance(
+                    candidate.get("path", []),
+                    normalized_path,
+                    tolerance=tolerance,
+                )
+            ]
+            if not matched_wall_ids:
+                append_constraint_failure(
+                    failures,
+                    code="wall_path_missing",
+                    constraint=constraint,
+                    target_id=None,
+                    expected=normalized_path,
+                    actual=None,
+                    message="No imported wall path satisfies the source constraint.",
+                )
+            continue
+
+        wall = walls.get(wall_id)
+        must_exist = bool(constraint.get("must_exist", True))
+        if not isinstance(wall, dict):
+            if must_exist:
+                append_constraint_failure(
+                    failures,
+                    code="wall_missing",
+                    constraint=constraint,
+                    target_id=wall_id,
+                    expected="existing wall",
+                    actual=None,
+                    message="Expected source-backed wall is missing from design_model.json.",
+                )
+            continue
+
+        if constraint.get("space_refs"):
+            expected_refs = set(str(ref) for ref in constraint["space_refs"])
+            actual_refs = set(wall_space_refs(wall))
+            if not expected_refs.issubset(actual_refs):
+                append_constraint_failure(
+                    failures,
+                    code="wall_space_refs_mismatch",
+                    constraint=constraint,
+                    target_id=wall_id,
+                    expected=sorted(expected_refs),
+                    actual=sorted(actual_refs),
+                    message="Wall semantic space references do not satisfy source constraint.",
+                )
+
+        if isinstance(expected_path, list) and len(expected_path) >= 2:
+            tolerance = constraint_tolerance(
+                constraint,
+                default_tolerance,
+                "path_tolerance",
+                "path_tolerance_mm",
+            )
+            normalized_path = [
+                normalize_3d_point(point, label=f"{wall_id}.path[{index}]")
+                for index, point in enumerate(expected_path)
+            ]
+            if not wall_paths_within_tolerance(
+                wall.get("path", []),
+                normalized_path,
+                tolerance=tolerance,
+            ):
+                append_constraint_failure(
+                    failures,
+                    code="wall_path_mismatch",
+                    constraint=constraint,
+                    target_id=wall_id,
+                    expected=normalized_path,
+                    actual=wall.get("path"),
+                    message="Wall path does not match source constraint.",
+                )
+
+    return failures, checked
+
+
+def validate_exterior_outline_constraints(
+    design_model: dict[str, Any],
+    constraints: list[dict[str, Any]],
+    *,
+    import_id: str,
+    default_tolerance: float,
+) -> tuple[list[dict[str, Any]], int]:
+    """Validate source exterior outline segments independent of room labels."""
+    failures: list[dict[str, Any]] = []
+    checked = 0
+    for constraint_index, constraint in enumerate(constraints):
+        tolerance = constraint_tolerance(
+            constraint,
+            default_tolerance,
+            "path_tolerance",
+            "path_tolerance_mm",
+            "outline_tolerance",
+            "outline_tolerance_mm",
+        )
+        segments = source_constraint_segments(
+            constraint,
+            label=f"exterior_outline_constraints[{constraint_index}]",
+        )
+        for segment in segments:
+            checked += 1
+            coverage = imported_wall_coverage_for_segment(
+                design_model,
+                import_id,
+                segment,
+                tolerance=tolerance,
+            )
+            if coverage["covered"]:
+                continue
+            append_constraint_failure(
+                failures,
+                code="exterior_outline_segment_missing",
+                constraint=constraint,
+                target_id=None,
+                expected={"segment": segment, "tolerance": tolerance},
+                actual={
+                    "matched_wall_ids": coverage["matched_wall_ids"],
+                    "gaps": coverage["gaps"],
+                },
+                message="Generated imported walls do not cover a source exterior outline segment.",
+            )
+
+    return failures, checked
+
+
+def opening_matches_boundary_requirement(
+    opening: dict[str, Any],
+    wall: dict[str, Any],
+    required_type: str | None,
+    expected_path: list[list[float]],
+    *,
+    tolerance: float,
+) -> bool:
+    """Return whether an opening on a wall satisfies a boundary source segment."""
+    if required_type and str(opening.get("type")) != required_type:
+        return False
+    axis = wall_axis(wall.get("path", []), tolerance=tolerance)
+    expected_axis = wall_axis(expected_path, tolerance=tolerance)
+    if axis is None or axis != expected_axis:
+        return False
+    opening_segment = opening_interval_on_wall(opening, wall, axis)
+    expected_segment = segment_interval(expected_path, axis)
+    return interval_overlap_length(opening_segment, expected_segment) > tolerance
+
+
+def validate_boundary_closure_constraints(
+    design_model: dict[str, Any],
+    constraints: list[dict[str, Any]],
+    *,
+    import_id: str,
+    default_tolerance: float,
+) -> tuple[list[dict[str, Any]], int]:
+    """Validate required source boundary closure and boundary opening types."""
+    failures: list[dict[str, Any]] = []
+    checked = 0
+    openings = design_model.get("openings", {})
+
+    for constraint_index, constraint in enumerate(constraints):
+        tolerance = constraint_tolerance(
+            constraint,
+            default_tolerance,
+            "path_tolerance",
+            "path_tolerance_mm",
+            "boundary_tolerance",
+            "boundary_tolerance_mm",
+        )
+        required_opening_type = constraint.get("required_opening_type")
+        if required_opening_type is None:
+            required_opening_type = constraint.get("opening_type")
+        if required_opening_type is None:
+            required_opening_type = constraint.get("required_type")
+        required_opening_type = (
+            str(required_opening_type) if required_opening_type is not None else None
+        )
+        expected_refs = {
+            str(ref)
+            for ref in constraint.get("space_refs", [])
+            if ref is not None
+        } if isinstance(constraint.get("space_refs"), list) else set()
+        segments = source_constraint_segments(
+            constraint,
+            label=f"boundary_closure_constraints[{constraint_index}]",
+        )
+        for segment in segments:
+            checked += 1
+            def wall_satisfies_boundary_refs(
+                wall_id: str,
+                wall: dict[str, Any],
+            ) -> bool:
+                del wall_id
+                return not expected_refs or expected_refs.issubset(set(wall_space_refs(wall)))
+
+            coverage = imported_wall_coverage_for_segment(
+                design_model,
+                import_id,
+                segment,
+                tolerance=tolerance,
+                wall_filter=wall_satisfies_boundary_refs,
+            )
+            matches = [
+                (wall_id, design_model.get("walls", {}).get(wall_id))
+                for wall_id in coverage["matched_wall_ids"]
+                if isinstance(design_model.get("walls", {}).get(wall_id), dict)
+            ]
+            if not coverage["covered"]:
+                append_constraint_failure(
+                    failures,
+                    code="boundary_closure_missing",
+                    constraint=constraint,
+                    target_id=None,
+                    expected={
+                        "segment": segment,
+                        "space_refs": sorted(expected_refs),
+                        "tolerance": tolerance,
+                    },
+                    actual={
+                        "matched_wall_ids": coverage["matched_wall_ids"],
+                        "gaps": coverage["gaps"],
+                    },
+                    message="Generated truth does not close a required source boundary segment.",
+                )
+                continue
+
+            if required_opening_type is None:
+                continue
+            matching_openings = [
+                opening_id
+                for wall_id, wall in matches
+                for opening_id, opening in openings.items()
+                if isinstance(opening, dict)
+                and opening.get("host_wall") == wall_id
+                and opening_matches_boundary_requirement(
+                    opening,
+                    wall,
+                    required_opening_type,
+                    segment,
+                    tolerance=tolerance,
+                )
+            ]
+            if not matching_openings:
+                append_constraint_failure(
+                    failures,
+                    code="boundary_opening_type_missing",
+                    constraint=constraint,
+                    target_id=None,
+                    expected={
+                        "segment": segment,
+                        "required_opening_type": required_opening_type,
+                        "matched_wall_ids": [wall_id for wall_id, _wall in matches],
+                    },
+                    actual={"matching_opening_ids": []},
+                    message="Required source boundary opening type is missing on the matched wall segment.",
+                )
+
+    return failures, checked
+
+
+def validate_negative_region_constraints(
+    design_model: dict[str, Any],
+    constraints: list[dict[str, Any]],
+    *,
+    import_id: str,
+    default_tolerance: float,
+) -> tuple[list[dict[str, Any]], int]:
+    """Validate regions that should not contain imported generated geometry."""
+    failures: list[dict[str, Any]] = []
+    checked = 0
+    walls = design_model.get("walls", {})
+    spaces = design_model.get("spaces", {})
+
+    for constraint in constraints:
+        raw_footprint = constraint.get("footprint") or constraint.get("polygon")
+        if raw_footprint is None and isinstance(constraint.get("bounds"), dict):
+            bounds = constraint["bounds"]
+            min_point = bounds.get("min")
+            max_point = bounds.get("max")
+            if min_point and max_point:
+                raw_footprint = [
+                    [min_point[0], min_point[1], 0],
+                    [max_point[0], min_point[1], 0],
+                    [max_point[0], max_point[1], 0],
+                    [min_point[0], max_point[1], 0],
+                ]
+        if raw_footprint is None:
+            continue
+        checked += 1
+        footprint = footprint_from_payload(
+            raw_footprint,
+            label=f"negative_region_constraints[{checked - 1}].footprint",
+        )
+        bounds = polygon_bounds(footprint)
+        tolerance = constraint_tolerance(
+            constraint,
+            default_tolerance,
+            "coordinate_tolerance",
+            "coordinate_tolerance_mm",
+        )
+        max_boundary_coverage_ratio: float | None = None
+        if (
+            constraint.get("forbid_boundary_enclosure")
+            or constraint.get("forbid_enclosure")
+            or constraint.get("forbid_wall_enclosure")
+        ):
+            max_boundary_coverage_ratio = DEFAULT_NEGATIVE_REGION_BOUNDARY_COVERAGE_RATIO
+        for key in (
+            "max_boundary_wall_coverage_ratio",
+            "max_boundary_coverage_ratio",
+            "max_enclosing_wall_coverage_ratio",
+        ):
+            if constraint.get(key) is not None:
+                max_boundary_coverage_ratio = float(constraint[key])
+                break
+
+        if max_boundary_coverage_ratio is not None:
+            boundary_coverage = negative_region_boundary_wall_coverage(
+                design_model,
+                footprint,
+                import_id=import_id,
+                tolerance=tolerance,
+            )
+            if (
+                boundary_coverage["total_length"] > 0
+                and boundary_coverage["coverage_ratio"]
+                > max_boundary_coverage_ratio
+            ):
+                append_constraint_failure(
+                    failures,
+                    code="negative_region_boundary_enclosure",
+                    constraint=constraint,
+                    target_id=None,
+                    expected={
+                        "max_boundary_wall_coverage_ratio": max_boundary_coverage_ratio,
+                    },
+                    actual=boundary_coverage,
+                    message=(
+                        "Imported walls enclose too much of a source negative/outside "
+                        "region boundary."
+                    ),
+                )
+
+        max_overlap = float(constraint.get("max_wall_overlap_length", 0.0))
+        max_space_overlap_area_mm2: float | None = None
+        if constraint.get("forbid_spaces") or constraint.get("forbid_imported_spaces"):
+            max_space_overlap_area_mm2 = 0.0
+        if constraint.get("max_space_overlap_area") is not None:
+            max_space_overlap_area_mm2 = float(constraint["max_space_overlap_area"])
+        if constraint.get("max_space_overlap_area_m2") is not None:
+            max_space_overlap_area_mm2 = (
+                float(constraint["max_space_overlap_area_m2"]) * 1_000_000
+            )
+        max_space_overlap_ratio = constraint.get("max_space_overlap_ratio")
+        area_tolerance_mm2 = (
+            float(constraint.get("area_tolerance_m2", 0.0)) * 1_000_000
+            if constraint.get("area_tolerance_m2") is not None
+            else 0.0
+        )
+        for wall_id, wall in walls.items():
+            if not isinstance(wall, dict):
+                continue
+            source = wall.get("source", {})
+            if not isinstance(source, dict) or source.get("import_id") != import_id:
+                continue
+            overlap = wall_overlap_with_bounds(wall, bounds, tolerance=tolerance)
+            if overlap > max_overlap + tolerance:
+                append_constraint_failure(
+                    failures,
+                    code="negative_region_wall_overlap",
+                    constraint=constraint,
+                    target_id=wall_id,
+                    expected={"max_wall_overlap_length": max_overlap},
+                    actual={"overlap_length": overlap, "wall_path": wall.get("path")},
+                    message="Imported wall overlaps a source negative/outside region.",
+                )
+
+        if max_space_overlap_area_mm2 is None and max_space_overlap_ratio is None:
+            continue
+        region_area = max(polygon_area_mm2(footprint), 1.0)
+        for space_id, space in spaces.items():
+            if not isinstance(space, dict):
+                continue
+            source = space.get("source", {})
+            if not isinstance(source, dict) or source.get("import_id") != import_id:
+                continue
+            overlap_area = imported_space_overlap_with_bounds(space, bounds)
+            ratio = overlap_area / region_area
+            area_limit = (
+                max_space_overlap_area_mm2
+                if max_space_overlap_area_mm2 is not None
+                else region_area + area_tolerance_mm2
+            )
+            ratio_limit = (
+                float(max_space_overlap_ratio)
+                if max_space_overlap_ratio is not None
+                else 1.0
+            )
+            if (
+                overlap_area > area_limit + area_tolerance_mm2
+                or ratio > ratio_limit
+            ):
+                append_constraint_failure(
+                    failures,
+                    code="negative_region_space_overlap",
+                    constraint=constraint,
+                    target_id=str(space_id),
+                    expected={
+                        "max_space_overlap_area": area_limit,
+                        "max_space_overlap_ratio": ratio_limit,
+                    },
+                    actual={
+                        "overlap_area": overlap_area,
+                        "overlap_area_m2": overlap_area / 1_000_000,
+                        "overlap_ratio": ratio,
+                    },
+                    message="Imported space overlaps a source negative/outside region.",
+                )
+
+    return failures, checked
+
+
+def space_plan_bounds(space: dict[str, Any]) -> tuple[float, float, float, float] | None:
+    """Return a space's plan bounds from footprint or rectangular bounds."""
+    footprint = space.get("footprint")
+    if isinstance(footprint, list) and len(footprint) >= 3:
+        points = [
+            normalize_3d_point(point, label="space.footprint point")
+            for point in footprint
+            if isinstance(point, list)
+        ]
+        if len(points) >= 3:
+            return polygon_bounds(points)
+    bounds = space.get("bounds", {})
+    if isinstance(bounds, dict) and bounds.get("min") and bounds.get("max"):
+        min_point = normalize_3d_point(bounds["min"], label="space.bounds.min")
+        max_point = normalize_3d_point(bounds["max"], label="space.bounds.max")
+        return (
+            min(min_point[0], max_point[0]),
+            max(min_point[0], max_point[0]),
+            min(min_point[1], max_point[1]),
+            max(min_point[1], max_point[1]),
+        )
+    return None
+
+
+def constraint_bounds(constraint: dict[str, Any]) -> tuple[float, float, float, float] | None:
+    """Return expected plan bounds from one source constraint."""
+    value = constraint.get("bounds")
+    if isinstance(value, dict):
+        min_point = value.get("min")
+        max_point = value.get("max")
+        if min_point and max_point:
+            min_xyz = normalize_3d_point(min_point, label="constraint.bounds.min")
+            max_xyz = normalize_3d_point(max_point, label="constraint.bounds.max")
+            return (
+                min(min_xyz[0], max_xyz[0]),
+                max(min_xyz[0], max_xyz[0]),
+                min(min_xyz[1], max_xyz[1]),
+                max(min_xyz[1], max_xyz[1]),
+            )
+    if isinstance(value, list) and len(value) == 4:
+        return (
+            min(float(value[0]), float(value[2])),
+            max(float(value[0]), float(value[2])),
+            min(float(value[1]), float(value[3])),
+            max(float(value[1]), float(value[3])),
+        )
+    footprint = constraint.get("footprint")
+    if isinstance(footprint, list) and len(footprint) >= 3:
+        return polygon_bounds(
+            footprint_from_payload(footprint, label="space_constraint.footprint")
+        )
+    return None
+
+
+def bounds_within_tolerance(
+    actual: tuple[float, float, float, float],
+    expected: tuple[float, float, float, float],
+    *,
+    tolerance: float,
+) -> bool:
+    """Return whether two plan bounds match within per-side tolerance."""
+    return all(abs(actual[index] - expected[index]) <= tolerance for index in range(4))
+
+
+def validate_space_constraints(
+    design_model: dict[str, Any],
+    constraints: list[dict[str, Any]],
+    *,
+    default_tolerance: float,
+) -> tuple[list[dict[str, Any]], int]:
+    """Validate source constraints for imported space footprints and bounds."""
+    failures: list[dict[str, Any]] = []
+    checked = 0
+    spaces = design_model.get("spaces", {})
+
+    for constraint in constraints:
+        space_id = str(
+            constraint.get("space_id")
+            or constraint.get("target_id")
+            or constraint.get("id")
+            or ""
+        )
+        if not space_id:
+            continue
+        checked += 1
+        space = spaces.get(space_id)
+        must_exist = bool(constraint.get("must_exist", True))
+        if not isinstance(space, dict):
+            if must_exist:
+                append_constraint_failure(
+                    failures,
+                    code="space_missing",
+                    constraint=constraint,
+                    target_id=space_id,
+                    expected="existing space",
+                    actual=None,
+                    message="Expected source-backed space is missing from design_model.json.",
+                )
+            continue
+
+        expected_type = constraint.get("type")
+        if expected_type is not None and space.get("type") != expected_type:
+            append_constraint_failure(
+                failures,
+                code="space_type_mismatch",
+                constraint=constraint,
+                target_id=space_id,
+                expected=expected_type,
+                actual=space.get("type"),
+                message="Space type does not match source constraint.",
+            )
+
+        expected_bounds = constraint_bounds(constraint)
+        if expected_bounds is not None:
+            tolerance = constraint_tolerance(
+                constraint,
+                default_tolerance,
+                "bounds_tolerance",
+                "bounds_tolerance_mm",
+                "coordinate_tolerance",
+                "coordinate_tolerance_mm",
+            )
+            actual_bounds = space_plan_bounds(space)
+            if actual_bounds is None or not bounds_within_tolerance(
+                actual_bounds,
+                expected_bounds,
+                tolerance=tolerance,
+            ):
+                append_constraint_failure(
+                    failures,
+                    code="space_bounds_mismatch",
+                    constraint=constraint,
+                    target_id=space_id,
+                    expected=list(expected_bounds),
+                    actual=list(actual_bounds) if actual_bounds else None,
+                    message="Space footprint bounds do not match source evidence.",
+                )
+
+        label_anchor = normalize_label_anchor(constraint)
+        if label_anchor is not None:
+            tolerance = constraint_tolerance(
+                constraint,
+                default_tolerance,
+                "label_anchor_tolerance",
+                "label_anchor_tolerance_mm",
+                "coordinate_tolerance",
+                "coordinate_tolerance_mm",
+            )
+            footprint = space.get("footprint")
+            normalized_footprint = (
+                footprint_from_payload(footprint, label="space.footprint")
+                if isinstance(footprint, list) and len(footprint) >= 3
+                else []
+            )
+            if not normalized_footprint or not point_in_polygon_2d(
+                label_anchor,
+                normalized_footprint,
+                tolerance=tolerance,
+            ):
+                append_constraint_failure(
+                    failures,
+                    code="space_label_anchor_outside_footprint",
+                    constraint=constraint,
+                    target_id=space_id,
+                    expected={"label_anchor": label_anchor},
+                    actual={"footprint": footprint},
+                    message="Source room label anchor is not inside the generated space footprint.",
+                )
+
+        expected_area_m2 = constraint.get("area_m2") or constraint.get("label_area_m2")
+        if expected_area_m2 is not None:
+            footprint = space.get("footprint")
+            if isinstance(footprint, list) and len(footprint) >= 3:
+                area_m2 = polygon_area_mm2(
+                    [
+                        normalize_3d_point(point, label="space.footprint point")
+                        for point in footprint
+                    ]
+                ) / 1_000_000
+                ratio_tolerance = float(
+                    constraint.get("area_tolerance_ratio", DEFAULT_LABEL_AREA_TOLERANCE_RATIO)
+                )
+                expected_area = float(expected_area_m2)
+                if expected_area > 0 and abs(area_m2 - expected_area) / expected_area > ratio_tolerance:
+                    append_constraint_failure(
+                        failures,
+                        code="space_area_mismatch",
+                        constraint=constraint,
+                        target_id=space_id,
+                        expected=expected_area,
+                        actual=area_m2,
+                        message="Space area differs from source label beyond tolerance.",
+                    )
+
+    return failures, checked
+
+
+def adjacency_constraint_space_ids(constraint: dict[str, Any]) -> tuple[str, str] | None:
+    """Return the two space IDs from one adjacency source constraint."""
+    value = constraint.get("space_ids") or constraint.get("spaces")
+    if isinstance(value, list) and len(value) == 2:
+        return str(value[0]), str(value[1])
+    first = constraint.get("space_a") or constraint.get("from_space")
+    second = constraint.get("space_b") or constraint.get("to_space")
+    if first and second:
+        return str(first), str(second)
+    return None
+
+
+def opening_connects_spaces(opening: dict[str, Any], first: str, second: str) -> bool:
+    """Return whether an opening semantically connects the two spaces."""
+    values = {
+        str(value)
+        for value in (
+            opening.get("open_to_space"),
+            opening.get("access_from_space"),
+            opening.get("from_space"),
+            opening.get("to_space"),
+        )
+        if value
+    }
+    return {first, second}.issubset(values)
+
+
+def validate_space_adjacency_constraints(
+    design_model: dict[str, Any],
+    constraints: list[dict[str, Any]],
+    *,
+    import_id: str,
+) -> tuple[list[dict[str, Any]], int]:
+    """Validate source-backed adjacency between spaces and their openings."""
+    failures: list[dict[str, Any]] = []
+    checked = 0
+    spaces = design_model.get("spaces", {})
+    walls = design_model.get("walls", {})
+    openings = design_model.get("openings", {})
+
+    for constraint in constraints:
+        space_ids = adjacency_constraint_space_ids(constraint)
+        if space_ids is None:
+            continue
+        checked += 1
+        first, second = space_ids
+        missing_spaces = [space_id for space_id in space_ids if space_id not in spaces]
+        if missing_spaces:
+            append_constraint_failure(
+                failures,
+                code="adjacency_space_missing",
+                constraint=constraint,
+                target_id=None,
+                expected=list(space_ids),
+                actual={"missing_spaces": missing_spaces},
+                message="Source adjacency references a missing space.",
+            )
+            continue
+
+        shared_wall_ids = [
+            wall_id
+            for wall_id, wall in walls.items()
+            if isinstance(wall, dict)
+            and isinstance(wall.get("source"), dict)
+            and wall["source"].get("import_id") == import_id
+            and {first, second}.issubset(set(wall_space_refs(wall)))
+        ]
+        if constraint.get("require_shared_wall", True) and not shared_wall_ids:
+            append_constraint_failure(
+                failures,
+                code="adjacency_shared_wall_missing",
+                constraint=constraint,
+                target_id=None,
+                expected={"space_ids": list(space_ids), "shared_wall": True},
+                actual={"shared_wall_ids": []},
+                message="No imported wall connects the source-adjacent spaces.",
+            )
+
+        opening_id = constraint.get("opening_id")
+        require_opening = bool(opening_id or constraint.get("require_opening"))
+        if not require_opening:
+            continue
+        candidate_openings = []
+        if opening_id:
+            opening = openings.get(str(opening_id))
+            if isinstance(opening, dict):
+                candidate_openings.append((str(opening_id), opening))
+        else:
+            candidate_openings = [
+                (candidate_id, opening)
+                for candidate_id, opening in openings.items()
+                if isinstance(opening, dict)
+            ]
+        matching_opening_ids = [
+            candidate_id
+            for candidate_id, opening in candidate_openings
+            if (
+                str(opening.get("host_wall", "")) in shared_wall_ids
+                or opening_connects_spaces(opening, first, second)
+            )
+        ]
+        if not matching_opening_ids:
+            append_constraint_failure(
+                failures,
+                code="adjacency_opening_missing",
+                constraint=constraint,
+                target_id=str(opening_id) if opening_id else None,
+                expected={
+                    "space_ids": list(space_ids),
+                    "shared_wall_ids": shared_wall_ids,
+                    "opening_id": opening_id,
+                },
+                actual={
+                    "matching_opening_ids": [],
+                    "candidate_opening_ids": [item[0] for item in candidate_openings],
+                },
+                message="No imported opening satisfies the source adjacency.",
+            )
+
+    return failures, checked
+
+
+def entity_edge_coordinate(
+    design_model: dict[str, Any],
+    *,
+    collection_name: str,
+    entity_id: str,
+    axis: str,
+    edge: str,
+) -> float | None:
+    """Return a source-checkable entity edge coordinate."""
+    collection = design_model.get(collection_name, {})
+    entity = collection.get(entity_id) if isinstance(collection, dict) else None
+    if not isinstance(entity, dict):
+        return None
+    if collection_name == "spaces":
+        bounds = space_plan_bounds(entity)
+        if bounds is None:
+            return None
+        index = {"x": {"min": 0, "max": 1}, "y": {"min": 2, "max": 3}}[axis][edge]
+        return float(bounds[index])
+    if collection_name == "walls":
+        path = entity.get("path", [])
+        wall_orientation = wall_axis(path)
+        if wall_orientation is None:
+            return None
+        bounds = polygon_bounds(
+            [
+                normalize_3d_point(point, label="wall.path point")
+                for point in (path[0], path[-1])
+            ]
+        )
+        index = {"x": {"min": 0, "max": 1}, "y": {"min": 2, "max": 3}}[axis][edge]
+        return float(bounds[index])
+    return None
+
+
+def validate_alignment_constraints(
+    design_model: dict[str, Any],
+    constraints: list[dict[str, Any]],
+    *,
+    default_tolerance: float,
+) -> tuple[list[dict[str, Any]], int]:
+    """Validate generic source-backed edge alignment constraints."""
+    failures: list[dict[str, Any]] = []
+    checked = 0
+
+    for constraint in constraints:
+        axis = str(constraint.get("axis", "x"))
+        edge = str(constraint.get("edge", "min"))
+        if axis not in {"x", "y"} or edge not in {"min", "max"}:
+            continue
+        collection_name = str(
+            constraint.get("collection")
+            or constraint.get("entity_collection")
+            or "spaces"
+        )
+        if not collection_name.endswith("s"):
+            collection_name = f"{collection_name}s"
+        entity_ids = (
+            constraint.get("entity_ids")
+            or constraint.get("space_ids")
+            or constraint.get("wall_ids")
+        )
+        if not isinstance(entity_ids, list) or len(entity_ids) < 2:
+            continue
+        checked += 1
+        tolerance = constraint_tolerance(
+            constraint,
+            default_tolerance,
+            "alignment_tolerance",
+            "alignment_tolerance_mm",
+        )
+        actual: dict[str, float | None] = {
+            str(entity_id): entity_edge_coordinate(
+                design_model,
+                collection_name=collection_name,
+                entity_id=str(entity_id),
+                axis=axis,
+                edge=edge,
+            )
+            for entity_id in entity_ids
+        }
+        numeric_values = [
+            value for value in actual.values() if isinstance(value, (int, float))
+        ]
+        missing = [entity_id for entity_id, value in actual.items() if value is None]
+        expected_coordinate = constraint.get("coordinate")
+        if expected_coordinate is not None:
+            target = float(expected_coordinate)
+        elif numeric_values:
+            target = numeric_values[0]
+        else:
+            target = 0.0
+        mismatches = {
+            entity_id: value
+            for entity_id, value in actual.items()
+            if value is None or abs(float(value) - target) > tolerance
+        }
+        if missing or mismatches or (
+            numeric_values and max(numeric_values) - min(numeric_values) > tolerance
+        ):
+            append_constraint_failure(
+                failures,
+                code="edge_alignment_mismatch",
+                constraint=constraint,
+                target_id=None,
+                expected={
+                    "collection": collection_name,
+                    "entity_ids": [str(entity_id) for entity_id in entity_ids],
+                    "axis": axis,
+                    "edge": edge,
+                    "coordinate": target,
+                    "tolerance": tolerance,
+                },
+                actual=actual,
+                message="Source-aligned entity edges are not aligned in generated truth.",
+            )
+
+    return failures, checked
+
+
+def source_fidelity_summary(result: dict[str, Any]) -> dict[str, Any]:
+    """Return compact source-fidelity state safe for manifests and model sessions."""
+    summary = {
+        "status": result["status"],
+        "checked_count": result["checked_count"],
+        "failure_count": result["failure_count"],
+        "constraints_path": result.get("constraints_path"),
+        "updated_at": result["updated_at"],
+    }
+    if result.get("evidence_origin"):
+        summary["evidence_origin"] = result["evidence_origin"]
+    return summary
+
+
+def validate_import_source_constraints(
+    project_path: str | Path,
+    import_id: str,
+    *,
+    constraints_path: str | Path | None = None,
+    tolerance: float = 80.0,
+    require_executed: bool = False,
+    require_extracted_evidence: bool = False,
+    update_state: bool = True,
+) -> dict[str, Any]:
+    """Validate generated import truth against source-scoped constraints."""
+    root = Path(project_path).expanduser().resolve()
+    chosen_id = import_safe_id(import_id)
+    constraints, loaded_constraints_path = load_import_constraints(
+        root,
+        chosen_id,
+        constraints_path=constraints_path,
+    )
+
+    timestamp = utc_now()
+    design_model_path = find_design_model_path(root)
+    design_model, model_errors = load_design_model(str(design_model_path))
+    if model_errors or design_model is None:
+        raise ValueError("; ".join(model_errors))
+
+    if constraints is None:
+        return {
+            "project_path": str(root),
+            "design_model_path": str(design_model_path),
+            "import_id": chosen_id,
+            "constraints_path": str(loaded_constraints_path),
+            "status": "no_constraints",
+            "checked_count": 0,
+            "failure_count": 0,
+            "failures": [],
+            "warnings": ["No import source constraints file was found."],
+            "updated_at": timestamp,
+        }
+
+    opening_constraints = source_constraint_items(
+        constraints,
+        "opening_constraints",
+        "openings",
+        "door_constraints",
+        "window_constraints",
+    )
+    wall_constraints = source_constraint_items(
+        constraints,
+        "wall_constraints",
+        "walls",
+        "boundary_constraints",
+    )
+    exterior_outline_constraints = source_constraint_items(
+        constraints,
+        "exterior_outline_constraints",
+        "outline_constraints",
+        "wall_mass_outline_constraints",
+        "source_outline_constraints",
+    )
+    boundary_closure_constraints = source_constraint_items(
+        constraints,
+        "boundary_closure_constraints",
+        "space_boundary_constraints",
+        "required_boundary_constraints",
+    )
+    negative_region_constraints = source_constraint_items(
+        constraints,
+        "negative_region_constraints",
+        "negative_regions",
+        "outside_regions",
+    )
+    space_constraints = source_constraint_items(
+        constraints,
+        "space_constraints",
+        "space_footprint_constraints",
+        "spaces",
+    )
+    adjacency_constraints = source_constraint_items(
+        constraints,
+        "adjacency_constraints",
+        "space_adjacency_constraints",
+        "required_adjacencies",
+    )
+    alignment_constraints = source_constraint_items(
+        constraints,
+        "alignment_constraints",
+        "edge_alignment_constraints",
+    )
+
+    failures: list[dict[str, Any]] = []
+    checked_count = 0
+    evidence_origin = None
+    if require_extracted_evidence:
+        (
+            evidence_failures,
+            evidence_checked,
+            evidence_origin,
+        ) = validate_source_constraint_evidence_origins(constraints)
+        failures.extend(evidence_failures)
+        checked_count += evidence_checked
+    for validator, items in (
+        (
+            lambda value: validate_opening_constraints(
+                design_model,
+                value,
+                default_tolerance=tolerance,
+                require_executed=require_executed,
+                require_source_evidence_fields=require_extracted_evidence,
+            ),
+            opening_constraints,
+        ),
+        (
+            lambda value: validate_wall_constraints(
+                design_model,
+                value,
+                import_id=chosen_id,
+                default_tolerance=tolerance,
+            ),
+            wall_constraints,
+        ),
+        (
+            lambda value: validate_exterior_outline_constraints(
+                design_model,
+                value,
+                import_id=chosen_id,
+                default_tolerance=tolerance,
+            ),
+            exterior_outline_constraints,
+        ),
+        (
+            lambda value: validate_boundary_closure_constraints(
+                design_model,
+                value,
+                import_id=chosen_id,
+                default_tolerance=tolerance,
+            ),
+            boundary_closure_constraints,
+        ),
+        (
+            lambda value: validate_negative_region_constraints(
+                design_model,
+                value,
+                import_id=chosen_id,
+                default_tolerance=tolerance,
+            ),
+            negative_region_constraints,
+        ),
+        (
+            lambda value: validate_space_constraints(
+                design_model,
+                value,
+                default_tolerance=tolerance,
+            ),
+            space_constraints,
+        ),
+        (
+            lambda value: validate_space_adjacency_constraints(
+                design_model,
+                value,
+                import_id=chosen_id,
+            ),
+            adjacency_constraints,
+        ),
+        (
+            lambda value: validate_alignment_constraints(
+                design_model,
+                value,
+                default_tolerance=tolerance,
+            ),
+            alignment_constraints,
+        ),
+    ):
+        validator_failures, validator_checked = validator(items)
+        failures.extend(validator_failures)
+        checked_count += validator_checked
+
+    result = {
+        "project_path": str(root),
+        "design_model_path": str(design_model_path),
+        "import_id": chosen_id,
+        "constraints_path": project_relative_path(root, loaded_constraints_path),
+        "status": source_constraint_status(len(failures), checked_count),
+        "checked_count": checked_count,
+        "failure_count": len(failures),
+        "failures": failures,
+        "warnings": [],
+        "updated_at": timestamp,
+    }
+    if evidence_origin is not None:
+        result["evidence_origin"] = evidence_origin
+
+    if update_state:
+        summary = source_fidelity_summary(result)
+        design_model.setdefault("import_sessions", {}).setdefault(chosen_id, {})[
+            "source_fidelity"
+        ] = summary
+        saved, save_errors = save_design_model(str(design_model_path), design_model)
+        if not saved:
+            raise ValueError("; ".join(save_errors))
+
+        manifest, manifest_file = load_project_import_manifest(root, chosen_id)
+        manifest["source_fidelity"] = summary
+        append_processing_step(
+            manifest,
+            "validate_import_source_constraints",
+            status="success" if result["status"] == "passed" else result["status"],
+            details={
+                "constraints_path": result["constraints_path"],
+                "checked_count": result["checked_count"],
+                "failure_count": result["failure_count"],
+            },
+        )
+        saved_manifest, manifest_errors = save_import_manifest(manifest_file, manifest)
+        if not saved_manifest:
+            raise ValueError("; ".join(manifest_errors))
+
+    return result
 
 
 def merge_intervals(
@@ -2521,40 +6031,29 @@ def spaces_covering_edge_segment(
     return spaces
 
 
-def semantic_short_gap_repair_signal(
+def short_gap_source_evidence_signal(
     *,
     axis: str,
     length: float,
     adjacent_spaces: list[dict[str, Any]],
-    max_semantic_gap_length: float,
+    max_source_evidence_gap_length: float,
 ) -> dict[str, Any]:
-    """Return whether a short footprint gap should be auto-filled as false opening."""
+    """Return whether a short footprint gap has source evidence for auto-repair."""
     space_types = {str(space.get("type", "other")) for space in adjacent_spaces}
-    reasons: list[str] = []
-    if length > max_semantic_gap_length:
+    if length > max_source_evidence_gap_length:
         return {
             "repair_recommended": False,
             "confidence": 0.0,
-            "reasons": ["gap exceeds semantic short-gap length threshold"],
-            "adjacent_space_types": sorted(space_types),
-        }
-    if axis == "y" and {"living_room", "balcony"}.issubset(space_types):
-        reasons.extend(
-            [
-                "short horizontal shared edge between living room and balcony",
-                "no explicit imported opening owns this footprint gap",
-            ]
-        )
-        return {
-            "repair_recommended": True,
-            "confidence": 0.68,
-            "reasons": reasons,
+            "reasons": ["gap exceeds short-gap source-evidence length threshold"],
             "adjacent_space_types": sorted(space_types),
         }
     return {
         "repair_recommended": False,
         "confidence": 0.0,
-        "reasons": ["no high-confidence semantic false-opening pattern matched"],
+        "reasons": [
+            "space adjacency alone is insufficient for auto-filling a short gap",
+            "source-backed wall-continuity evidence is required",
+        ],
         "adjacent_space_types": sorted(space_types),
     }
 
@@ -2750,8 +6249,8 @@ def imported_boundary_coverage_gaps(
     *,
     min_gap_length: float = DEFAULT_MIN_BOUNDARY_GAP_LENGTH,
     max_opening_gap_length: float = DEFAULT_MAX_OPENING_GAP_LENGTH,
-    infer_semantic_short_gaps: bool = True,
-    max_semantic_gap_length: float = DEFAULT_MAX_SEMANTIC_SHORT_GAP_LENGTH,
+    infer_source_evidence_short_gaps: bool = True,
+    max_source_evidence_gap_length: float = DEFAULT_MAX_SOURCE_EVIDENCE_SHORT_GAP_LENGTH,
     coordinate_match_tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
     require_structural_endpoints: bool = True,
 ) -> list[dict[str, Any]]:
@@ -2760,8 +6259,8 @@ def imported_boundary_coverage_gaps(
         raise ValueError("min_gap_length must be positive.")
     if max_opening_gap_length < 0:
         raise ValueError("max_opening_gap_length must be non-negative.")
-    if max_semantic_gap_length < 0:
-        raise ValueError("max_semantic_gap_length must be non-negative.")
+    if max_source_evidence_gap_length < 0:
+        raise ValueError("max_source_evidence_gap_length must be non-negative.")
     if coordinate_match_tolerance <= 0:
         raise ValueError("coordinate_match_tolerance must be positive.")
 
@@ -2844,27 +6343,35 @@ def imported_boundary_coverage_gaps(
                     segment_interval_value=(gap_start, gap_end),
                     coordinate_match_tolerance=coordinate_match_tolerance,
                 )
-                semantic_repair = semantic_short_gap_repair_signal(
-                    axis=axis,
+                circulation_gap = is_circulation_gap(
+                    adjacent_spaces,
                     length=length,
-                    adjacent_spaces=adjacent_spaces,
-                    max_semantic_gap_length=max_semantic_gap_length,
                 )
-                if (
-                    infer_semantic_short_gaps
-                    and classification == "candidate_opening_or_intentional_gap"
-                    and semantic_repair["repair_recommended"]
-                ):
-                    classification = "candidate_false_opening_or_missing_wall"
+                if classification == "candidate_missing_wall" and circulation_gap:
+                    classification = "candidate_circulation_opening_or_intentional_gap"
+                if infer_source_evidence_short_gaps:
+                    source_evidence_repair = short_gap_source_evidence_signal(
+                        axis=axis,
+                        length=length,
+                        adjacent_spaces=adjacent_spaces,
+                        max_source_evidence_gap_length=max_source_evidence_gap_length,
+                    )
+                else:
+                    source_evidence_repair = {
+                        "repair_recommended": False,
+                        "confidence": 0.0,
+                        "reasons": ["short-gap source-evidence review disabled"],
+                        "adjacent_space_types": sorted(
+                            {
+                                str(space.get("type", "other"))
+                                for space in adjacent_spaces
+                            }
+                        ),
+                    }
                 repair_recommended = classification == "candidate_missing_wall" and (
                     not require_structural_endpoints
                     or (start_supported and end_supported)
                 )
-                if classification == "candidate_false_opening_or_missing_wall":
-                    repair_recommended = (
-                        not require_structural_endpoints
-                        or (start_supported and end_supported)
-                    )
                 gaps.append(
                     {
                         "space_id": space_id,
@@ -2878,7 +6385,8 @@ def imported_boundary_coverage_gaps(
                         "classification": classification,
                         "repair_recommended": repair_recommended,
                         "adjacent_spaces": adjacent_spaces,
-                        "semantic_repair": semantic_repair,
+                        "circulation_gap": circulation_gap,
+                        "source_evidence_repair": source_evidence_repair,
                         "endpoint_support": {
                             "start": start_supported,
                             "end": end_supported,
@@ -3627,8 +7135,8 @@ def review_imported_boundary_coverage(
     *,
     min_gap_length: float = DEFAULT_MIN_BOUNDARY_GAP_LENGTH,
     max_opening_gap_length: float = DEFAULT_MAX_OPENING_GAP_LENGTH,
-    infer_semantic_short_gaps: bool = True,
-    max_semantic_gap_length: float = DEFAULT_MAX_SEMANTIC_SHORT_GAP_LENGTH,
+    infer_source_evidence_short_gaps: bool = True,
+    max_source_evidence_gap_length: float = DEFAULT_MAX_SOURCE_EVIDENCE_SHORT_GAP_LENGTH,
     coordinate_match_tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
     require_structural_endpoints: bool = True,
 ) -> dict[str, Any]:
@@ -3648,8 +7156,8 @@ def review_imported_boundary_coverage(
         chosen_id,
         min_gap_length=min_gap_length,
         max_opening_gap_length=max_opening_gap_length,
-        infer_semantic_short_gaps=infer_semantic_short_gaps,
-        max_semantic_gap_length=max_semantic_gap_length,
+        infer_source_evidence_short_gaps=infer_source_evidence_short_gaps,
+        max_source_evidence_gap_length=max_source_evidence_gap_length,
         coordinate_match_tolerance=coordinate_match_tolerance,
         require_structural_endpoints=require_structural_endpoints,
     )
@@ -3663,8 +7171,8 @@ def review_imported_boundary_coverage(
         "recommended_repair_count": len(recommended),
         "min_gap_length": min_gap_length,
         "max_opening_gap_length": max_opening_gap_length,
-        "infer_semantic_short_gaps": infer_semantic_short_gaps,
-        "max_semantic_gap_length": max_semantic_gap_length,
+        "infer_source_evidence_short_gaps": infer_source_evidence_short_gaps,
+        "max_source_evidence_gap_length": max_source_evidence_gap_length,
         "coordinate_match_tolerance": coordinate_match_tolerance,
         "require_structural_endpoints": require_structural_endpoints,
         "gaps": gaps,
@@ -3677,8 +7185,8 @@ def repair_imported_boundary_coverage(
     *,
     min_gap_length: float = DEFAULT_MIN_BOUNDARY_GAP_LENGTH,
     max_opening_gap_length: float = DEFAULT_MAX_OPENING_GAP_LENGTH,
-    infer_semantic_short_gaps: bool = True,
-    max_semantic_gap_length: float = DEFAULT_MAX_SEMANTIC_SHORT_GAP_LENGTH,
+    infer_source_evidence_short_gaps: bool = True,
+    max_source_evidence_gap_length: float = DEFAULT_MAX_SOURCE_EVIDENCE_SHORT_GAP_LENGTH,
     coordinate_match_tolerance: float = DEFAULT_COORDINATE_MATCH_TOLERANCE,
     require_structural_endpoints: bool = True,
     max_repairs: int = 20,
@@ -3703,8 +7211,8 @@ def repair_imported_boundary_coverage(
         chosen_id,
         min_gap_length=min_gap_length,
         max_opening_gap_length=max_opening_gap_length,
-        infer_semantic_short_gaps=infer_semantic_short_gaps,
-        max_semantic_gap_length=max_semantic_gap_length,
+        infer_source_evidence_short_gaps=infer_source_evidence_short_gaps,
+        max_source_evidence_gap_length=max_source_evidence_gap_length,
         coordinate_match_tolerance=coordinate_match_tolerance,
         require_structural_endpoints=require_structural_endpoints,
     )
@@ -3752,23 +7260,6 @@ def repair_imported_boundary_coverage(
             severity="warning",
             message="A missing source-backed boundary wall was added to working truth.",
         )
-        if any(
-            gap.get("classification") == "candidate_false_opening_or_missing_wall"
-            for gap in repaired_gaps
-        ):
-            add_import_quality_flag(
-                design_model,
-                chosen_id,
-                "import_false_opening_repaired",
-                message="A semantically unlikely imported opening gap was filled as a wall.",
-            )
-            add_import_quality_flag(
-                design_model,
-                chosen_id,
-                "semantic_short_gap_wall_added",
-                severity="warning",
-                message="A short boundary gap was auto-filled using semantic space context.",
-            )
         design_model["updated_at"] = utc_now()
         mark_execution_dirty(
             design_model,
@@ -3782,8 +7273,8 @@ def repair_imported_boundary_coverage(
         chosen_id,
         min_gap_length=min_gap_length,
         max_opening_gap_length=max_opening_gap_length,
-        infer_semantic_short_gaps=infer_semantic_short_gaps,
-        max_semantic_gap_length=max_semantic_gap_length,
+        infer_source_evidence_short_gaps=infer_source_evidence_short_gaps,
+        max_source_evidence_gap_length=max_source_evidence_gap_length,
         coordinate_match_tolerance=coordinate_match_tolerance,
         require_structural_endpoints=require_structural_endpoints,
     )
@@ -3798,8 +7289,8 @@ def repair_imported_boundary_coverage(
         "action": "repair_imported_boundary_coverage",
         "min_gap_length": min_gap_length,
         "max_opening_gap_length": max_opening_gap_length,
-        "infer_semantic_short_gaps": infer_semantic_short_gaps,
-        "max_semantic_gap_length": max_semantic_gap_length,
+        "infer_source_evidence_short_gaps": infer_source_evidence_short_gaps,
+        "max_source_evidence_gap_length": max_source_evidence_gap_length,
         "coordinate_match_tolerance": coordinate_match_tolerance,
         "require_structural_endpoints": require_structural_endpoints,
         "max_repairs": max_repairs,
@@ -3814,24 +7305,12 @@ def repair_imported_boundary_coverage(
 
     manifest, manifest_file = load_project_import_manifest(root, chosen_id)
     if added_walls:
-        semantic_flags = (
-            [
-                "import_false_opening_repaired",
-                "semantic_short_gap_wall_added",
-            ]
-            if any(
-                gap.get("classification") == "candidate_false_opening_or_missing_wall"
-                for gap in repaired_gaps
-            )
-            else []
-        )
         manifest["status"] = "repaired"
         manifest["quality_flags"] = dedupe_quality_flags(
             [
                 *manifest.get("quality_flags", []),
                 "import_boundary_coverage_repaired",
                 "source_backed_boundary_wall_added",
-                *semantic_flags,
             ]
         )
     append_processing_step(

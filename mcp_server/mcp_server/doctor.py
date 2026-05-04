@@ -66,6 +66,7 @@ def console_script_check(command: str) -> dict[str, Any]:
         command,
         path is not None,
         {"path": path} if path else None,
+        severity="warning",
         message=None if path else f"{command} is not available on PATH.",
     )
 

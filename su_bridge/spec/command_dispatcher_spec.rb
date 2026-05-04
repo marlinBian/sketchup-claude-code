@@ -66,6 +66,44 @@ RSpec.describe SuBridge::CommandDispatcher do
     end
   end
 
+  describe "#dispatch_operation" do
+    it "does not require an active model for read-only bridge info" do
+      allow(Sketchup).to receive(:active_model).and_return(nil)
+
+      response = dispatcher.dispatch_operation("diag_bridge", "get_bridge_info", {}, false)
+
+      expect(response[:status]).to eq("success")
+      expect(response[:bridge_info][:supported_operations]).to include("get_bridge_info")
+    end
+
+    it "wraps mutating operations in an undo transaction" do
+      allow(SuBridge::UndoManager).to receive(:with_transaction).and_call_original
+      allow(SuBridge::Entities::WallBuilder).to receive(:create).and_return(
+        {
+          entity_ids: ["101"],
+          spatial_delta: {},
+          model_revision: 1,
+          elapsed_ms: 0,
+        }
+      )
+
+      dispatcher.dispatch_operation(
+        "wall_001",
+        "create_wall",
+        {
+          "start" => [0, 0, 0],
+          "end" => [1000, 0, 0],
+          "height" => 2400,
+          "thickness" => 120,
+        },
+        true
+      )
+
+      expect(SuBridge::UndoManager).to have_received(:with_transaction)
+        .with(name: "create_wall", rollback_on_failure: true)
+    end
+  end
+
   describe "#handle_create_wall_with_openings" do
     it "delegates hosted openings to the wall builder" do
       builder_result = {
@@ -190,6 +228,24 @@ RSpec.describe SuBridge::CommandDispatcher do
       expect(model.active_view.camera.target.to_a).to eq([50.0, 100.0, 0.0])
       expect(model.active_view.camera.up.to_a).to eq([0.0, 1.0, 0.0])
       expect(model.active_view.camera.perspective).to be(false)
+      expect(model.active_view).to be_zoomed_extents
+    end
+
+    it "uses model bounds for birdseye presets" do
+      model = FakeCameraModelForDispatcher.new
+      allow(Sketchup).to receive(:active_model).and_return(model)
+
+      result = dispatcher.send(
+        :handle_set_camera_view,
+        { "view_preset" => "living_room_birdseye" }
+      )
+
+      expect(result[:view_info][:preset]).to eq("living_room_birdseye")
+      expect(model.active_view.camera.target.to_a).to eq([50.0, 100.0, 15.0])
+      expect(model.active_view.camera.eye.to_a[1]).to be < 100.0
+      expect(model.active_view.camera.eye.to_a[2]).to be > 30.0
+      expect(model.active_view.camera.up.to_a).to eq([0.0, 0.0, 1.0])
+      expect(model.active_view.camera.perspective).to be(true)
       expect(model.active_view).to be_zoomed_extents
     end
   end

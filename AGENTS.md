@@ -18,6 +18,10 @@ runtime skills, and protocol docs.
 
 Maintainer-only Codex skills for developing this repository are intentionally
 kept outside the product repository, under the local `ai4design` workspace.
+Project/session dynamic runtime skills may be generated inside an active
+designer project during use, for example after an import or designer correction.
+Those skills are project-local runtime memory, not product source files, and
+must not be committed under this repository's `skills/` directory.
 
 ## Development Rules
 
@@ -26,6 +30,10 @@ kept outside the product repository, under the local `ai4design` workspace.
 - Treat `skills/` as the runtime skill authoring source. Installers and plugin
   manifests must expose those skills in each AI tool's supported runtime
   location; designers should not need to copy files from the source tree.
+- Keep source-specific import interpretations, per-project corrections, and
+  designer preferences out of shipped runtime skills. Store them as project
+  evidence and, when useful at runtime, project-local dynamic skills in the
+  active design project.
 - Use millimeters and Z-up coordinates across protocol boundaries.
 - Add or update tests when changing schemas, MCP tool contracts, or placement behavior.
 - Do not put maintainer workflow skills under `skills/` or ship them in plugin

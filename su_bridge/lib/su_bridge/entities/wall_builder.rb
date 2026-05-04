@@ -191,22 +191,17 @@ module SuBridge
         # Create empty group first, then add faces to group's entities
         group = entities.add_group
 
-        # Add faces using add_face - SketchUp determines front/back automatically.
-        # add_face flips the face if needed to face the camera or match adjacent geometry.
-        # No manual reverse needed.
+        v1, v2, _v3, v4 = vertices.map { |vertex| Vector3d.new(*vertex) }
+        direction = normalized_vector(v4 - v1)
+        positive_normal = normalized_vector(v1 - v2)
+        z_up = Vector3d.new(0, 0, 1)
 
-        # Bottom face (at z=0)
-        group.entities.add_face(pts[0], pts[1], pts[2], pts[3])
-        # Top face (at height)
-        group.entities.add_face(pts[4], pts[5], pts[6], pts[7])
-        # Left face (x=0, facing -X)
-        group.entities.add_face(pts[0], pts[4], pts[5], pts[1])
-        # Right face (x=end, facing +X)
-        group.entities.add_face(pts[3], pts[7], pts[6], pts[2])
-        # Front face (y=start, facing -Y)
-        group.entities.add_face(pts[1], pts[2], pts[6], pts[5])
-        # Back face (y=end, facing +Y)
-        group.entities.add_face(pts[0], pts[3], pts[7], pts[4])
+        add_oriented_face(group.entities, [pts[0], pts[1], pts[2], pts[3]], z_up * -1.0)
+        add_oriented_face(group.entities, [pts[4], pts[5], pts[6], pts[7]], z_up)
+        add_oriented_face(group.entities, [pts[0], pts[4], pts[5], pts[1]], direction * -1.0)
+        add_oriented_face(group.entities, [pts[3], pts[7], pts[6], pts[2]], direction)
+        add_oriented_face(group.entities, [pts[1], pts[2], pts[6], pts[5]], positive_normal * -1.0)
+        add_oriented_face(group.entities, [pts[0], pts[3], pts[7], pts[4]], positive_normal)
 
         # Apply layer if specified
         if options["layer"]
@@ -248,6 +243,35 @@ module SuBridge
       end
 
       private
+
+      def self.add_oriented_face(entities, points, expected_normal)
+        face = entities.add_face(*points)
+        orient_face!(face, expected_normal)
+        face
+      end
+
+      def self.orient_face!(face, expected_normal)
+        return face unless face && face.respond_to?(:normal) && face.respond_to?(:reverse!)
+
+        actual_normal = face.normal
+        return face unless actual_normal
+
+        face.reverse! if vector_dot(actual_normal, expected_normal) < 0
+        face
+      end
+
+      def self.normalized_vector(vector)
+        length = vector.r
+        return Vector3d.new(0, 0, 0) if length <= 0
+
+        vector / length
+      end
+
+      def self.vector_dot(first, second)
+        first.x.to_f * second.x.to_f +
+          first.y.to_f * second.y.to_f +
+          first.z.to_f * second.z.to_f
+      end
 
       def self.normalize_openings(openings, wall_length, wall_height)
         cursor = 0.0
