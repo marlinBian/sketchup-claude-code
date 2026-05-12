@@ -178,7 +178,9 @@ uv run --extra dev pytest tests/test_integration.py \
 
 - [Installation](INSTALLATION.md)
 - [Quickstart](QUICKSTART.md)
+- [Designer Manual](DESIGNER_MANUAL.md)
 - [Designer Guide](DESIGNER_GUIDE.md)
 - [Development](DEVELOPMENT.md)
+- [Capability Map](docs/product/capability-map.md)
 - [Roadmap](docs/roadmap.md)
 - [Runtime vs Development Skills](docs/architecture/runtime-vs-dev-skills.md)

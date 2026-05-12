@@ -1,109 +1,46 @@
 # SketchUp Agent Harness
 
-让室内设计师使用 Claude CLI 或 Codex CLI 通过自然语言在 SketchUp 中创建、检查和迭代 3D 模型。
-
----
+让设计师通过 Claude CLI 或 Codex CLI，用自然语言控制 SketchUp，创建、检查、
+导入和迭代可编辑的设计模型。
 
 ## 项目定位
 
-这个项目原名 `sketchup-claude-code`，正在迁移为 `sketchup-agent-harness`。
-Claude 和 Codex 都只是入口，核心是共享的 MCP Server、SketchUp Ruby bridge、设计模型 JSON、组件规则和设计 workflow skills。
+SketchUp Agent Harness 不是单一的 Claude 插件。Claude 和 Codex 都只是入口；
+共享核心是 MCP server、SketchUp Ruby bridge、结构化设计模型、组件元数据、
+设计规则和 runtime skills。
 
-设计师不需要 clone 本仓库。正常使用路径应该是安装插件，然后在自己的设计项目目录中启动 Claude 或 Codex。
+设计师正常使用时不需要 clone 本仓库，也不需要编辑源码。推荐方式是在自己的
+设计项目目录中运行 Claude 或 Codex，让 agent 通过本工具连接 SketchUp。
 
-## 设计师安装（推荐方式）
+## 快速入口
 
-### Claude CLI
+面向设计师的完整中文手册：
 
-```bash
-# 1. 通过 Claude Code 安装插件
-/plugin marketplace add https://github.com/marlinBian/sketchup-agent-harness
-/plugin install sketchup-agent-harness
+- [设计师使用手册](./docs/zh/DESIGNER_MANUAL.md)
 
-# 2. 复制 SketchUp 插件（一次性操作）
-cp -r ~/.claude/plugins/sketchup-agent-harness/su_bridge ~/Library/Application\ Support/SketchUp/SketchUp\ 2024/SketchUp/Plugins/
+英文主文档：
 
-# 3. 在 SketchUp Ruby 控制台运行一次
-load '~/Library/Application Support/SketchUp/SketchUp 2024/SketchUp/Plugins/su_bridge/lib/su_bridge.rb'
-SuBridge.start
+- [Designer Manual](./DESIGNER_MANUAL.md)
 
-# 4. 创建设计项目目录并开始
-mkdir ~/Design/my-room && cd ~/Design/my-room
-claude
+## 当前能力
 
-# 5. 开始设计！
-# "创建一个 4米 x 5米的客厅，层高 2.4米"
-```
+- 初始化独立设计项目目录
+- 安装 SketchUp Ruby bridge
+- 在项目中安装 Claude / Codex runtime skills
+- 通过自然语言生成简单空间和卫生间布局
+- 导入 DWG、DXF、PDF、图片、扫描件或照片作为第一版可编辑模型
+- 在 `design_model.json` 中保存结构化设计 truth
+- 保存 source evidence、截图、版本和项目规则
 
-### Codex CLI
+## 更多文档
 
-```bash
-# 1. 添加插件 marketplace
-codex plugin marketplace add marlinBian/sketchup-agent-harness
+- [安装说明](./INSTALLATION.md)
+- [快速开始](./QUICKSTART.md)
+- [设计师指南](./DESIGNER_GUIDE.md)
+- [能力地图](./docs/product/capability-map.md)
+- [开发文档](./DEVELOPMENT.md)
 
-# 2. 进入设计项目目录
-mkdir ~/Design/my-room && cd ~/Design/my-room
-codex
+## 当前限制
 
-# 3. 开始设计
-# "创建一个 4米 x 5米的客厅，层高 2.4米"
-```
-
----
-
-## 快速开始
-
-### 在 SketchUp 中加载插件
-
-1. 确保 `su_bridge` 已复制到 SketchUp 插件目录
-2. 重启 SketchUp
-3. 在 SketchUp Ruby 控制台中运行：
-   ```ruby
-   SuBridge.start
-   ```
-
-### 开始设计
-
-在 Claude CLI 或 Codex CLI 中切换到项目目录，然后说：
-- "创建一个 4米 x 5米的客厅，层高 2.4米"
-- "添加一套北欧风格的沙发"
-- "在餐桌上方 1.2米 放置吊灯"
-
----
-
-## 常用指令
-
-| 指令 | 功能 |
-|------|------|
-| 开始新项目 | 初始化新设计 |
-| 添加 [家具类型] | 放置家具 |
-| 移动 [物体] 到 [位置] | 调整布局 |
-| 应用 [风格名称] | 应用设计风格 |
-| 帮我拍几张照 | 多角度截图 |
-
----
-
-## 设计风格
-
-- 奶油风（日式+北欧）
-- 北欧风
-- 工业风
-- 地中海风
-- 波西米亚风
-- 现代极简
-
----
-
-## 系统要求
-
-- SketchUp 2021+
-- Python 3.11+
-- Ruby 3.2+
-
----
-
-## 更多信息
-
-- [设计师快速上手](./QUICKSTART.md) - 更详细的操作指南
-- [完整安装指南](./INSTALLATION.md) - 开发者贡献指南
-- [开发文档](./DEVELOPMENT.md) - 项目架构和技术细节
+1.0 版本仍是早期版本。图纸导入生成的是可编辑工作模型，不是测绘级结果；
+真实组件库、复杂碰撞检查和更稳定的图纸识别仍在迭代中。
