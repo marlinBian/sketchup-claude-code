@@ -110,3 +110,37 @@ def test_import_manifest_accepts_timing_trace():
 
     assert valid is True
     assert errors == []
+
+
+def test_import_manifest_accepts_pipeline_timing_trace():
+    manifest = create_import_manifest(import_id="import_001", source=source_info())
+    manifest["pipeline_timing"] = {
+        "schema_version": "1.0",
+        "stage_traces": [
+            {
+                "schema_version": "1.0",
+                "trace_type": "prepare_import_source",
+                "scope": "deterministic_product_pipeline",
+                "started_at": "2026-05-12T00:00:00+00:00",
+                "ended_at": "2026-05-12T00:00:01+00:00",
+                "total_ms": 12.0,
+                "classification_totals_ms": {"deterministic_extractor": 12.0},
+                "phases": [],
+                "slowest_phase": None,
+                "budget": {
+                    "total_budget_ms": 5000.0,
+                    "within_budget": True,
+                },
+            }
+        ],
+        "stage_count": 1,
+        "total_ms": 12.0,
+        "classification_totals_ms": {"deterministic_extractor": 12.0},
+        "latest_trace_type": "prepare_import_source",
+        "updated_at": "2026-05-12T00:00:01+00:00",
+    }
+
+    valid, errors = validate_import_manifest(manifest)
+
+    assert valid is True
+    assert errors == []

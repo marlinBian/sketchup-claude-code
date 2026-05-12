@@ -99,6 +99,26 @@ IMPORT_MANIFEST_SCHEMA: dict[str, Any] = {
         "processing_steps": {"type": "array", "items": {"type": "object"}},
         "quality_flags": {"type": "array", "items": {"type": "string"}},
         "repair_history": {"type": "array", "items": {"type": "object"}},
+        "pipeline_timing": {
+            "type": "object",
+            "required": ["schema_version", "stage_traces"],
+            "properties": {
+                "schema_version": {"type": "string"},
+                "stage_traces": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                },
+                "stage_count": {"type": "integer", "minimum": 0},
+                "total_ms": {"type": "number", "minimum": 0},
+                "classification_totals_ms": {
+                    "type": "object",
+                    "additionalProperties": {"type": "number", "minimum": 0},
+                },
+                "latest_trace_type": {"type": "string"},
+                "updated_at": {"type": "string"},
+            },
+            "additionalProperties": True,
+        },
         "timing": {
             "type": "object",
             "required": [

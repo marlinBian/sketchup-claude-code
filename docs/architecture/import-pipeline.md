@@ -196,6 +196,25 @@ Raster/PDF/CAD extraction should produce a non-canonical
 contains visible room labels, dimension chains, or outside/void regions. This
 intermediate file is evidence, not canonical model state.
 
+The pipeline is split into timed stages:
+
+1. `prepare_import_source` registers the source and writes
+   `preprocessed/preprocessing_report.json`.
+2. `extract_floorplan_source` writes `extracted/raw_extraction.json`. The
+   built-in extractor is intentionally conservative: it records file metadata
+   and basic image dimensions when available, and marks rich geometry as
+   unavailable unless a richer extractor actually produced it.
+3. `generate_source_interpretation` creates the deterministic
+   `extracted/source_interpretation.json` handoff. In the coarse baseline it
+   creates an editable rectangular shell with explicit quality flags instead of
+   pretending that walls, rooms, or openings were recognized from pixels.
+4. `import_floorplan_to_model` consumes `source_interpretation_path` and writes
+   canonical `design_model.json` truth.
+
+External agent/vision/CAD/OCR semantic work may happen between extraction and
+interpretation, but it should be recorded with `record_import_stage_timing` so
+the manifest shows real latency outside the deterministic product CLI.
+
 Useful interpretation fields:
 
 - `dimension_chains`: axis-specific measured chains from the source, such as a
@@ -244,7 +263,12 @@ region, or a required source adjacency disappears.
 The first tool set should be small and structured:
 
 - `register_import_source`
+- `prepare_import_source`
+- `extract_floorplan_source`
+- `generate_source_interpretation`
+- `record_import_stage_timing`
 - `import_floorplan_to_model`
+- `import_source_pipeline`
 - `get_import_summary`
 - `rescale_imported_model`
 - `normalize_imported_wall_alignment`
@@ -403,9 +427,10 @@ file or an explicit non-file-backed source-reference draft, plus
 10. Produce a headless bridge trace for imported walls and hosted opening
    operations that create wall pieces, sills, headers, and thin door/window
    markers.
-11. Expose list, summary, rescale, wall-alignment normalization, corner-notch
-   repair, boundary coverage review/repair, review, and repair tools through MCP
-   and CLI.
+11. Expose staged prepare/extract/interpret/generate commands plus list,
+   summary, rescale, wall-alignment normalization, corner-notch repair,
+   boundary coverage review/repair, review, and repair tools through MCP and
+   CLI.
 
 Richer extractors should replace only the extraction stage. They must keep the
 same manifest, generated truth, quality flag, source-fidelity constraint, and

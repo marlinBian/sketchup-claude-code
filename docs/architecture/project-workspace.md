@@ -105,8 +105,15 @@ Agents can inspect project state through MCP tools:
   returned entity IDs and operation metadata back into `design_model.json`
 - `register_import_source` registers DWG, DXF, PDF, image, scan, photo, or other
   source material under `imports/<import_id>/`
+- `prepare_import_source`, `extract_floorplan_source`, and
+  `generate_source_interpretation` split import preprocessing, extraction, and
+  source interpretation into timed handoff stages before canonical truth is
+  written
 - `import_floorplan_to_model` generates editable first-pass working truth from
   a registered or provided source without routine preflight confirmation
+- `import_source_pipeline` runs the staged coarse path when rich extraction is
+  unavailable, and `record_import_stage_timing` lets runtime agents record slow
+  external vision or semantic stages in the import manifest
 - `list_import_sessions` and `get_import_summary` inspect retained import
   manifests, generated model IDs, quality flags, scale, and assumptions
 - `rescale_imported_model`, `normalize_imported_wall_alignment`,

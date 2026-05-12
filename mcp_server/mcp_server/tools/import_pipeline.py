@@ -161,6 +161,31 @@ IMPORT_TIMING_PHASES: dict[str, dict[str, Any]] = {
         "classification": "model_vision_or_external_extractor",
         "budget_ms": None,
     },
+    "source_preprocessing": {
+        "label": "Source preprocessing",
+        "classification": "deterministic_extractor",
+        "budget_ms": 1000.0,
+    },
+    "source_extraction": {
+        "label": "Source extraction",
+        "classification": "deterministic_extractor",
+        "budget_ms": 2000.0,
+    },
+    "source_interpretation_generation": {
+        "label": "Source interpretation generation",
+        "classification": "deterministic_cli",
+        "budget_ms": 1000.0,
+    },
+    "import_pipeline": {
+        "label": "Import source pipeline",
+        "classification": "deterministic_cli",
+        "budget_ms": None,
+    },
+    "agent_semantic_interpretation": {
+        "label": "Agent semantic interpretation",
+        "classification": "agent_llm",
+        "budget_ms": None,
+    },
     "source_interpretation_loading_normalization": {
         "label": "Source interpretation loading and normalization",
         "classification": "deterministic_cli",
@@ -198,6 +223,9 @@ IMPORT_TIMING_PHASES: dict[str, dict[str, Any]] = {
     },
 }
 IMPORT_TOTAL_BUDGET_MS = 5000.0
+PIPELINE_TIMING_SCHEMA_VERSION = "1.0"
+RAW_EXTRACTION_SCHEMA_VERSION = "1.0"
+SOURCE_INTERPRETATION_SCHEMA_VERSION = "1.0"
 
 
 def utc_now() -> str:
@@ -395,6 +423,141 @@ def format_import_timing_summary(timing: dict[str, Any]) -> str:
     if diagnostics.get("slow_stage_hint"):
         lines.append(f"Hint: {diagnostics['slow_stage_hint']}")
     return "\n".join(lines)
+
+
+def append_pipeline_timing(
+    manifest: dict[str, Any],
+    timing_trace: dict[str, Any],
+) -> dict[str, Any]:
+    """Append one stage timing trace to an import-level pipeline trace."""
+    pipeline = manifest.setdefault(
+        "pipeline_timing",
+        {
+            "schema_version": PIPELINE_TIMING_SCHEMA_VERSION,
+            "stage_traces": [],
+        },
+    )
+    pipeline.setdefault("schema_version", PIPELINE_TIMING_SCHEMA_VERSION)
+    pipeline.setdefault("stage_traces", []).append(timing_trace)
+    stage_traces = [
+        trace
+        for trace in pipeline.get("stage_traces", [])
+        if isinstance(trace, dict)
+    ]
+    classification_totals_ms: dict[str, float] = {}
+    for trace in stage_traces:
+        for classification, duration in trace.get(
+            "classification_totals_ms",
+            {},
+        ).items():
+            classification_totals_ms[str(classification)] = round(
+                classification_totals_ms.get(str(classification), 0.0)
+                + float(duration),
+                3,
+            )
+    pipeline["stage_count"] = len(stage_traces)
+    pipeline["total_ms"] = round(
+        sum(float(trace.get("total_ms", 0.0)) for trace in stage_traces),
+        3,
+    )
+    pipeline["classification_totals_ms"] = classification_totals_ms
+    pipeline["latest_trace_type"] = timing_trace.get("trace_type")
+    pipeline["updated_at"] = utc_now()
+    return pipeline
+
+
+def stored_source_path(project_path: str | Path, manifest: dict[str, Any]) -> Path:
+    """Return the local stored source path from an import manifest."""
+    root = Path(project_path).expanduser().resolve()
+    stored = str(manifest.get("source", {}).get("stored_path", "")).strip()
+    if not stored:
+        raise ValueError("import manifest source.stored_path is missing.")
+    path = Path(stored)
+    if not path.is_absolute():
+        path = root / path
+    return path
+
+
+def maybe_read_png_size(path: Path) -> dict[str, int] | None:
+    """Return PNG pixel dimensions without adding an image dependency."""
+    with path.open("rb") as handle:
+        data = handle.read(24)
+    if len(data) < 24 or data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
+        return None
+    return {
+        "pixel_width": int.from_bytes(data[16:20], "big"),
+        "pixel_height": int.from_bytes(data[20:24], "big"),
+    }
+
+
+def maybe_read_jpeg_size(path: Path) -> dict[str, int] | None:
+    """Return JPEG pixel dimensions without adding an image dependency."""
+    with path.open("rb") as handle:
+        if handle.read(2) != b"\xff\xd8":
+            return None
+        while True:
+            marker_prefix = handle.read(1)
+            if not marker_prefix:
+                return None
+            if marker_prefix != b"\xff":
+                continue
+            marker = handle.read(1)
+            while marker == b"\xff":
+                marker = handle.read(1)
+            if marker in {b"\xd8", b"\xd9"}:
+                continue
+            length_bytes = handle.read(2)
+            if len(length_bytes) != 2:
+                return None
+            segment_length = int.from_bytes(length_bytes, "big")
+            if segment_length < 2:
+                return None
+            if marker and marker[0] in {
+                0xC0,
+                0xC1,
+                0xC2,
+                0xC3,
+                0xC5,
+                0xC6,
+                0xC7,
+                0xC9,
+                0xCA,
+                0xCB,
+                0xCD,
+                0xCE,
+                0xCF,
+            }:
+                payload = handle.read(5)
+                if len(payload) != 5:
+                    return None
+                return {
+                    "pixel_height": int.from_bytes(payload[1:3], "big"),
+                    "pixel_width": int.from_bytes(payload[3:5], "big"),
+                }
+            handle.seek(segment_length - 2, 1)
+
+
+def read_image_dimensions(path: Path) -> dict[str, Any] | None:
+    """Return best-effort raster dimensions for common formats."""
+    extension = path.suffix.lower()
+    readers: list[Callable[[Path], dict[str, int] | None]] = []
+    if extension == ".png":
+        readers = [maybe_read_png_size]
+    elif extension in {".jpg", ".jpeg"}:
+        readers = [maybe_read_jpeg_size]
+    else:
+        readers = [maybe_read_png_size, maybe_read_jpeg_size]
+    for reader in readers:
+        try:
+            dimensions = reader(path)
+        except OSError:
+            dimensions = None
+        if dimensions:
+            return {
+                **dimensions,
+                "source": "tool_extracted",
+            }
+    return None
 
 
 def import_safe_id(value: str) -> str:
@@ -788,6 +951,16 @@ def load_project_import_manifest(
     return manifest, manifest_path
 
 
+def save_project_import_manifest(
+    manifest_path: str | Path,
+    manifest: dict[str, Any],
+) -> None:
+    """Save one loaded import manifest or raise a ValueError."""
+    saved, errors = save_import_manifest(manifest_path, manifest)
+    if not saved:
+        raise ValueError("; ".join(errors))
+
+
 def source_confidence(source_type: str, has_explicit_dimensions: bool) -> float:
     """Return a conservative import confidence for deterministic interpretation."""
     if has_explicit_dimensions:
@@ -934,6 +1107,584 @@ def opening_payloads(
                 "assumptions": [*assumptions, "Window inferred on the north wall."],
             },
         },
+    }
+
+
+def prepare_import_source(
+    project_path: str | Path,
+    *,
+    source_path: str | Path | None = None,
+    source_reference: str | None = None,
+    source_reference_type: str = "chat_image_attachment",
+    import_id: str | None = None,
+    label: str | None = None,
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    """Register and preprocess one import source without generating model truth."""
+    timing = ImportTimingTrace(trace_type="prepare_import_source")
+    root = Path(project_path).expanduser().resolve()
+    if source_path is not None and source_reference is not None:
+        raise ValueError("Use either source_path or source_reference, not both.")
+
+    with timing.phase("source_registration") as phase:
+        if source_path is not None:
+            registered = register_import_source(
+                root,
+                source_path,
+                import_id=import_id,
+                label=label,
+                overwrite=overwrite,
+            )
+            chosen_id = registered["import_id"]
+            phase["details"] = {"mode": "source_path", "import_id": chosen_id}
+        elif source_reference is not None:
+            registered = register_import_source_reference(
+                root,
+                source_reference,
+                import_id=import_id,
+                label=label,
+                source_reference_type=source_reference_type,
+                overwrite=overwrite,
+            )
+            chosen_id = registered["import_id"]
+            phase["details"] = {"mode": "source_reference", "import_id": chosen_id}
+        elif import_id is not None:
+            chosen_id = import_safe_id(import_id)
+            phase["details"] = {"mode": "existing_manifest", "import_id": chosen_id}
+        else:
+            raise ValueError("source_path, source_reference, or import_id is required.")
+        manifest, manifest_file = load_project_import_manifest(root, chosen_id)
+
+    with timing.phase("source_preprocessing") as phase:
+        session_dir = import_session_path(root, chosen_id)
+        preprocessed_dir = session_dir / "preprocessed"
+        preprocessed_dir.mkdir(parents=True, exist_ok=True)
+        source = manifest.get("source", {})
+        source_type = str(source.get("source_type", "unknown"))
+        file_backed = source_is_file_backed(manifest)
+        source_file = stored_source_path(root, manifest)
+        source_exists = source_file.exists()
+        source_metadata: dict[str, Any] = {
+            "source_type": source_type,
+            "file_backed": file_backed,
+            "stored_path": source.get("stored_path"),
+            "filename": source.get("filename"),
+            "size_bytes": source.get("size_bytes"),
+            "sha256": source.get("sha256"),
+        }
+        if file_backed:
+            source_metadata["source_exists"] = source_exists
+            if not source_exists:
+                raise FileNotFoundError(f"stored import source not found: {source_file}")
+        image_dimensions = (
+            read_image_dimensions(source_file)
+            if file_backed and source_exists and source_type == "image"
+            else None
+        )
+        if image_dimensions:
+            source_metadata["image"] = image_dimensions
+        report_path = preprocessed_dir / "preprocessing_report.json"
+        report = {
+            "schema_version": "1.0",
+            "import_id": chosen_id,
+            "created_at": utc_now(),
+            "status": "prepared",
+            "source": source_metadata,
+            "outputs": {
+                "normalized_source_path": source.get("stored_path"),
+                "preprocessing_report_path": project_relative_path(root, report_path),
+            },
+            "preview": {
+                "created": False,
+                "reason": "No rasterization or preview renderer is bundled in the headless baseline.",
+            },
+            "next_stage": "extract_floorplan_source",
+        }
+        report_path.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        append_processing_step(
+            manifest,
+            "prepare_import_source",
+            details={
+                "preprocessing_report_path": project_relative_path(root, report_path),
+                "source_type": source_type,
+                "file_backed": file_backed,
+                "image_dimensions_detected": image_dimensions is not None,
+            },
+        )
+        phase["details"] = {
+            "preprocessing_report_path": project_relative_path(root, report_path),
+            "image_dimensions_detected": image_dimensions is not None,
+        }
+
+    timing_trace = timing.finish()
+    append_pipeline_timing(manifest, timing_trace)
+    save_project_import_manifest(manifest_file, manifest)
+    return {
+        "project_path": str(root),
+        "import_id": chosen_id,
+        "manifest_path": str(manifest_file),
+        "preprocessing_report_path": project_relative_path(root, report_path),
+        "status": "prepared",
+        "source_type": str(manifest.get("source", {}).get("source_type", "unknown")),
+        "timing": timing_trace,
+        "pipeline_timing": manifest.get("pipeline_timing"),
+    }
+
+
+def extract_floorplan_source(
+    project_path: str | Path,
+    import_id: str,
+    *,
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    """Extract deterministic source metadata into raw_extraction.json."""
+    timing = ImportTimingTrace(trace_type="extract_floorplan_source")
+    root = Path(project_path).expanduser().resolve()
+    chosen_id = import_safe_id(import_id)
+    manifest, manifest_file = load_project_import_manifest(root, chosen_id)
+
+    with timing.phase("source_extraction") as phase:
+        session_dir = import_session_path(root, chosen_id)
+        extracted_dir = session_dir / "extracted"
+        extracted_dir.mkdir(parents=True, exist_ok=True)
+        raw_path = extracted_dir / "raw_extraction.json"
+        if raw_path.exists() and not overwrite:
+            raise FileExistsError(
+                f"Raw extraction already exists: {raw_path}. Use overwrite=True."
+            )
+        preprocessing_report_path = session_dir / "preprocessed" / "preprocessing_report.json"
+        preprocessing_report = None
+        if preprocessing_report_path.exists():
+            preprocessing_report = json.loads(
+                preprocessing_report_path.read_text(encoding="utf-8")
+            )
+        source = manifest.get("source", {})
+        source_type = str(source.get("source_type", "unknown"))
+        file_backed = source_is_file_backed(manifest)
+        source_file = stored_source_path(root, manifest)
+        source_exists = source_file.exists()
+        if file_backed and not source_exists:
+            raise FileNotFoundError(f"stored import source not found: {source_file}")
+        image_dimensions = (
+            read_image_dimensions(source_file)
+            if file_backed and source_exists and source_type == "image"
+            else None
+        )
+        quality_flags = ["rich_geometry_unavailable"]
+        if source_type in RASTER_INTERPRETATION_SOURCE_TYPES:
+            quality_flags.append("raster_or_document_interpretation")
+        if source_type in {"dwg", "dxf"}:
+            quality_flags.append("cad_layers_not_semantically_verified")
+        if image_dimensions is None and source_type == "image":
+            quality_flags.append("image_pixel_dimensions_unavailable")
+        raw_extraction = {
+            "schema_version": RAW_EXTRACTION_SCHEMA_VERSION,
+            "import_id": chosen_id,
+            "created_at": utc_now(),
+            "status": "extracted",
+            "extractor": {
+                "name": "built_in_metadata_extractor",
+                "origin": "tool_extracted",
+                "capabilities": [
+                    "source_file_metadata",
+                    "basic_png_jpeg_dimensions",
+                    "coarse_import_handoff",
+                ],
+                "limitations": [
+                    "Does not perform OCR, CAD layer parsing, or wall/opening recognition.",
+                    "Does not produce source-verified geometric primitives.",
+                ],
+            },
+            "source": {
+                "source_type": source_type,
+                "file_backed": file_backed,
+                "stored_path": source.get("stored_path"),
+                "filename": source.get("filename"),
+                "sha256": source.get("sha256"),
+                "size_bytes": source.get("size_bytes"),
+            },
+            "preprocessing_report_path": (
+                project_relative_path(root, preprocessing_report_path)
+                if preprocessing_report is not None
+                else None
+            ),
+            "image": image_dimensions,
+            "geometry": {
+                "rich_geometry_available": False,
+                "space_candidates": [],
+                "walls": [],
+                "openings": [],
+                "constraints": {},
+            },
+            "quality_flags": dedupe_quality_flags(quality_flags),
+            "recommended_next_stage": "generate_source_interpretation",
+        }
+        raw_path.write_text(
+            json.dumps(raw_extraction, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        append_processing_step(
+            manifest,
+            "extract_floorplan_source",
+            details={
+                "raw_extraction_path": project_relative_path(root, raw_path),
+                "extractor": raw_extraction["extractor"]["name"],
+                "rich_geometry_available": False,
+            },
+        )
+        manifest["quality_flags"] = dedupe_quality_flags(
+            [
+                flag
+                for flag in manifest.get("quality_flags", [])
+                if flag != "scale_missing"
+            ]
+            + raw_extraction["quality_flags"]
+        )
+        phase["details"] = {
+            "raw_extraction_path": project_relative_path(root, raw_path),
+            "rich_geometry_available": False,
+        }
+
+    timing_trace = timing.finish()
+    append_pipeline_timing(manifest, timing_trace)
+    save_project_import_manifest(manifest_file, manifest)
+    return {
+        "project_path": str(root),
+        "import_id": chosen_id,
+        "manifest_path": str(manifest_file),
+        "raw_extraction_path": project_relative_path(root, raw_path),
+        "status": "extracted",
+        "rich_geometry_available": False,
+        "timing": timing_trace,
+        "pipeline_timing": manifest.get("pipeline_timing"),
+    }
+
+
+def generate_source_interpretation(
+    project_path: str | Path,
+    import_id: str,
+    *,
+    raw_extraction_path: str | Path | None = None,
+    width: float | None = None,
+    depth: float | None = None,
+    strategy: str = "coarse",
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    """Generate source_interpretation.json from raw extraction evidence."""
+    if strategy != "coarse":
+        raise ValueError("Only strategy='coarse' is currently supported.")
+    if width is not None and width <= 0:
+        raise ValueError("width must be positive when provided.")
+    if depth is not None and depth <= 0:
+        raise ValueError("depth must be positive when provided.")
+
+    timing = ImportTimingTrace(trace_type="generate_source_interpretation")
+    root = Path(project_path).expanduser().resolve()
+    chosen_id = import_safe_id(import_id)
+    manifest, manifest_file = load_project_import_manifest(root, chosen_id)
+
+    with timing.phase("source_interpretation_generation") as phase:
+        session_dir = import_session_path(root, chosen_id)
+        extracted_dir = session_dir / "extracted"
+        extracted_dir.mkdir(parents=True, exist_ok=True)
+        raw_path = (
+            Path(raw_extraction_path).expanduser().resolve()
+            if raw_extraction_path is not None
+            else extracted_dir / "raw_extraction.json"
+        )
+        if not raw_path.exists():
+            raise FileNotFoundError(
+                f"raw extraction not found: {raw_path}. Run extract-floorplan-source first."
+            )
+        raw_extraction = json.loads(raw_path.read_text(encoding="utf-8"))
+        output_path = extracted_dir / "source_interpretation.json"
+        if output_path.exists() and not overwrite:
+            raise FileExistsError(
+                f"Source interpretation already exists: {output_path}. Use overwrite=True."
+            )
+
+        source_type = str(manifest.get("source", {}).get("source_type", "unknown"))
+        has_explicit_dimensions = width is not None and depth is not None
+        model_width = float(width if width is not None else DEFAULT_IMPORTED_WIDTH)
+        model_depth = float(depth if depth is not None else DEFAULT_IMPORTED_DEPTH)
+        ids = imported_entity_ids(chosen_id)
+        assumptions = [
+            "Generated from the product's coarse deterministic extraction handoff.",
+            "No source-verified wall, opening, or room geometry was available.",
+            "Use this as a fast editable baseline, not as source-fidelity proof.",
+        ]
+        if not has_explicit_dimensions:
+            assumptions.append(
+                f"Scale estimated as {model_width:g} mm by {model_depth:g} mm."
+            )
+        footprint = [
+            [0.0, 0.0, 0.0],
+            [model_width, 0.0, 0.0],
+            [model_width, model_depth, 0.0],
+            [0.0, model_depth, 0.0],
+        ]
+        source_provenance = {
+            "origin": "tool_extracted",
+            "stage": "generate_source_interpretation",
+            "raw_extraction_path": project_relative_path(root, raw_path),
+            "rich_geometry_available": False,
+        }
+        interpretation = {
+            "version": SOURCE_INTERPRETATION_SCHEMA_VERSION,
+            "import_id": chosen_id,
+            "created_at": utc_now(),
+            "autonomous_first": True,
+            "strategy": strategy,
+            "source": {
+                "source_type": source_type,
+                "provenance": source_provenance,
+            },
+            "source_extraction_path": project_relative_path(root, raw_path),
+            "scale": {
+                "units": "mm",
+                "source": "user_dimensions" if has_explicit_dimensions else "estimated",
+                "confidence": 0.55 if has_explicit_dimensions else 0.3,
+                "width": model_width,
+                "depth": model_depth,
+                "coordinate_system": "x east, y north, origin at model south-west corner",
+            },
+            "space_candidates": [
+                {
+                    "id": f"{chosen_id}_coarse_shell_candidate",
+                    "space_id": ids["space_id"],
+                    "type": "other",
+                    "confidence": 0.45 if has_explicit_dimensions else 0.3,
+                    "footprint": footprint,
+                    "source": {
+                        "kind": "import_floorplan",
+                        "import_id": chosen_id,
+                        "provenance": source_provenance,
+                        "assumptions": assumptions,
+                    },
+                }
+            ],
+            "walls": [
+                {
+                    "wall_id": ids["wall_ids"][0],
+                    "path": [[0.0, 0.0, 0.0], [model_width, 0.0, 0.0]],
+                    "space_refs": [ids["space_id"]],
+                },
+                {
+                    "wall_id": ids["wall_ids"][1],
+                    "path": [[model_width, 0.0, 0.0], [model_width, model_depth, 0.0]],
+                    "space_refs": [ids["space_id"]],
+                },
+                {
+                    "wall_id": ids["wall_ids"][2],
+                    "path": [[model_width, model_depth, 0.0], [0.0, model_depth, 0.0]],
+                    "space_refs": [ids["space_id"]],
+                },
+                {
+                    "wall_id": ids["wall_ids"][3],
+                    "path": [[0.0, model_depth, 0.0], [0.0, 0.0, 0.0]],
+                    "space_refs": [ids["space_id"]],
+                },
+            ],
+            "openings": [],
+            "constraints": {},
+            "assumptions": assumptions,
+            "quality_flags": dedupe_quality_flags(
+                [
+                    "source_interpreted_as_rectangular_shell",
+                    "coarse_source_interpretation",
+                    "geometry_not_source_verified",
+                    *raw_extraction.get("quality_flags", []),
+                ]
+            ),
+        }
+        output_path.write_text(
+            json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        append_processing_step(
+            manifest,
+            "generate_source_interpretation",
+            details={
+                "source_interpretation_path": project_relative_path(root, output_path),
+                "strategy": strategy,
+                "rich_geometry_available": False,
+            },
+        )
+        phase["details"] = {
+            "source_interpretation_path": project_relative_path(root, output_path),
+            "strategy": strategy,
+            "space_candidate_count": 1,
+            "wall_count": 4,
+        }
+
+    timing_trace = timing.finish()
+    append_pipeline_timing(manifest, timing_trace)
+    save_project_import_manifest(manifest_file, manifest)
+    return {
+        "project_path": str(root),
+        "import_id": chosen_id,
+        "manifest_path": str(manifest_file),
+        "raw_extraction_path": project_relative_path(root, raw_path),
+        "source_interpretation_path": project_relative_path(root, output_path),
+        "status": "source_interpretation_generated",
+        "strategy": strategy,
+        "timing": timing_trace,
+        "pipeline_timing": manifest.get("pipeline_timing"),
+    }
+
+
+def record_import_stage_timing(
+    project_path: str | Path,
+    import_id: str,
+    *,
+    stage_name: str,
+    duration_ms: float,
+    classification: str = "agent_llm",
+    status: str = "success",
+    details: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Record externally measured import stage timing in the manifest."""
+    if duration_ms < 0:
+        raise ValueError("duration_ms must be non-negative.")
+    if status not in {"success", "skipped", "failed"}:
+        raise ValueError("status must be one of: success, skipped, failed.")
+    root = Path(project_path).expanduser().resolve()
+    chosen_id = import_safe_id(import_id)
+    manifest, manifest_file = load_project_import_manifest(root, chosen_id)
+    phase: dict[str, Any] = {
+        "name": stage_name,
+        "label": stage_name.replace("_", " "),
+        "classification": classification,
+        "status": status,
+        "started_at": utc_now(),
+        "ended_at": utc_now(),
+        "duration_ms": float(duration_ms),
+    }
+    if details:
+        phase["details"] = details
+    trace = {
+        "schema_version": "1.0",
+        "trace_type": "external_import_stage",
+        "scope": "external_runtime_stage",
+        "started_at": utc_now(),
+        "ended_at": utc_now(),
+        "total_ms": float(duration_ms),
+        "classification_totals_ms": {classification: float(duration_ms)}
+        if status != "skipped"
+        else {},
+        "phases": [phase],
+        "slowest_phase": {
+            "name": stage_name,
+            "duration_ms": float(duration_ms),
+            "classification": classification,
+        }
+        if status != "skipped"
+        else None,
+        "budget": {
+            "total_budget_ms": IMPORT_TOTAL_BUDGET_MS,
+            "within_budget": True,
+            "total_within_budget": True,
+            "over_budget_phases": [],
+        },
+        "diagnostics": {
+            "mcp_tool_overhead_timed": False,
+            "model_vision_extraction_timed": classification
+            in {"agent_llm", "model_vision_or_external_extractor"},
+            "live_sketchup_execution_timed": classification == "live_sketchup",
+            "slow_stage_hint": "External runtime stage timing was recorded by the caller.",
+        },
+    }
+    append_pipeline_timing(manifest, trace)
+    append_processing_step(
+        manifest,
+        "record_import_stage_timing",
+        details={
+            "stage_name": stage_name,
+            "classification": classification,
+            "duration_ms": duration_ms,
+        },
+    )
+    save_project_import_manifest(manifest_file, manifest)
+    return {
+        "project_path": str(root),
+        "import_id": chosen_id,
+        "manifest_path": str(manifest_file),
+        "status": "recorded",
+        "timing": trace,
+        "pipeline_timing": manifest.get("pipeline_timing"),
+    }
+
+
+def import_source_pipeline(
+    project_path: str | Path,
+    *,
+    source_path: str | Path | None = None,
+    source_reference: str | None = None,
+    source_reference_type: str = "chat_image_attachment",
+    import_id: str | None = None,
+    label: str | None = None,
+    width: float | None = None,
+    depth: float | None = None,
+    mode: str = "coarse",
+    wall_height: float = DEFAULT_WALL_HEIGHT,
+    wall_thickness: float = DEFAULT_WALL_THICKNESS,
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    """Run the staged source import pipeline through deterministic model generation."""
+    if mode != "coarse":
+        raise ValueError("Only mode='coarse' is currently supported.")
+    prepared = prepare_import_source(
+        project_path,
+        source_path=source_path,
+        source_reference=source_reference,
+        source_reference_type=source_reference_type,
+        import_id=import_id,
+        label=label,
+        overwrite=overwrite,
+    )
+    chosen_id = prepared["import_id"]
+    extracted = extract_floorplan_source(
+        project_path,
+        chosen_id,
+        overwrite=True,
+    )
+    interpretation = generate_source_interpretation(
+        project_path,
+        chosen_id,
+        raw_extraction_path=Path(project_path).expanduser().resolve()
+        / extracted["raw_extraction_path"],
+        width=width,
+        depth=depth,
+        strategy="coarse",
+        overwrite=True,
+    )
+    imported = import_floorplan_to_model(
+        project_path,
+        import_id=chosen_id,
+        width=width,
+        depth=depth,
+        source_interpretation_path=Path(project_path).expanduser().resolve()
+        / interpretation["source_interpretation_path"],
+        wall_height=wall_height,
+        wall_thickness=wall_thickness,
+        overwrite=True,
+    )
+    manifest, _manifest_file = load_project_import_manifest(project_path, chosen_id)
+    return {
+        "project_path": str(Path(project_path).expanduser().resolve()),
+        "import_id": chosen_id,
+        "status": "imported",
+        "mode": mode,
+        "stages": {
+            "prepare": prepared,
+            "extract": extracted,
+            "source_interpretation": interpretation,
+            "model_generation": imported,
+        },
+        "pipeline_timing": manifest.get("pipeline_timing"),
     }
 
 
@@ -1768,6 +2519,12 @@ def write_interpretation_constraints_if_present(
         constraints = derive_source_constraints_from_interpretation(interpretation)
         derived_constraints = constraints is not None
     if not isinstance(constraints, dict):
+        return None
+    has_constraints = any(
+        isinstance(constraints.get(key), list) and constraints[key]
+        for key in SOURCE_CONSTRAINT_LIST_KEYS
+    )
+    if not has_constraints:
         return None
     root = Path(project_path).expanduser().resolve()
     chosen_id = import_safe_id(import_id)
@@ -3617,8 +4374,9 @@ def import_floorplan_to_model(
         "source_preprocessing_or_extraction",
         (
             "import-floorplan consumes a registered source and optional "
-            "source_interpretation_path; agent vision/OCR/CAD extraction happens "
-            "before this command unless a future extractor is wired in."
+            "source_interpretation_path. Use prepare-import, extract-floorplan-source, "
+            "and generate-source-interpretation to time preprocessing/extraction "
+            "before deterministic model generation."
         ),
     )
 
@@ -3955,6 +4713,7 @@ def import_floorplan_to_model(
     if manifest_for_timing is None:
         raise ValueError("; ".join(manifest_errors))
     manifest_for_timing["timing"] = timing_trace
+    append_pipeline_timing(manifest_for_timing, timing_trace)
     saved_manifest, manifest_errors = save_import_manifest(
         manifest_file,
         manifest_for_timing,

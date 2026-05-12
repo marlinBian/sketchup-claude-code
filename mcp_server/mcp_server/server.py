@@ -78,15 +78,20 @@ from mcp_server.tools.project_executor import (
     execute_project_execution_plan,
 )
 from mcp_server.tools.import_pipeline import (
+    extract_floorplan_source as extract_floorplan_source_file,
+    generate_source_interpretation as generate_source_interpretation_file,
     get_import_summary as get_import_summary_file,
     import_floorplan_to_model as import_floorplan_to_model_file,
+    import_source_pipeline as import_source_pipeline_file,
     list_import_sessions as list_import_sessions_file,
     normalize_imported_wall_alignment as normalize_imported_wall_alignment_file,
+    prepare_import_source as prepare_import_source_file,
     repair_imported_boundary_coverage as repair_imported_boundary_coverage_file,
     repair_imported_shell_overreach as repair_imported_shell_overreach_file,
     register_import_source as register_import_source_file,
     repair_imported_corner_notch as repair_imported_corner_notch_file,
     repair_imported_region as repair_imported_region_file,
+    record_import_stage_timing as record_import_stage_timing_file,
     rescale_imported_model as rescale_imported_model_file,
     review_imported_boundary_coverage as review_imported_boundary_coverage_file,
     review_imported_wall_space_consistency as review_imported_wall_space_consistency_file,
@@ -1778,6 +1783,157 @@ async def register_import_source(
         )
     except Exception as e:
         return TextContent(type="text", text=f"Import source failed: {str(e)}")
+
+
+@mcp.tool()
+async def prepare_import_source(
+    project_path: str,
+    source_path: str | None = None,
+    source_reference: str | None = None,
+    source_reference_type: str = "chat_image_attachment",
+    import_id: str | None = None,
+    label: str | None = None,
+    overwrite: bool = False,
+) -> TextContent:
+    """Register and preprocess a floor-plan source without writing model truth."""
+    try:
+        result = prepare_import_source_file(
+            project_path,
+            source_path=source_path,
+            source_reference=source_reference,
+            source_reference_type=source_reference_type,
+            import_id=import_id,
+            label=label,
+            overwrite=overwrite,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Prepare import failed: {str(e)}")
+
+
+@mcp.tool()
+async def extract_floorplan_source(
+    project_path: str,
+    import_id: str,
+    overwrite: bool = False,
+) -> TextContent:
+    """Extract deterministic source metadata into raw_extraction.json."""
+    try:
+        result = extract_floorplan_source_file(
+            project_path,
+            import_id,
+            overwrite=overwrite,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Extract floorplan source failed: {str(e)}")
+
+
+@mcp.tool()
+async def generate_source_interpretation(
+    project_path: str,
+    import_id: str,
+    raw_extraction_path: str | None = None,
+    width: float | None = None,
+    depth: float | None = None,
+    strategy: str = "coarse",
+    overwrite: bool = False,
+) -> TextContent:
+    """Generate source_interpretation.json from raw extraction evidence."""
+    try:
+        result = generate_source_interpretation_file(
+            project_path,
+            import_id,
+            raw_extraction_path=raw_extraction_path,
+            width=width,
+            depth=depth,
+            strategy=strategy,
+            overwrite=overwrite,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(
+            type="text",
+            text=f"Generate source interpretation failed: {str(e)}",
+        )
+
+
+@mcp.tool()
+async def record_import_stage_timing(
+    project_path: str,
+    import_id: str,
+    stage_name: str,
+    duration_ms: float,
+    classification: str = "agent_llm",
+    status: str = "success",
+) -> TextContent:
+    """Record externally measured import stage timing in the manifest."""
+    try:
+        result = record_import_stage_timing_file(
+            project_path,
+            import_id,
+            stage_name=stage_name,
+            duration_ms=duration_ms,
+            classification=classification,
+            status=status,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(
+            type="text",
+            text=f"Record import stage timing failed: {str(e)}",
+        )
+
+
+@mcp.tool()
+async def import_source_pipeline(
+    project_path: str,
+    source_path: str | None = None,
+    source_reference: str | None = None,
+    source_reference_type: str = "chat_image_attachment",
+    import_id: str | None = None,
+    label: str | None = None,
+    width: float | None = None,
+    depth: float | None = None,
+    mode: str = "coarse",
+    wall_height: float = 2800,
+    wall_thickness: float = 120,
+    overwrite: bool = False,
+) -> TextContent:
+    """Run prepare, extraction, interpretation, and deterministic model generation."""
+    try:
+        result = import_source_pipeline_file(
+            project_path,
+            source_path=source_path,
+            source_reference=source_reference,
+            source_reference_type=source_reference_type,
+            import_id=import_id,
+            label=label,
+            width=width,
+            depth=depth,
+            mode=mode,
+            wall_height=wall_height,
+            wall_thickness=wall_thickness,
+            overwrite=overwrite,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Import source pipeline failed: {str(e)}")
 
 
 @mcp.tool()

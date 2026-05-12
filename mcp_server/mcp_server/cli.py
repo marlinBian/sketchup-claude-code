@@ -30,16 +30,21 @@ from mcp_server.tools.project_executor import (
     execute_project_execution_plan,
 )
 from mcp_server.tools.import_pipeline import (
+    extract_floorplan_source,
     format_import_timing_summary,
+    generate_source_interpretation,
     get_import_summary,
     import_floorplan_to_model,
+    import_source_pipeline,
     list_import_sessions,
     normalize_imported_wall_alignment,
+    prepare_import_source,
     repair_imported_boundary_coverage,
     repair_imported_shell_overreach,
     register_import_source,
     repair_imported_corner_notch,
     repair_imported_region,
+    record_import_stage_timing,
     rescale_imported_model,
     review_imported_boundary_coverage,
     review_imported_wall_space_consistency,
@@ -327,6 +332,169 @@ def build_parser() -> argparse.ArgumentParser:
         "--force",
         action="store_true",
         help="Overwrite an existing import manifest with the same ID",
+    )
+
+    prepare_import_parser = subparsers.add_parser(
+        "prepare-import",
+        help="Register and preprocess source material without writing model truth",
+    )
+    prepare_import_parser.add_argument("project_path", help="Design project directory")
+    prepare_import_parser.add_argument(
+        "source_path",
+        nargs="?",
+        help="Source file to register and prepare. Omit when --import-id already exists.",
+    )
+    prepare_import_parser.add_argument(
+        "--source-reference",
+        help="Runtime source reference for a chat/CLI attachment with no local file path.",
+    )
+    prepare_import_parser.add_argument(
+        "--source-reference-type",
+        default="chat_image_attachment",
+        choices=["chat_image_attachment"],
+        help="Type for --source-reference.",
+    )
+    prepare_import_parser.add_argument("--import-id", help="Optional import session ID")
+    prepare_import_parser.add_argument("--label", help="Optional human label")
+    prepare_import_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing import manifest with the same ID",
+    )
+    prepare_import_parser.add_argument(
+        "--timing-summary",
+        action="store_true",
+        help="Print a concise timing summary instead of the full JSON result",
+    )
+
+    extract_floorplan_parser = subparsers.add_parser(
+        "extract-floorplan-source",
+        help="Extract deterministic source metadata into raw_extraction.json",
+    )
+    extract_floorplan_parser.add_argument("project_path", help="Design project directory")
+    extract_floorplan_parser.add_argument("import_id", help="Import session ID")
+    extract_floorplan_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing raw_extraction.json",
+    )
+    extract_floorplan_parser.add_argument(
+        "--timing-summary",
+        action="store_true",
+        help="Print a concise timing summary instead of the full JSON result",
+    )
+
+    generate_interpretation_parser = subparsers.add_parser(
+        "generate-source-interpretation",
+        help="Generate source_interpretation.json from raw extraction evidence",
+    )
+    generate_interpretation_parser.add_argument(
+        "project_path",
+        help="Design project directory",
+    )
+    generate_interpretation_parser.add_argument("import_id", help="Import session ID")
+    generate_interpretation_parser.add_argument(
+        "--raw-extraction",
+        dest="raw_extraction_path",
+        help="Optional raw_extraction.json path. Defaults to imports/<id>/extracted/raw_extraction.json.",
+    )
+    generate_interpretation_parser.add_argument("--width", type=float, help="Known plan width in mm")
+    generate_interpretation_parser.add_argument("--depth", type=float, help="Known plan depth in mm")
+    generate_interpretation_parser.add_argument(
+        "--strategy",
+        default="coarse",
+        choices=["coarse"],
+        help="Interpretation strategy.",
+    )
+    generate_interpretation_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing source_interpretation.json",
+    )
+    generate_interpretation_parser.add_argument(
+        "--timing-summary",
+        action="store_true",
+        help="Print a concise timing summary instead of the full JSON result",
+    )
+
+    import_source_pipeline_parser = subparsers.add_parser(
+        "import-source-pipeline",
+        help="Run prepare, extraction, interpretation, and model generation stages",
+    )
+    import_source_pipeline_parser.add_argument(
+        "project_path",
+        help="Design project directory",
+    )
+    import_source_pipeline_parser.add_argument(
+        "source_path",
+        nargs="?",
+        help="Source file to import. Omit when --source-reference is used.",
+    )
+    import_source_pipeline_parser.add_argument(
+        "--source-reference",
+        help="Runtime source reference for a chat/CLI attachment with no local file path.",
+    )
+    import_source_pipeline_parser.add_argument(
+        "--source-reference-type",
+        default="chat_image_attachment",
+        choices=["chat_image_attachment"],
+        help="Type for --source-reference.",
+    )
+    import_source_pipeline_parser.add_argument("--import-id", help="Optional import session ID")
+    import_source_pipeline_parser.add_argument("--label", help="Optional human label")
+    import_source_pipeline_parser.add_argument("--width", type=float, help="Known plan width in mm")
+    import_source_pipeline_parser.add_argument("--depth", type=float, help="Known plan depth in mm")
+    import_source_pipeline_parser.add_argument(
+        "--mode",
+        default="coarse",
+        choices=["coarse"],
+        help="Pipeline mode.",
+    )
+    import_source_pipeline_parser.add_argument(
+        "--wall-height",
+        type=float,
+        default=2800,
+        help="Assumed wall height in mm",
+    )
+    import_source_pipeline_parser.add_argument(
+        "--wall-thickness",
+        type=float,
+        default=120,
+        help="Assumed wall thickness in mm",
+    )
+    import_source_pipeline_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing import artifacts for the same import ID",
+    )
+    import_source_pipeline_parser.add_argument(
+        "--timing-summary",
+        action="store_true",
+        help="Print the model-generation timing summary instead of the full JSON result",
+    )
+
+    record_import_stage_parser = subparsers.add_parser(
+        "record-import-stage-timing",
+        help="Record externally measured import stage timing in the manifest",
+    )
+    record_import_stage_parser.add_argument("project_path", help="Design project directory")
+    record_import_stage_parser.add_argument("import_id", help="Import session ID")
+    record_import_stage_parser.add_argument("stage_name", help="Stage name to record")
+    record_import_stage_parser.add_argument(
+        "duration_ms",
+        type=float,
+        help="Measured duration in milliseconds",
+    )
+    record_import_stage_parser.add_argument(
+        "--classification",
+        default="agent_llm",
+        help="Timing classification such as agent_llm, deterministic_extractor, or live_sketchup",
+    )
+    record_import_stage_parser.add_argument(
+        "--status",
+        default="success",
+        choices=["success", "skipped", "failed"],
+        help="Recorded stage status",
     )
 
     import_floorplan_parser = subparsers.add_parser(
@@ -1001,6 +1169,82 @@ def main(argv: list[str] | None = None) -> int:
                 import_id=args.import_id,
                 label=args.label,
                 overwrite=args.force,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "prepare-import":
+            result = prepare_import_source(
+                args.project_path,
+                source_path=args.source_path,
+                source_reference=args.source_reference,
+                source_reference_type=args.source_reference_type,
+                import_id=args.import_id,
+                label=args.label,
+                overwrite=args.force,
+            )
+            if args.timing_summary:
+                print(format_import_timing_summary(result["timing"]))
+            else:
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "extract-floorplan-source":
+            result = extract_floorplan_source(
+                args.project_path,
+                args.import_id,
+                overwrite=args.force,
+            )
+            if args.timing_summary:
+                print(format_import_timing_summary(result["timing"]))
+            else:
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "generate-source-interpretation":
+            result = generate_source_interpretation(
+                args.project_path,
+                args.import_id,
+                raw_extraction_path=args.raw_extraction_path,
+                width=args.width,
+                depth=args.depth,
+                strategy=args.strategy,
+                overwrite=args.force,
+            )
+            if args.timing_summary:
+                print(format_import_timing_summary(result["timing"]))
+            else:
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "import-source-pipeline":
+            result = import_source_pipeline(
+                args.project_path,
+                source_path=args.source_path,
+                source_reference=args.source_reference,
+                source_reference_type=args.source_reference_type,
+                import_id=args.import_id,
+                label=args.label,
+                width=args.width,
+                depth=args.depth,
+                mode=args.mode,
+                wall_height=args.wall_height,
+                wall_thickness=args.wall_thickness,
+                overwrite=args.force,
+            )
+            if args.timing_summary:
+                print(
+                    format_import_timing_summary(
+                        result["stages"]["model_generation"]["timing"]
+                    )
+                )
+            else:
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "record-import-stage-timing":
+            result = record_import_stage_timing(
+                args.project_path,
+                args.import_id,
+                stage_name=args.stage_name,
+                duration_ms=args.duration_ms,
+                classification=args.classification,
+                status=args.status,
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0

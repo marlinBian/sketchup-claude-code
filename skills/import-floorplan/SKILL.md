@@ -35,13 +35,32 @@ Import this floor plan and generate an editable model.
 
 1. Use `get_project_state` to confirm the current project path and whether
    existing imported model truth may be overwritten.
-2. For raster/PDF/CAD sources where room labels, dimension chains, openings,
-   exterior shell steps, or outside blank regions are visible, run a vision or
-   vector extraction pass before import. Start from the source file itself, not
-   from an old `design_model.json`, old `source_interpretation.json`, dynamic
-   skill notes, or prior failed truth. Create a project-local
-   `source_interpretation.json` with the extracted geometry and source
-   constraints.
+2. Split import into explicit stages instead of asking the agent to parse the
+   whole drawing and write final truth in one pass:
+
+   - Call `prepare_import_source` to register the actual source and write a
+     preprocessing report.
+   - Call `extract_floorplan_source` to create `raw_extraction.json` from
+     deterministic source metadata or richer extractor output when available.
+   - Call `generate_source_interpretation` when the raw extraction is enough for
+     a deterministic coarse handoff, or write a richer `source_interpretation.json`
+     from a fresh vision/vector/CAD semantic interpretation pass when the source
+     visibly contains rooms, dimensions, openings, outside regions, or facade
+     closure evidence.
+   - If the runtime agent performs a slow semantic/vision stage outside the MCP
+     server, call `record_import_stage_timing` so the import manifest shows where
+     real latency occurred.
+   - Call `import_floorplan_to_model` with `source_interpretation_path` for the
+     deterministic model-generation stage, or use `import_source_pipeline` for a
+     fast coarse import when rich extraction is unavailable.
+
+   For raster/PDF/CAD sources where room labels, dimension chains, openings,
+   exterior shell steps, or outside blank regions are visible, the semantic
+   interpretation stage may use vision or vector extraction, but it must start
+   from the source file itself, not from an old `design_model.json`, old
+   `source_interpretation.json`, dynamic skill notes, or prior failed truth.
+   Create a project-local `source_interpretation.json` with the extracted
+   geometry and source constraints.
 
    The import source should be the actual file being interpreted whenever a
    local path is available. For a chat or CLI-attached image with no local file

@@ -9,10 +9,15 @@ from mcp_server.project_state import read_project_state
 from mcp_server.resources.design_model_schema import load_design_model
 from mcp_server.smoke import validate_project
 from mcp_server.tools.import_pipeline import (
+    extract_floorplan_source,
+    generate_source_interpretation,
     get_import_summary,
     import_floorplan_to_model,
+    import_source_pipeline,
     normalize_imported_wall_alignment,
+    prepare_import_source,
     register_import_source,
+    record_import_stage_timing,
     repair_imported_boundary_coverage,
     repair_imported_corner_notch,
     repair_imported_shell_overreach,
@@ -1090,6 +1095,115 @@ def test_register_import_source_creates_manifest_and_source_copy(tmp_path):
     assert copied_source.exists()
     assert manifest["source"]["source_type"] == "pdf"
     assert manifest["source"]["stored_path"] == "imports/import_001/source/floorplan.pdf"
+
+
+def test_staged_import_pipeline_records_extraction_handoff_and_timing(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, name="floorplan.png")
+
+    prepared = prepare_import_source(
+        project,
+        source_path=source,
+        import_id="import_001",
+    )
+    extracted = extract_floorplan_source(project, "import_001")
+    interpreted = generate_source_interpretation(
+        project,
+        "import_001",
+        width=6400,
+        depth=4200,
+    )
+    imported = import_floorplan_to_model(
+        project,
+        import_id="import_001",
+        source_interpretation_path=project / interpreted["source_interpretation_path"],
+        width=6400,
+        depth=4200,
+    )
+    recorded = record_import_stage_timing(
+        project,
+        "import_001",
+        stage_name="agent_semantic_interpretation",
+        duration_ms=25.0,
+        classification="agent_llm",
+    )
+    manifest = json.loads(
+        (project / "imports" / "import_001" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    raw_extraction = json.loads(
+        (project / extracted["raw_extraction_path"]).read_text(encoding="utf-8")
+    )
+    source_interpretation = json.loads(
+        (project / interpreted["source_interpretation_path"]).read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert prepared["status"] == "prepared"
+    assert extracted["rich_geometry_available"] is False
+    assert raw_extraction["extractor"]["origin"] == "tool_extracted"
+    assert source_interpretation["source"]["provenance"]["origin"] == "tool_extracted"
+    assert source_interpretation["quality_flags"] == [
+        "source_interpreted_as_rectangular_shell",
+        "coarse_source_interpretation",
+        "geometry_not_source_verified",
+        "rich_geometry_unavailable",
+        "raster_or_document_interpretation",
+        "image_pixel_dimensions_unavailable",
+    ]
+    assert imported["source_interpretation_used"] is True
+    assert imported["summary"]["opening_count"] == 0
+    assert imported["source_fidelity"] is None
+    assert recorded["status"] == "recorded"
+    assert manifest["timing"]["trace_type"] == "import_floorplan"
+    assert manifest["pipeline_timing"]["stage_count"] == 5
+    assert {
+        trace["trace_type"]
+        for trace in manifest["pipeline_timing"]["stage_traces"]
+    } == {
+        "prepare_import_source",
+        "extract_floorplan_source",
+        "generate_source_interpretation",
+        "import_floorplan",
+        "external_import_stage",
+    }
+    assert manifest["pipeline_timing"]["classification_totals_ms"]["agent_llm"] == 25.0
+
+
+def test_import_source_pipeline_keeps_coarse_import_when_rich_extraction_absent(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, name="floorplan.pdf")
+
+    result = import_source_pipeline(
+        project,
+        source_path=source,
+        import_id="import_001",
+        width=5000,
+        depth=3200,
+    )
+    design_model, errors = load_design_model(str(project / "design_model.json"))
+    manifest = json.loads(
+        (project / "imports" / "import_001" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert errors == []
+    assert result["status"] == "imported"
+    assert result["stages"]["extract"]["rich_geometry_available"] is False
+    assert result["stages"]["model_generation"]["source_interpretation_used"] is True
+    assert result["stages"]["model_generation"]["source_fidelity"] is None
+    assert design_model["spaces"]["import_001_space_001"]["footprint"][2] == [
+        5000.0,
+        3200.0,
+        0,
+    ]
+    assert manifest["pipeline_timing"]["stage_count"] == 4
+    assert manifest["pipeline_timing"]["latest_trace_type"] == "import_floorplan"
 
 
 def test_import_floorplan_to_model_writes_working_truth_and_trace(tmp_path):

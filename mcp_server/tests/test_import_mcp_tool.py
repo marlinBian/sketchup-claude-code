@@ -188,6 +188,80 @@ async def test_import_floorplan_to_model_tool_writes_project_truth(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_staged_import_mcp_tools_write_pipeline_artifacts(tmp_path):
+    from mcp_server import server
+
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, name="floorplan.pdf")
+
+    prepare_response = await server.prepare_import_source(
+        project_path=str(project),
+        source_path=str(source),
+        import_id="import_001",
+    )
+    prepare_data = json.loads(prepare_response.text)
+    extract_response = await server.extract_floorplan_source(
+        project_path=str(project),
+        import_id="import_001",
+    )
+    extract_data = json.loads(extract_response.text)
+    interpretation_response = await server.generate_source_interpretation(
+        project_path=str(project),
+        import_id="import_001",
+        width=4800,
+        depth=3600,
+    )
+    interpretation_data = json.loads(interpretation_response.text)
+    import_response = await server.import_floorplan_to_model(
+        project_path=str(project),
+        import_id="import_001",
+        source_interpretation_path=str(
+            project / interpretation_data["source_interpretation_path"]
+        ),
+        width=4800,
+        depth=3600,
+    )
+    import_data = json.loads(import_response.text)
+    timing_response = await server.record_import_stage_timing(
+        project_path=str(project),
+        import_id="import_001",
+        stage_name="agent_semantic_interpretation",
+        duration_ms=12.0,
+        classification="agent_llm",
+    )
+    timing_data = json.loads(timing_response.text)
+
+    assert prepare_data["status"] == "prepared"
+    assert extract_data["status"] == "extracted"
+    assert interpretation_data["status"] == "source_interpretation_generated"
+    assert import_data["source_interpretation_used"] is True
+    assert timing_data["pipeline_timing"]["stage_count"] == 5
+
+
+@pytest.mark.asyncio
+async def test_import_source_pipeline_mcp_tool_runs_coarse_pipeline(tmp_path):
+    from mcp_server import server
+
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, name="floorplan.pdf")
+
+    response = await server.import_source_pipeline(
+        project_path=str(project),
+        source_path=str(source),
+        import_id="import_001",
+        width=4200,
+        depth=3000,
+    )
+    data = json.loads(response.text)
+
+    assert data["status"] == "imported"
+    assert data["stages"]["extract"]["rich_geometry_available"] is False
+    assert data["pipeline_timing"]["stage_count"] == 4
+
+
+@pytest.mark.asyncio
 async def test_import_floorplan_to_model_tool_accepts_source_reference(tmp_path):
     from mcp_server import server
 
@@ -629,6 +703,116 @@ def test_cli_import_floorplan_can_emit_timing_summary(tmp_path, capsys):
     assert "- source_registration:" in output
     assert "agent-side vision/OCR/CAD extraction" in output
     assert manifest["timing"]["trace_type"] == "import_floorplan"
+
+
+def test_cli_staged_import_pipeline_commands(tmp_path, capsys):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, name="floorplan.png")
+
+    prepare_code = main(
+        [
+            "prepare-import",
+            str(project),
+            str(source),
+            "--import-id",
+            "import_001",
+            "--timing-summary",
+        ]
+    )
+    prepare_output = capsys.readouterr().out
+    extract_code = main(
+        [
+            "extract-floorplan-source",
+            str(project),
+            "import_001",
+            "--timing-summary",
+        ]
+    )
+    extract_output = capsys.readouterr().out
+    interpretation_code = main(
+        [
+            "generate-source-interpretation",
+            str(project),
+            "import_001",
+            "--width",
+            "6200",
+            "--depth",
+            "4100",
+            "--timing-summary",
+        ]
+    )
+    interpretation_output = capsys.readouterr().out
+    import_code = main(
+        [
+            "import-floorplan",
+            str(project),
+            "--import-id",
+            "import_001",
+            "--source-interpretation",
+            str(project / "imports" / "import_001" / "extracted" / "source_interpretation.json"),
+            "--width",
+            "6200",
+            "--depth",
+            "4100",
+        ]
+    )
+    import_output = json.loads(capsys.readouterr().out)
+    record_code = main(
+        [
+            "record-import-stage-timing",
+            str(project),
+            "import_001",
+            "agent_semantic_interpretation",
+            "42",
+            "--classification",
+            "agent_llm",
+        ]
+    )
+    record_output = json.loads(capsys.readouterr().out)
+    manifest = json.loads(
+        (project / "imports" / "import_001" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert prepare_code == 0
+    assert extract_code == 0
+    assert interpretation_code == 0
+    assert import_code == 0
+    assert record_code == 0
+    assert "- source_registration:" in prepare_output
+    assert "- source_extraction:" in extract_output
+    assert "- source_interpretation_generation:" in interpretation_output
+    assert import_output["source_interpretation_used"] is True
+    assert record_output["pipeline_timing"]["classification_totals_ms"]["agent_llm"] == 42.0
+    assert manifest["pipeline_timing"]["stage_count"] == 5
+
+
+def test_cli_import_source_pipeline_runs_all_stages(tmp_path, capsys):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, name="floorplan.pdf")
+
+    exit_code = main(
+        [
+            "import-source-pipeline",
+            str(project),
+            str(source),
+            "--import-id",
+            "import_001",
+            "--width",
+            "5000",
+            "--depth",
+            "3000",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert output["status"] == "imported"
+    assert output["stages"]["extract"]["rich_geometry_available"] is False
+    assert output["stages"]["model_generation"]["summary"]["space_count"] == 1
 
 
 def test_cli_import_floorplan_accepts_source_reference(tmp_path, capsys):

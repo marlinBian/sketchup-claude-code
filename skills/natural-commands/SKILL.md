@@ -31,15 +31,18 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
   Use `launch_sketchup_bridge` and report `possible_blockers` if
   `socket_ready` is false.
 - Import floor plan source: "import this floor plan", "导入这张户型图".
-  Use `import_floorplan_to_model` to register the source and write an editable
-  working model directly into `design_model.json`. If the source is a visible
-  chat/CLI attachment with no local file path, use `source_reference` with
+  Use the staged import flow: `prepare_import_source`,
+  `extract_floorplan_source`, `generate_source_interpretation`, then
+  `import_floorplan_to_model`; use `import_source_pipeline` for the fast coarse
+  path when rich extraction is unavailable. If the source is a visible chat/CLI
+  attachment with no local file path, use `source_reference` with
   `source_reference_type=chat_image_attachment` instead of inventing a text-note
   source file. When visible room labels, dimension chains, or outside blank
-  source regions are available, first create a source interpretation JSON and
-  pass it as `source_interpretation_path` so the import rejects overwide room
-  candidates and shell overreach before truth is saved. Do not ask the designer
-  to confirm routine wall, door, window, or numeric candidates before generating
+  source regions are available, create source interpretation from the original
+  source and pass it as `source_interpretation_path` so deterministic import can
+  reject bad candidates before truth is saved. Record slow external vision or
+  semantic stages with `record_import_stage_timing`. Do not ask the designer to
+  confirm routine wall, door, window, or numeric candidates before generating
   the first model. When updating SketchUp from the import, call
   `execute_project_model(clean_before_execute=True, clean_scope="all")` so old
   source images, template entities, and stale generated geometry are removed.
