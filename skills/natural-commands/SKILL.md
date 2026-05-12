@@ -31,25 +31,17 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
   Use `launch_sketchup_bridge` and report `possible_blockers` if
   `socket_ready` is false.
 - Import floor plan source: "import this floor plan", "导入这张户型图".
-  Use the staged import flow: `prepare_import_source`,
-  `extract_floorplan_source`, `generate_source_interpretation`, then
-  `import_floorplan_to_model`; use `import_source_pipeline` for the fast coarse
-  path when rich extraction is unavailable. If the source is a visible chat/CLI
-  attachment with no local file path, use `source_reference` with
+  Use the staged import flow from `import-floorplan`: prepare or reference the
+  source, extract, choose either fast coarse import or evidence-backed
+  `source_interpretation_path`, generate `design_model.json`, then clean-replay
+  to SketchUp when requested. If the source is a visible chat/CLI attachment
+  with no local file path, use `source_reference` with
   `source_reference_type=chat_image_attachment` instead of inventing a text-note
-  source file. When visible room labels, dimension chains, or outside blank
-  source regions are available, create source interpretation from the original
-  source and pass it as `source_interpretation_path` so deterministic import can
-  reject bad candidates before truth is saved. Record slow external vision or
-  semantic stages with `record_import_stage_timing`. Do not ask the designer to
-  confirm routine wall, door, window, or numeric candidates before generating
-  the first model. When updating SketchUp from the import, call
-  `execute_project_model(clean_before_execute=True, clean_scope="all")` so old
-  source images, template entities, and stale generated geometry are removed.
-  Imports that use `source_interpretation_path` or an unfiled
-  `source_reference` should return a tool-generated project-local dynamic skill;
-  use that skill as scoped memory rather than adding source-specific facts to
-  shipped skills.
+  source file. Do not ask the designer to confirm routine wall, door, window, or
+  numeric candidates before generating the first model. Claim source-fidelity
+  only when structured source constraints exist with honest provenance. Use the
+  tool-generated project-local dynamic skill as scoped memory; never add
+  source-specific facts to shipped skills.
 - Rescale imported source: "this plan should be 8200 mm wide",
   "这个户型整体宽度应该是 8200 毫米". Use `rescale_imported_model` or
   `repair_imported_region` rather than asking the designer to edit JSON.

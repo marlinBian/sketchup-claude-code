@@ -205,6 +205,56 @@ def test_product_runtime_skills_are_skill_directories():
         assert frontmatter["description"]
 
 
+def test_import_floorplan_runtime_skill_uses_staged_capability_contract():
+    skill_path = (
+        Path(__file__).resolve().parents[2]
+        / "skills"
+        / "import-floorplan"
+        / "SKILL.md"
+    )
+    text = skill_path.read_text(encoding="utf-8")
+
+    assert "## Capability Contract" in text
+    assert "## Default Workflow" in text
+    assert "**Fast coarse import**" in text
+    assert "**Evidence-backed import**" in text
+    assert "**Source-fidelity validation**" in text
+    assert "**Designer correction loop**" in text
+    assert "source_interpretation_path" in text
+    assert "record_import_stage_timing" in text
+
+
+def test_import_floorplan_runtime_skill_guards_source_specific_memory():
+    skill_path = (
+        Path(__file__).resolve().parents[2]
+        / "skills"
+        / "import-floorplan"
+        / "SKILL.md"
+    )
+    text = skill_path.read_text(encoding="utf-8")
+    normalized_text = re.sub(r"\s+", " ", text)
+
+    assert "<project>/.agents/skills/import-source-<import-id>/SKILL.md" in text
+    assert (
+        "Do not put source-specific facts into this shipped runtime skill"
+        in normalized_text
+    )
+    assert "must not become the geometry source of truth" in text
+    assert "Do not make validation pass by writing the expected answer" in normalized_text
+
+
+def test_import_floorplan_runtime_skill_stays_runtime_sized():
+    skill_path = (
+        Path(__file__).resolve().parents[2]
+        / "skills"
+        / "import-floorplan"
+        / "SKILL.md"
+    )
+    lines = skill_path.read_text(encoding="utf-8").splitlines()
+
+    assert len(lines) <= 260
+
+
 def test_wheel_contains_packaged_runtime_skills(tmp_path):
     if shutil.which("uv") is None:
         return
