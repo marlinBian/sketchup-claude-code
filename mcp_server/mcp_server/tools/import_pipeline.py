@@ -226,6 +226,22 @@ IMPORT_TOTAL_BUDGET_MS = 5000.0
 PIPELINE_TIMING_SCHEMA_VERSION = "1.0"
 RAW_EXTRACTION_SCHEMA_VERSION = "1.0"
 SOURCE_INTERPRETATION_SCHEMA_VERSION = "1.0"
+IMPORT_REVIEW_SCHEMA_VERSION = "1.0"
+IMPORT_CORRECTION_SCHEMA_VERSION = "1.0"
+IMPORT_REVIEW_STAGES = {
+    "coarse_import",
+    "scale_orientation",
+    "room_candidates",
+    "exterior_shell_negative_regions",
+    "openings",
+    "source_fidelity",
+}
+IMPORT_CORRECTION_PROVENANCE_ORIGINS = {
+    "designer_correction",
+    "manual_validation",
+    "agent_review",
+    "maintainer_debug",
+}
 
 
 def utc_now() -> str:
@@ -853,6 +869,7 @@ def write_import_dynamic_runtime_skill(
     interpretation_path: str | None,
     source_interpretation_path: str | None,
     source_constraints_path: str | None,
+    correction_evidence_path: str | None = None,
     lifecycle: str = "persistent-project-memory",
 ) -> dict[str, Any]:
     """Create or update project-local dynamic runtime skills for one import."""
@@ -907,6 +924,7 @@ source. `design_model.json` remains canonical truth.
 - generated_interpretation_path: {skill_markdown_value(interpretation_path)}
 - source_interpretation_path: {skill_markdown_value(source_interpretation_path)}
 - source_constraints_path: {skill_markdown_value(source_constraints_path)}
+- correction_evidence_path: {skill_markdown_value(correction_evidence_path)}
 
 ## Recognition Status
 
@@ -2241,6 +2259,71 @@ def normalize_source_interpretation_coordinates(
 def import_constraints_path(project_path: str | Path, import_id: str) -> Path:
     """Return the project-local source constraints path for one import."""
     return import_session_path(project_path, import_safe_id(import_id)) / "constraints.json"
+
+
+def import_corrections_path(project_path: str | Path, import_id: str) -> Path:
+    """Return the project-local structured corrections path for one import."""
+    return import_session_path(project_path, import_safe_id(import_id)) / "corrections.json"
+
+
+def import_correction_record_path(
+    project_path: str | Path,
+    import_id: str,
+    correction_id: str,
+) -> Path:
+    """Return the path for one correction record."""
+    safe_correction_id = re.sub(r"[^a-zA-Z0-9_]+", "_", correction_id).strip("_")
+    if not safe_correction_id:
+        raise ValueError("correction_id must contain at least one letter or number.")
+    return (
+        import_session_path(project_path, import_safe_id(import_id))
+        / "corrections"
+        / f"{safe_correction_id}.json"
+    )
+
+
+def load_import_corrections(
+    project_path: str | Path,
+    import_id: str,
+) -> tuple[dict[str, Any], Path]:
+    """Load structured correction evidence for one import."""
+    root = Path(project_path).expanduser().resolve()
+    chosen_id = import_safe_id(import_id)
+    path = import_corrections_path(root, chosen_id)
+    if not path.exists():
+        return {
+            "schema_version": IMPORT_CORRECTION_SCHEMA_VERSION,
+            "import_id": chosen_id,
+            "corrections": [],
+        }, path
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise ValueError(f"import corrections are not valid JSON: {error}") from error
+    if not isinstance(data, dict):
+        raise ValueError("import corrections must be a JSON object.")
+    data_import_id = data.get("import_id")
+    if data_import_id and import_safe_id(str(data_import_id)) != chosen_id:
+        raise ValueError(
+            f"corrections import_id {data_import_id!r} does not match {chosen_id!r}."
+        )
+    corrections = data.setdefault("corrections", [])
+    if not isinstance(corrections, list):
+        raise ValueError("import corrections field must be a list.")
+    data.setdefault("schema_version", IMPORT_CORRECTION_SCHEMA_VERSION)
+    data["import_id"] = chosen_id
+    return data, path
+
+
+def save_import_corrections(path: str | Path, data: dict[str, Any]) -> None:
+    """Persist structured correction evidence for one import."""
+    data["updated_at"] = utc_now()
+    corrections_path = Path(path)
+    corrections_path.parent.mkdir(parents=True, exist_ok=True)
+    corrections_path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 def load_import_constraints(
@@ -9271,6 +9354,553 @@ def review_model_against_import_source(
                 / "interpretation.json"
             ),
         },
+    }
+
+
+def source_constraint_detail_counts(
+    constraints: dict[str, Any] | None,
+) -> dict[str, int]:
+    """Return counts for supported source constraint groups."""
+    if not constraints:
+        return {}
+    detail_counts: dict[str, int] = {}
+    groups = {
+        "openings": ("opening_constraints", "door_constraints", "window_constraints"),
+        "walls": ("wall_constraints", "boundary_constraints"),
+        "exterior_outline": (
+            "exterior_outline_constraints",
+            "outline_constraints",
+            "wall_mass_outline_constraints",
+            "source_outline_constraints",
+        ),
+        "boundary_closure": (
+            "boundary_closure_constraints",
+            "space_boundary_constraints",
+            "required_boundary_constraints",
+        ),
+        "negative_regions": ("negative_region_constraints",),
+        "spaces": ("space_constraints", "space_footprint_constraints"),
+        "adjacency": (
+            "adjacency_constraints",
+            "space_adjacency_constraints",
+            "required_adjacencies",
+        ),
+        "alignment": ("alignment_constraints", "edge_alignment_constraints"),
+    }
+    for group_name, keys in groups.items():
+        detail_counts[group_name] = len(source_constraint_items(constraints, *keys))
+    return detail_counts
+
+
+def imported_generated_counts(
+    design_model: dict[str, Any],
+    import_id: str,
+) -> dict[str, int]:
+    """Return generated/imported model counts for one import session."""
+    ids = imported_ids_in_model(design_model, import_id)
+    return {
+        "spaces": len(ids["spaces"]),
+        "walls": len(ids["walls"]),
+        "openings": len(ids["openings"]),
+    }
+
+
+def correction_counts_by_stage(corrections: list[dict[str, Any]]) -> dict[str, int]:
+    """Return pending correction counts keyed by review stage."""
+    counts: dict[str, int] = {}
+    for correction in corrections:
+        if not isinstance(correction, dict):
+            continue
+        status = str(correction.get("status", "proposed"))
+        if status in {"resolved", "accepted", "applied", "rejected"}:
+            continue
+        stage = str(correction.get("stage", "source_fidelity"))
+        counts[stage] = counts.get(stage, 0) + 1
+    return counts
+
+
+def manifest_has_weak_source_geometry(manifest: dict[str, Any]) -> bool:
+    """Return whether the import pipeline only had weak/coarse source geometry."""
+    for step in manifest.get("processing_steps", []):
+        if not isinstance(step, dict):
+            continue
+        details = step.get("details", {})
+        if not isinstance(details, dict):
+            continue
+        if details.get("rich_geometry_available") is False:
+            return True
+        if details.get("strategy") == "coarse":
+            return True
+    return False
+
+
+def import_review_stage(
+    stage: str,
+    status: str,
+    summary: str,
+    *,
+    evidence: dict[str, Any] | None = None,
+    recommended_tools: list[str] | None = None,
+) -> dict[str, Any]:
+    """Return one compact review-stage record."""
+    record: dict[str, Any] = {
+        "stage": stage,
+        "status": status,
+        "summary": summary,
+    }
+    if evidence:
+        record["evidence"] = evidence
+    if recommended_tools:
+        record["recommended_tools"] = recommended_tools
+    return record
+
+
+def apply_stage_correction_status(
+    stage: dict[str, Any],
+    correction_counts: dict[str, int],
+) -> dict[str, Any]:
+    """Mark a stage as needing review when structured corrections are pending."""
+    pending_count = correction_counts.get(str(stage["stage"]), 0)
+    if not pending_count:
+        return stage
+    updated = {**stage}
+    updated["status"] = "needs_review"
+    evidence = dict(updated.get("evidence", {}))
+    evidence["pending_corrections"] = pending_count
+    updated["evidence"] = evidence
+    tools = list(updated.get("recommended_tools", []))
+    if "record_import_correction" not in tools:
+        tools.append("record_import_correction")
+    updated["recommended_tools"] = tools
+    return updated
+
+
+def review_import_stages(
+    project_path: str | Path,
+    import_id: str,
+) -> dict[str, Any]:
+    """Review staged import progress without requiring SketchUp."""
+    root = Path(project_path).expanduser().resolve()
+    chosen_id = import_safe_id(import_id)
+    manifest, manifest_file = load_project_import_manifest(root, chosen_id)
+    design_model_path = find_design_model_path(root)
+    design_model, errors = load_design_model(str(design_model_path))
+    if errors or design_model is None:
+        raise ValueError("; ".join(errors))
+
+    session = design_model.get("import_sessions", {}).get(chosen_id)
+    session = session if isinstance(session, dict) else {}
+    quality_flags = dedupe_quality_flags(
+        [
+            *manifest.get("quality_flags", []),
+            *session.get("quality_flags", []),
+        ]
+    )
+    counts = imported_generated_counts(design_model, chosen_id)
+    corrections, corrections_file = load_import_corrections(root, chosen_id)
+    pending_corrections = correction_counts_by_stage(corrections.get("corrections", []))
+    constraints, constraints_file = load_import_constraints(root, chosen_id)
+    constraint_counts = source_constraint_detail_counts(constraints)
+    constraint_total = sum(constraint_counts.values())
+
+    boundary_review: dict[str, Any] | None = None
+    wall_space_review: dict[str, Any] | None = None
+    if counts["spaces"] and counts["walls"]:
+        boundary_review = review_imported_boundary_coverage(root, chosen_id)
+        wall_space_review = review_imported_wall_space_consistency(root, chosen_id)
+
+    stages: list[dict[str, Any]] = []
+    generated = counts["spaces"] + counts["walls"] + counts["openings"]
+    stages.append(
+        import_review_stage(
+            "coarse_import",
+            "complete" if generated else "pending",
+            (
+                "Working truth exists for this import."
+                if generated
+                else "No generated imported model truth is present yet."
+            ),
+            evidence={"generated_counts": counts, "quality_flags": quality_flags},
+            recommended_tools=[] if generated else ["import_source_pipeline"],
+        )
+    )
+
+    scale = manifest.get("scale", {})
+    scale_confidence = float(scale.get("confidence", 0) or 0)
+    scale_source = str(scale.get("source", "unspecified"))
+    scale_needs_review = (
+        "scale_missing" in quality_flags
+        or "scale_estimated" in quality_flags
+        or scale_source == "unspecified"
+        or scale_confidence < 0.5
+    )
+    stages.append(
+        import_review_stage(
+            "scale_orientation",
+            "needs_review" if scale_needs_review else "complete",
+            (
+                "Scale or orientation should be reviewed before precision edits."
+                if scale_needs_review
+                else "Scale metadata is present with usable confidence."
+            ),
+            evidence={"scale": scale},
+            recommended_tools=["rescale_imported_model"] if scale_needs_review else [],
+        )
+    )
+
+    weak_source_geometry = manifest_has_weak_source_geometry(manifest)
+    room_needs_review = (
+        counts["spaces"] == 0
+        or "coarse_source_interpretation" in quality_flags
+        or "rich_geometry_unavailable" in quality_flags
+        or weak_source_geometry
+    )
+    stages.append(
+        import_review_stage(
+            "room_candidates",
+            "needs_review" if room_needs_review else "complete",
+            (
+                "Room/space candidates are coarse or missing."
+                if room_needs_review
+                else "Imported room/space candidates are available."
+            ),
+            evidence={
+                "space_count": counts["spaces"],
+                "space_constraint_count": constraint_counts.get("spaces", 0),
+            },
+            recommended_tools=(
+                ["record_import_correction"] if room_needs_review else []
+            ),
+        )
+    )
+
+    overreach_count = int((wall_space_review or {}).get("overreach_count", 0) or 0)
+    boundary_gap_count = int((boundary_review or {}).get("gap_count", 0) or 0)
+    shell_needs_review = overreach_count > 0 or boundary_gap_count > 0
+    stages.append(
+        import_review_stage(
+            "exterior_shell_negative_regions",
+            "needs_review" if shell_needs_review else ("complete" if generated else "pending"),
+            (
+                "Shell coverage or outside-region consistency needs review."
+                if shell_needs_review
+                else "No headless shell overreach or boundary gap was found."
+            ),
+            evidence={
+                "boundary_gap_count": boundary_gap_count,
+                "overreach_count": overreach_count,
+                "negative_region_constraint_count": constraint_counts.get(
+                    "negative_regions",
+                    0,
+                ),
+                "exterior_outline_constraint_count": constraint_counts.get(
+                    "exterior_outline",
+                    0,
+                ),
+                "boundary_closure_constraint_count": constraint_counts.get(
+                    "boundary_closure",
+                    0,
+                ),
+            },
+            recommended_tools=(
+                [
+                    "review_imported_boundary_coverage",
+                    "review_imported_wall_space_consistency",
+                    "record_import_correction",
+                ]
+                if shell_needs_review
+                else []
+            ),
+        )
+    )
+
+    opening_constraint_count = constraint_counts.get("openings", 0)
+    opening_status = (
+        "complete"
+        if counts["openings"] or opening_constraint_count
+        else ("pending" if generated else "pending")
+    )
+    stages.append(
+        import_review_stage(
+            "openings",
+            opening_status,
+            (
+                "Openings exist or source opening constraints are available."
+                if opening_status == "complete"
+                else "No doors/windows/passages are represented yet."
+            ),
+            evidence={
+                "opening_count": counts["openings"],
+                "opening_constraint_count": opening_constraint_count,
+            },
+            recommended_tools=(
+                ["record_import_correction"] if opening_status != "complete" else []
+            ),
+        )
+    )
+
+    source_fidelity = manifest.get("source_fidelity")
+    if not constraint_total:
+        source_fidelity_status = "pending"
+        source_fidelity_summary = "No source constraints are available yet."
+        source_fidelity_tools = ["record_import_correction"]
+    elif isinstance(source_fidelity, dict) and source_fidelity.get("status") == "passed":
+        source_fidelity_status = "complete"
+        source_fidelity_summary = "Latest source-fidelity validation passed."
+        source_fidelity_tools = []
+    elif isinstance(source_fidelity, dict) and source_fidelity.get("status") == "failed":
+        source_fidelity_status = "needs_review"
+        source_fidelity_summary = "Latest source-fidelity validation failed."
+        source_fidelity_tools = [
+            "validate_import_source_constraints",
+            "record_import_correction",
+        ]
+    else:
+        source_fidelity_status = "pending"
+        source_fidelity_summary = "Source constraints exist but have not been validated."
+        source_fidelity_tools = ["validate_import_source_constraints"]
+    stages.append(
+        import_review_stage(
+            "source_fidelity",
+            source_fidelity_status,
+            source_fidelity_summary,
+            evidence={
+                "constraints_path": (
+                    project_relative_path(root, constraints_file)
+                    if constraints_file.exists()
+                    else None
+                ),
+                "constraint_counts": constraint_counts,
+                "latest_source_fidelity": source_fidelity,
+            },
+            recommended_tools=source_fidelity_tools,
+        )
+    )
+
+    stages = [
+        apply_stage_correction_status(stage, pending_corrections)
+        for stage in stages
+    ]
+    if any(stage["status"] == "needs_review" for stage in stages):
+        overall_status = "needs_review"
+    elif any(stage["status"] == "pending" for stage in stages):
+        overall_status = "partial"
+    else:
+        overall_status = "complete"
+
+    recommended_tools = sorted(
+        {
+            tool
+            for stage in stages
+            for tool in stage.get("recommended_tools", [])
+        }
+    )
+    correction_count = len(corrections.get("corrections", []))
+    review_state = {
+        "schema_version": IMPORT_REVIEW_SCHEMA_VERSION,
+        "updated_at": utc_now(),
+        "overall_status": overall_status,
+        "stage_count": len(stages),
+        "stages": stages,
+        "correction_evidence_path": (
+            project_relative_path(root, corrections_file)
+            if corrections_file.exists()
+            else None
+        ),
+        "correction_count": correction_count,
+        "pending_correction_count": sum(pending_corrections.values()),
+    }
+    manifest["review_state"] = review_state
+    append_processing_step(
+        manifest,
+        "review_import_stages",
+        details={
+            "overall_status": overall_status,
+            "stage_count": len(stages),
+            "recommended_tools": recommended_tools,
+        },
+    )
+    save_project_import_manifest(manifest_file, manifest)
+
+    return {
+        "project_path": str(root),
+        "design_model_path": str(design_model_path),
+        "import_id": chosen_id,
+        "manifest_path": str(manifest_file),
+        "status": overall_status,
+        "stages": stages,
+        "recommended_tools": recommended_tools,
+        "correction_evidence_path": review_state["correction_evidence_path"],
+        "correction_count": correction_count,
+        "pending_correction_count": review_state["pending_correction_count"],
+        "source_constraints_path": (
+            project_relative_path(root, constraints_file)
+            if constraints_file.exists()
+            else None
+        ),
+    }
+
+
+def next_import_correction_id(corrections: list[dict[str, Any]]) -> str:
+    """Return the next deterministic correction ID."""
+    existing = {
+        str(item.get("id"))
+        for item in corrections
+        if isinstance(item, dict) and item.get("id")
+    }
+    index = 1
+    while True:
+        correction_id = f"correction_{index:03d}"
+        if correction_id not in existing:
+            return correction_id
+        index += 1
+
+
+def record_import_correction(
+    project_path: str | Path,
+    import_id: str,
+    *,
+    stage: str,
+    correction_type: str,
+    summary: str,
+    details: dict[str, Any] | None = None,
+    target_id: str | None = None,
+    provenance_origin: str = "designer_correction",
+    confidence: float | None = None,
+    correction_id: str | None = None,
+    update_dynamic_skill: bool = True,
+) -> dict[str, Any]:
+    """Record structured import correction evidence without mutating truth."""
+    root = Path(project_path).expanduser().resolve()
+    chosen_id = import_safe_id(import_id)
+    if stage not in IMPORT_REVIEW_STAGES:
+        supported = ", ".join(sorted(IMPORT_REVIEW_STAGES))
+        raise ValueError(f"stage must be one of: {supported}")
+    if not correction_type.strip():
+        raise ValueError("correction_type is required.")
+    if not summary.strip():
+        raise ValueError("summary is required.")
+    if details is not None and not isinstance(details, dict):
+        raise ValueError("details must be an object.")
+    if provenance_origin not in IMPORT_CORRECTION_PROVENANCE_ORIGINS:
+        supported = ", ".join(sorted(IMPORT_CORRECTION_PROVENANCE_ORIGINS))
+        raise ValueError(f"provenance_origin must be one of: {supported}")
+    if confidence is not None and (confidence < 0 or confidence > 1):
+        raise ValueError("confidence must be between 0 and 1.")
+
+    manifest, manifest_file = load_project_import_manifest(root, chosen_id)
+    corrections, corrections_file = load_import_corrections(root, chosen_id)
+    correction_items = corrections.setdefault("corrections", [])
+    chosen_correction_id = correction_id or next_import_correction_id(correction_items)
+    created_at = utc_now()
+    record: dict[str, Any] = {
+        "id": chosen_correction_id,
+        "created_at": created_at,
+        "status": "proposed",
+        "stage": stage,
+        "correction_type": correction_type.strip(),
+        "summary": summary.strip(),
+        "provenance": {"origin": provenance_origin},
+    }
+    if target_id:
+        record["target_id"] = target_id
+    if confidence is not None:
+        record["confidence"] = float(confidence)
+    if details:
+        record["details"] = details
+
+    correction_items.append(record)
+    corrections["latest_correction_id"] = chosen_correction_id
+    save_import_corrections(corrections_file, corrections)
+
+    single_record_path = import_correction_record_path(
+        root,
+        chosen_id,
+        chosen_correction_id,
+    )
+    single_record_path.parent.mkdir(parents=True, exist_ok=True)
+    single_record_path.write_text(
+        json.dumps(record, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    relative_corrections_path = project_relative_path(root, corrections_file)
+    manifest["quality_flags"] = dedupe_quality_flags(
+        [
+            *manifest.get("quality_flags", []),
+            "import_has_structured_corrections",
+            "import_review_corrections_pending",
+        ]
+    )
+    manifest["review_corrections"] = {
+        "schema_version": IMPORT_CORRECTION_SCHEMA_VERSION,
+        "path": relative_corrections_path,
+        "latest_correction_id": chosen_correction_id,
+        "count": len(correction_items),
+        "pending_count": len(
+            [
+                item
+                for item in correction_items
+                if isinstance(item, dict)
+                and item.get("status", "proposed")
+                not in {"resolved", "accepted", "applied", "rejected"}
+            ]
+        ),
+        "updated_at": created_at,
+    }
+    append_processing_step(
+        manifest,
+        "record_import_correction",
+        details={
+            "correction_id": chosen_correction_id,
+            "stage": stage,
+            "correction_type": correction_type.strip(),
+            "target_id": target_id,
+            "corrections_path": relative_corrections_path,
+        },
+    )
+    save_project_import_manifest(manifest_file, manifest)
+
+    dynamic_runtime_skill = None
+    if update_dynamic_skill:
+        extracted_path = import_session_path(root, chosen_id) / "extracted" / "interpretation.json"
+        source_interpretation_path = (
+            import_session_path(root, chosen_id)
+            / "extracted"
+            / "source_interpretation.json"
+        )
+        constraints_path = import_constraints_path(root, chosen_id)
+        dynamic_runtime_skill = write_import_dynamic_runtime_skill(
+            root,
+            import_id=chosen_id,
+            manifest=manifest,
+            interpretation_path=(
+                project_relative_path(root, extracted_path)
+                if extracted_path.exists()
+                else None
+            ),
+            source_interpretation_path=(
+                project_relative_path(root, source_interpretation_path)
+                if source_interpretation_path.exists()
+                else None
+            ),
+            source_constraints_path=(
+                project_relative_path(root, constraints_path)
+                if constraints_path.exists()
+                else None
+            ),
+            correction_evidence_path=relative_corrections_path,
+        )
+
+    return {
+        "project_path": str(root),
+        "import_id": chosen_id,
+        "status": "correction_recorded",
+        "correction": record,
+        "corrections_path": str(corrections_file),
+        "correction_record_path": str(single_record_path),
+        "dynamic_runtime_skill": dynamic_runtime_skill,
+        "design_model_mutated": False,
     }
 
 

@@ -240,6 +240,50 @@ async def test_staged_import_mcp_tools_write_pipeline_artifacts(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_import_review_and_correction_mcp_tools_persist_evidence(tmp_path):
+    from mcp_server import server
+
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, name="floorplan.png")
+    import_response = await server.import_source_pipeline(
+        project_path=str(project),
+        source_path=str(source),
+        import_id="import_001",
+    )
+    import_data = json.loads(import_response.text)
+    review_response = await server.review_import_stages(
+        project_path=str(project),
+        import_id="import_001",
+    )
+    review_data = json.loads(review_response.text)
+    correction_response = await server.record_import_correction(
+        project_path=str(project),
+        import_id="import_001",
+        stage="openings",
+        correction_type="missing_opening",
+        summary="A visible door/window opening is missing from the imported model.",
+        details={"source_area": "designer-marked region"},
+        target_id="import_001_wall_south",
+    )
+    correction_data = json.loads(correction_response.text)
+    updated_review_response = await server.review_import_stages(
+        project_path=str(project),
+        import_id="import_001",
+    )
+    updated_review = json.loads(updated_review_response.text)
+
+    assert import_data["status"] == "imported"
+    assert review_data["status"] == "needs_review"
+    assert correction_data["status"] == "correction_recorded"
+    assert correction_data["design_model_mutated"] is False
+    assert correction_data["dynamic_runtime_skill"]["skill_name"] == (
+        "import-source-import-001"
+    )
+    assert updated_review["pending_correction_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_import_source_pipeline_mcp_tool_runs_coarse_pipeline(tmp_path):
     from mcp_server import server
 
@@ -813,6 +857,47 @@ def test_cli_import_source_pipeline_runs_all_stages(tmp_path, capsys):
     assert output["status"] == "imported"
     assert output["stages"]["extract"]["rich_geometry_available"] is False
     assert output["stages"]["model_generation"]["summary"]["space_count"] == 1
+
+
+def test_cli_import_review_and_correction_commands(tmp_path, capsys):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, name="floorplan.pdf")
+    main(
+        [
+            "import-source-pipeline",
+            str(project),
+            str(source),
+            "--import-id",
+            "import_001",
+        ]
+    )
+    capsys.readouterr()
+
+    review_code = main(["review-import-stages", str(project), "import_001"])
+    review = json.loads(capsys.readouterr().out)
+    correction_code = main(
+        [
+            "record-import-correction",
+            str(project),
+            "import_001",
+            "--stage",
+            "scale_orientation",
+            "--correction-type",
+            "known_dimension",
+            "--summary",
+            "Designer supplied a better overall width.",
+            "--details-json",
+            '{"target_width": 8200}',
+        ]
+    )
+    correction = json.loads(capsys.readouterr().out)
+
+    assert review_code == 0
+    assert correction_code == 0
+    assert review["status"] == "needs_review"
+    assert correction["status"] == "correction_recorded"
+    assert correction["correction"]["details"] == {"target_width": 8200}
 
 
 def test_cli_import_floorplan_accepts_source_reference(tmp_path, capsys):

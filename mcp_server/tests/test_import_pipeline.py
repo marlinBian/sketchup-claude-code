@@ -16,6 +16,7 @@ from mcp_server.tools.import_pipeline import (
     import_source_pipeline,
     normalize_imported_wall_alignment,
     prepare_import_source,
+    record_import_correction,
     register_import_source,
     record_import_stage_timing,
     repair_imported_boundary_coverage,
@@ -25,6 +26,7 @@ from mcp_server.tools.import_pipeline import (
     rescale_imported_model,
     review_imported_boundary_coverage,
     review_imported_wall_space_consistency,
+    review_import_stages,
     review_model_against_import_source,
     validate_import_source_constraints,
 )
@@ -1204,6 +1206,102 @@ def test_import_source_pipeline_keeps_coarse_import_when_rich_extraction_absent(
     ]
     assert manifest["pipeline_timing"]["stage_count"] == 4
     assert manifest["pipeline_timing"]["latest_trace_type"] == "import_floorplan"
+
+
+def test_review_import_stages_persists_partial_review_state(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, name="floorplan.png")
+    import_source_pipeline(project, source_path=source, import_id="import_001")
+
+    result = review_import_stages(project, "import_001")
+    manifest = json.loads(
+        (project / "imports" / "import_001" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    stages = {stage["stage"]: stage for stage in result["stages"]}
+
+    assert result["status"] == "needs_review"
+    assert stages["coarse_import"]["status"] == "complete"
+    assert stages["scale_orientation"]["status"] == "needs_review"
+    assert stages["room_candidates"]["status"] == "needs_review"
+    assert "rescale_imported_model" in result["recommended_tools"]
+    assert manifest["review_state"]["overall_status"] == "needs_review"
+    assert manifest["review_state"]["stage_count"] == 6
+
+
+def test_record_import_correction_stores_structured_evidence_without_mutating_truth(tmp_path):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path, name="floorplan.png")
+    import_source_pipeline(project, source_path=source, import_id="import_001")
+    before_model = json.loads((project / "design_model.json").read_text())
+
+    result = record_import_correction(
+        project,
+        "import_001",
+        stage="exterior_shell_negative_regions",
+        correction_type="negative_region_polarity",
+        summary="The visible blank region should stay outside the imported model.",
+        target_id="import_001_space_001",
+        details={
+            "failure_class": "negative_outside_region_polarity",
+            "suggested_next_tool": "repair_imported_shell_overreach",
+        },
+        provenance_origin="designer_correction",
+        confidence=0.9,
+    )
+    after_model = json.loads((project / "design_model.json").read_text())
+    corrections = json.loads(
+        (project / "imports" / "import_001" / "corrections.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    manifest = json.loads(
+        (project / "imports" / "import_001" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    dynamic_skill = (
+        project
+        / ".agents"
+        / "skills"
+        / "import-source-import-001"
+        / "SKILL.md"
+    )
+    review = review_import_stages(project, "import_001")
+    review_stages = {stage["stage"]: stage for stage in review["stages"]}
+
+    assert result["status"] == "correction_recorded"
+    assert result["design_model_mutated"] is False
+    assert before_model == after_model
+    assert corrections["corrections"][0]["stage"] == "exterior_shell_negative_regions"
+    assert corrections["corrections"][0]["provenance"] == {
+        "origin": "designer_correction"
+    }
+    assert (
+        project
+        / "imports"
+        / "import_001"
+        / "corrections"
+        / "correction_001.json"
+    ).exists()
+    assert manifest["review_corrections"]["path"] == (
+        "imports/import_001/corrections.json"
+    )
+    assert "import_has_structured_corrections" in manifest["quality_flags"]
+    assert dynamic_skill.exists()
+    assert "correction_evidence_path: imports/import_001/corrections.json" in (
+        dynamic_skill.read_text(encoding="utf-8")
+    )
+    assert review["pending_correction_count"] == 1
+    assert (
+        review_stages["exterior_shell_negative_regions"]["evidence"][
+            "pending_corrections"
+        ]
+        == 1
+    )
 
 
 def test_import_floorplan_to_model_writes_working_truth_and_trace(tmp_path):

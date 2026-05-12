@@ -45,11 +45,16 @@ This file is user-facing runtime guidance, not maintainer workflow guidance.
 - Rescale imported source: "this plan should be 8200 mm wide",
   "这个户型整体宽度应该是 8200 毫米". Use `rescale_imported_model` or
   `repair_imported_region` rather than asking the designer to edit JSON.
+- Review imported progress: "what still needs review in this import?",
+  "这个导入还有哪些地方需要检查". Use `review_import_stages` to return
+  staged status for scale/orientation, rooms, exterior shell, negative regions,
+  openings, and source fidelity without requiring SketchUp.
 - Repair imported mismatch: "this door differs from the source",
-  "这个门和原图不一致". Use `review_model_against_import_source`, then
-  `repair_imported_region` with the specific correction. If the correction
-  should guide future turns for the same project/source, update the project
-  dynamic runtime skill through `project-runtime-memory`.
+  "这个门和原图不一致". Use `record_import_correction` to persist the
+  source-specific correction as structured import evidence, then use
+  `review_model_against_import_source` or the narrowest repair tool. If the
+  correction should guide future turns for the same project/source, update the
+  project dynamic runtime skill through `project-runtime-memory`.
 - Normalize imported exterior wall alignment: "this straight exterior wall is
   offset", "这条外墙应该是直的". Use
   `normalize_imported_wall_alignment` when imported near-boundary wall segments

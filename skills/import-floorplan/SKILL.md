@@ -92,6 +92,8 @@ proof that the importer recognized the source automatically.
 5. **Validate what is actually supported**
    - Call `plan_project_execution` to check that the model can compile into
      bridge operations.
+   - Call `review_import_stages` when the designer wants to inspect progress or
+     when a coarse/weak extraction should expose what needs correction next.
    - Call `validate_import_source_constraints` only when source constraints
      exist. Use `require_extracted_evidence=true` when validating automatic
      recognition.
@@ -171,8 +173,11 @@ When the designer reports a mismatch with the original source:
 
 1. Inspect current `design_model.json`, import evidence, and the latest bridge
    trace before editing truth.
-2. Use the narrowest supported review or repair tool, such as:
+2. Record the mismatch with `record_import_correction` when it should persist as
+   structured project-local evidence before the next regeneration or repair.
+3. Use the narrowest supported review or repair tool, such as:
    - `review_model_against_import_source`
+   - `review_import_stages`
    - `review_imported_boundary_coverage`
    - `repair_imported_boundary_coverage`
    - `review_imported_wall_space_consistency`
@@ -180,9 +185,9 @@ When the designer reports a mismatch with the original source:
    - `normalize_imported_wall_alignment`
    - `repair_imported_corner_notch`
    - `repair_imported_region`
-3. If the correction should affect future turns for the same source, store it as
+4. If the correction should affect future turns for the same source, store it as
    structured import evidence and update the project-local dynamic skill.
-4. Re-run planning and clean SketchUp replay when the designer wants the live
+5. Re-run planning and clean SketchUp replay when the designer wants the live
    model updated.
 
 Do not patch `design_model.json` directly to make a single screenshot look

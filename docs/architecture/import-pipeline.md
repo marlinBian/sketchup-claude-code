@@ -278,11 +278,16 @@ The first tool set should be small and structured:
 - `review_imported_wall_space_consistency`
 - `repair_imported_shell_overreach`
 - `review_model_against_import_source`
+- `review_import_stages`
+- `record_import_correction`
 - `repair_imported_region`
 - `list_import_sessions`
 
 Mutating tools must return changed model IDs, warnings, and state feedback that
 can be written into `design_model.json`.
+Correction-recording tools are intentionally evidence-only: they persist
+structured project-local import evidence and manifest state without mutating
+canonical model truth.
 
 SketchUp execution after import should use clean replay. The agent should call
 `execute_project_model(clean_before_execute=True, clean_scope="all")` after a
@@ -304,10 +309,19 @@ Runtime skills should guide direct import and repair:
 
 - "Import this floor plan and generate an editable model."
 - "Use this wall as 3600 mm and rescale the imported model."
+- "What still needs review in this import?"
 - "This door differs from the source; review and fix it."
 
 They should not instruct the agent to ask for routine confirmation before
 generating the first model.
+
+For partial progress, runtime skills should call `review_import_stages` instead
+of trying to turn every source mismatch into one giant repair prompt. When a
+designer points out a mismatch that should survive the current turn, runtime
+skills should call `record_import_correction` so the correction is stored under
+`imports/<import_id>/corrections.json` and linked from the manifest. This keeps
+source-specific facts out of shipped runtime skills while still making future
+turns source-aware.
 
 They should also treat raster/CAD/PDF source material as evidence, not as the
 final SketchUp scene object. Unless the designer explicitly requests an overlay
@@ -428,9 +442,9 @@ file or an explicit non-file-backed source-reference draft, plus
    operations that create wall pieces, sills, headers, and thin door/window
    markers.
 11. Expose staged prepare/extract/interpret/generate commands plus list,
-   summary, rescale, wall-alignment normalization, corner-notch repair,
-   boundary coverage review/repair, review, and repair tools through MCP and
-   CLI.
+   summary, staged review, structured correction recording, rescale,
+   wall-alignment normalization, corner-notch repair, boundary coverage
+   review/repair, review, and repair tools through MCP and CLI.
 
 Richer extractors should replace only the extraction stage. They must keep the
 same manifest, generated truth, quality flag, source-fidelity constraint, and

@@ -39,6 +39,7 @@ from mcp_server.tools.import_pipeline import (
     list_import_sessions,
     normalize_imported_wall_alignment,
     prepare_import_source,
+    record_import_correction,
     repair_imported_boundary_coverage,
     repair_imported_shell_overreach,
     register_import_source,
@@ -48,6 +49,7 @@ from mcp_server.tools.import_pipeline import (
     rescale_imported_model,
     review_imported_boundary_coverage,
     review_imported_wall_space_consistency,
+    review_import_stages,
     validate_import_source_constraints,
 )
 
@@ -808,6 +810,74 @@ def build_parser() -> argparse.ArgumentParser:
         help="Point-coordinate equality tolerance in mm",
     )
 
+    review_stages_parser = subparsers.add_parser(
+        "review-import-stages",
+        help="Review staged import progress and recommended correction tools",
+    )
+    review_stages_parser.add_argument("project_path", help="Design project directory")
+    review_stages_parser.add_argument("import_id", help="Import session ID")
+
+    record_correction_parser = subparsers.add_parser(
+        "record-import-correction",
+        help="Record structured import correction evidence without mutating truth",
+    )
+    record_correction_parser.add_argument("project_path", help="Design project directory")
+    record_correction_parser.add_argument("import_id", help="Import session ID")
+    record_correction_parser.add_argument(
+        "--stage",
+        required=True,
+        choices=[
+            "coarse_import",
+            "scale_orientation",
+            "room_candidates",
+            "exterior_shell_negative_regions",
+            "openings",
+            "source_fidelity",
+        ],
+        help="Import review stage this correction belongs to",
+    )
+    record_correction_parser.add_argument(
+        "--correction-type",
+        required=True,
+        help="Machine-readable correction class",
+    )
+    record_correction_parser.add_argument(
+        "--summary",
+        required=True,
+        help="Short human-readable correction summary",
+    )
+    record_correction_parser.add_argument(
+        "--details-json",
+        default="{}",
+        help="Optional structured correction details as a JSON object",
+    )
+    record_correction_parser.add_argument("--target-id", help="Optional model target ID")
+    record_correction_parser.add_argument(
+        "--provenance-origin",
+        default="designer_correction",
+        choices=[
+            "designer_correction",
+            "manual_validation",
+            "agent_review",
+            "maintainer_debug",
+        ],
+        help="Where the correction came from",
+    )
+    record_correction_parser.add_argument(
+        "--confidence",
+        type=float,
+        help="Optional correction confidence from 0 to 1",
+    )
+    record_correction_parser.add_argument(
+        "--correction-id",
+        help="Optional stable correction ID",
+    )
+    record_correction_parser.add_argument(
+        "--no-dynamic-skill",
+        action="store_true",
+        help="Do not update the project-local dynamic runtime skill",
+    )
+
     shell_overreach_parser = subparsers.add_parser(
         "repair-import-shell-overreach",
         help="Trim imported wall segments that enclose space outside imported footprints",
@@ -1373,6 +1443,40 @@ def main(argv: list[str] | None = None) -> int:
                 args.import_id,
                 min_segment_length=args.min_segment_length,
                 coordinate_match_tolerance=args.coordinate_match_tolerance,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "review-import-stages":
+            result = review_import_stages(
+                args.project_path,
+                args.import_id,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "record-import-correction":
+            try:
+                details = json.loads(args.details_json)
+            except json.JSONDecodeError as error:
+                print(
+                    f"Error: --details-json must be a JSON object: {error}",
+                    file=sys.stderr,
+                )
+                return 2
+            if not isinstance(details, dict):
+                print("Error: --details-json must be a JSON object.", file=sys.stderr)
+                return 2
+            result = record_import_correction(
+                args.project_path,
+                args.import_id,
+                stage=args.stage,
+                correction_type=args.correction_type,
+                summary=args.summary,
+                details=details,
+                target_id=args.target_id,
+                provenance_origin=args.provenance_origin,
+                confidence=args.confidence,
+                correction_id=args.correction_id,
+                update_dynamic_skill=not args.no_dynamic_skill,
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0

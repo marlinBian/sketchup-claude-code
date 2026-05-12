@@ -86,6 +86,7 @@ from mcp_server.tools.import_pipeline import (
     list_import_sessions as list_import_sessions_file,
     normalize_imported_wall_alignment as normalize_imported_wall_alignment_file,
     prepare_import_source as prepare_import_source_file,
+    record_import_correction as record_import_correction_file,
     repair_imported_boundary_coverage as repair_imported_boundary_coverage_file,
     repair_imported_shell_overreach as repair_imported_shell_overreach_file,
     register_import_source as register_import_source_file,
@@ -95,6 +96,7 @@ from mcp_server.tools.import_pipeline import (
     rescale_imported_model as rescale_imported_model_file,
     review_imported_boundary_coverage as review_imported_boundary_coverage_file,
     review_imported_wall_space_consistency as review_imported_wall_space_consistency_file,
+    review_import_stages as review_import_stages_file,
     review_model_against_import_source as review_model_against_import_source_file,
     validate_import_source_constraints as validate_import_source_constraints_file,
 )
@@ -2286,6 +2288,62 @@ async def review_model_against_import_source(
         )
     except Exception as e:
         return TextContent(type="text", text=f"Import source review failed: {str(e)}")
+
+
+@mcp.tool()
+async def review_import_stages(
+    project_path: str,
+    import_id: str,
+) -> TextContent:
+    """Review staged import progress and recommended correction tools."""
+    try:
+        result = review_import_stages_file(project_path, import_id)
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(type="text", text=f"Import stage review failed: {str(e)}")
+
+
+@mcp.tool()
+async def record_import_correction(
+    project_path: str,
+    import_id: str,
+    stage: str,
+    correction_type: str,
+    summary: str,
+    details: dict[str, Any] | None = None,
+    target_id: str | None = None,
+    provenance_origin: str = "designer_correction",
+    confidence: float | None = None,
+    correction_id: str | None = None,
+    update_dynamic_skill: bool = True,
+) -> TextContent:
+    """Record structured import correction evidence without mutating truth."""
+    try:
+        result = record_import_correction_file(
+            project_path,
+            import_id,
+            stage=stage,
+            correction_type=correction_type,
+            summary=summary,
+            details=details,
+            target_id=target_id,
+            provenance_origin=provenance_origin,
+            confidence=confidence,
+            correction_id=correction_id,
+            update_dynamic_skill=update_dynamic_skill,
+        )
+        return TextContent(
+            type="text",
+            text=json.dumps(result, ensure_ascii=False, indent=2),
+        )
+    except Exception as e:
+        return TextContent(
+            type="text",
+            text=f"Import correction recording failed: {str(e)}",
+        )
 
 
 @mcp.tool()
