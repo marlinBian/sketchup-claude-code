@@ -24,6 +24,10 @@ Runtime skills are authored in `skills/`, but installation must expose them
 through the supported Claude or Codex plugin/skill mechanism. The source tree is
 not the designer's operating surface.
 
+Optional workbench layers such as Pi or OpenCode are adapter or experiment
+surfaces, not product truth. See
+[Agent Workbench Boundary](docs/architecture/agent-workbench-boundary.md).
+
 ## Current Status
 
 This project is in early development. The baseline bathroom slice is available,

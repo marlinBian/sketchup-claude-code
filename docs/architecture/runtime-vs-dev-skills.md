@@ -52,6 +52,11 @@ Dynamic runtime skills are guidance only. `design_model.json` remains the
 canonical editable truth, and import evidence remains under
 `imports/<import_id>/`.
 
+Dynamic runtime skills also must not become an adapter-local shadow state for
+one workbench. If Pi, OpenCode, Claude, or Codex needs project-specific runtime
+memory, that memory should still live in the active design project rather than
+inside one runtime's private cache.
+
 Dynamic runtime skills must not be copied into the product repository's
 `skills/` directory, and they must not be stored in maintainer development skill
 directories. If a dynamic skill exposes a pattern that should apply broadly,
@@ -104,3 +109,6 @@ runtime skill locations.
 
 If a skill helps a maintainer change this repository, it belongs outside the
 product repository in the `ai4design` development workspace.
+
+For the broader adapter boundary, see
+[Agent Workbench Boundary](agent-workbench-boundary.md).

@@ -16,6 +16,10 @@ runtime skills, and protocol docs.
 - `.claude-plugin/`: Claude plugin adapter.
 - `.codex-plugin/`, `.mcp.json`, `.agents/plugins/`: Codex plugin adapter.
 
+Future Pi/OpenCode or other workbench integrations should be treated the same
+way: adapter or experiment surfaces around the shared core, never the owner of
+project truth.
+
 Maintainer-only Codex skills for developing this repository are intentionally
 kept outside the product repository, under the local `ai4design` workspace.
 Project/session dynamic runtime skills may be generated inside an active
@@ -30,6 +34,9 @@ must not be committed under this repository's `skills/` directory.
 - Treat `skills/` as the runtime skill authoring source. Installers and plugin
   manifests must expose those skills in each AI tool's supported runtime
   location; designers should not need to copy files from the source tree.
+- Keep runtime-specific workbench state, hooks, menus, or session caches out of
+  product truth. `design_model.json`, project manifests, and import evidence
+  remain the canonical product-owned state.
 - Keep source-specific import interpretations, per-project corrections, and
   designer preferences out of shipped runtime skills. Store them as project
   evidence and, when useful at runtime, project-local dynamic skills in the

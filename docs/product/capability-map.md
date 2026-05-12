@@ -16,6 +16,11 @@ SketchUp. Claude CLI and Codex CLI are adapters. The shared product core is:
 - component and design-rule metadata
 - install, validation, smoke, and release checks
 
+Future Pi or OpenCode integrations are optional adapter or experiment layers.
+They may improve workflow, but they must not replace the CLI, MCP, schemas, or
+project truth. See
+[Agent Workbench Boundary](../architecture/agent-workbench-boundary.md).
+
 Designers should work in their own design project directories. They should not
 need to edit this source repository during normal use.
 
@@ -48,6 +53,16 @@ The product has three distinct skill layers:
 
 Shipped runtime skills must stay generic. They must not encode one imported
 floor plan, one customer source, or one debugging session as product behavior.
+
+## Adapter Boundary
+
+Use the product core for truth, validation, deterministic execution, and import
+semantics. Use shipped runtime skills for generic workflow guidance. Use agent
+adapters only for packaging, invocation, and runtime-specific UX.
+
+If a future workbench wants status panels, demo flows, or guided review UIs, it
+should orchestrate existing CLI and MCP capabilities instead of inventing a
+second source of truth.
 
 ## Current 1.0 Capabilities
 
