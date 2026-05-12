@@ -7,9 +7,11 @@ import hashlib
 import json
 import re
 import shutil
+import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from mcp_server.resources.design_model_schema import load_design_model, save_design_model
 from mcp_server.resources.import_manifest_schema import (
@@ -143,11 +145,256 @@ POINT_SEQUENCE_KEYS = {
     "polyline",
     "segment",
 }
+IMPORT_TIMING_PHASES: dict[str, dict[str, Any]] = {
+    "project_state_read": {
+        "label": "Project state read",
+        "classification": "deterministic_cli",
+        "budget_ms": 500.0,
+    },
+    "source_registration": {
+        "label": "Source registration",
+        "classification": "deterministic_cli",
+        "budget_ms": 750.0,
+    },
+    "source_preprocessing_or_extraction": {
+        "label": "Source preprocessing or extraction",
+        "classification": "model_vision_or_external_extractor",
+        "budget_ms": None,
+    },
+    "source_interpretation_loading_normalization": {
+        "label": "Source interpretation loading and normalization",
+        "classification": "deterministic_cli",
+        "budget_ms": 1000.0,
+    },
+    "model_generation": {
+        "label": "Model generation",
+        "classification": "deterministic_cli",
+        "budget_ms": 1500.0,
+    },
+    "source_constraint_validation": {
+        "label": "Source constraint validation",
+        "classification": "deterministic_cli",
+        "budget_ms": 1000.0,
+    },
+    "plan_execution": {
+        "label": "Plan execution",
+        "classification": "deterministic_cli",
+        "budget_ms": None,
+    },
+    "live_sketchup_execution": {
+        "label": "Live SketchUp execution",
+        "classification": "live_sketchup",
+        "budget_ms": None,
+    },
+    "snapshot_report_generation": {
+        "label": "Snapshot/report generation",
+        "classification": "deterministic_cli",
+        "budget_ms": None,
+    },
+    "manifest_report_persistence": {
+        "label": "Manifest/report persistence",
+        "classification": "deterministic_cli",
+        "budget_ms": 750.0,
+    },
+}
+IMPORT_TOTAL_BUDGET_MS = 5000.0
 
 
 def utc_now() -> str:
     """Return an ISO8601 UTC timestamp."""
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+class ImportTimingTrace:
+    """Collect structured phase timings for one floor-plan import."""
+
+    def __init__(self, *, trace_type: str = "import_floorplan") -> None:
+        self.trace_type = trace_type
+        self.started_at = utc_now()
+        self._started_perf = time.perf_counter()
+        self._phases: list[dict[str, Any]] = []
+
+    @contextmanager
+    def phase(self, name: str) -> Iterator[dict[str, Any]]:
+        """Measure one import phase."""
+        spec = IMPORT_TIMING_PHASES.get(name, {})
+        phase: dict[str, Any] = {
+            "name": name,
+            "label": spec.get("label", name.replace("_", " ")),
+            "classification": spec.get("classification", "deterministic_cli"),
+            "status": "success",
+            "started_at": utc_now(),
+        }
+        budget_ms = spec.get("budget_ms")
+        if budget_ms is not None:
+            phase["budget_ms"] = float(budget_ms)
+        started_perf = time.perf_counter()
+        try:
+            yield phase
+        except Exception as exc:
+            phase["status"] = "failed"
+            phase["error"] = exc.__class__.__name__
+            raise
+        finally:
+            duration_ms = round((time.perf_counter() - started_perf) * 1000, 3)
+            phase["ended_at"] = utc_now()
+            phase["duration_ms"] = duration_ms
+            if "budget_ms" in phase:
+                phase["within_budget"] = duration_ms <= float(phase["budget_ms"])
+            self._phases.append(phase)
+
+    def skip_phase(self, name: str, reason: str) -> None:
+        """Record a phase that is intentionally outside this command."""
+        spec = IMPORT_TIMING_PHASES.get(name, {})
+        phase: dict[str, Any] = {
+            "name": name,
+            "label": spec.get("label", name.replace("_", " ")),
+            "classification": spec.get("classification", "deterministic_cli"),
+            "status": "skipped",
+            "skip_reason": reason,
+            "started_at": utc_now(),
+            "ended_at": utc_now(),
+            "duration_ms": 0.0,
+        }
+        budget_ms = spec.get("budget_ms")
+        if budget_ms is not None:
+            phase["budget_ms"] = float(budget_ms)
+            phase["within_budget"] = True
+        self._phases.append(phase)
+
+    def finish(self) -> dict[str, Any]:
+        """Return a JSON-serializable timing trace."""
+        ended_at = utc_now()
+        total_ms = round((time.perf_counter() - self._started_perf) * 1000, 3)
+        over_budget_phases = [
+            phase["name"]
+            for phase in self._phases
+            if phase.get("within_budget") is False
+        ]
+        measured_phases = [
+            phase for phase in self._phases if phase.get("status") != "skipped"
+        ]
+        slowest_phase = (
+            max(measured_phases, key=lambda phase: float(phase.get("duration_ms", 0.0)))
+            if measured_phases
+            else None
+        )
+        classification_totals_ms: dict[str, float] = {}
+        for phase in measured_phases:
+            classification = str(phase.get("classification", "unknown"))
+            classification_totals_ms[classification] = round(
+                classification_totals_ms.get(classification, 0.0)
+                + float(phase.get("duration_ms", 0.0)),
+                3,
+            )
+
+        within_total_budget = total_ms <= IMPORT_TOTAL_BUDGET_MS
+        trace = {
+            "schema_version": "1.0",
+            "trace_type": self.trace_type,
+            "scope": "deterministic_product_pipeline",
+            "started_at": self.started_at,
+            "ended_at": ended_at,
+            "total_ms": total_ms,
+            "classification_totals_ms": classification_totals_ms,
+            "phases": self._phases,
+            "slowest_phase": (
+                {
+                    "name": slowest_phase["name"],
+                    "duration_ms": slowest_phase["duration_ms"],
+                    "classification": slowest_phase.get("classification"),
+                }
+                if slowest_phase is not None
+                else None
+            ),
+            "budget": {
+                "total_budget_ms": IMPORT_TOTAL_BUDGET_MS,
+                "within_budget": within_total_budget and not over_budget_phases,
+                "total_within_budget": within_total_budget,
+                "over_budget_phases": over_budget_phases,
+            },
+        }
+        trace["diagnostics"] = import_timing_diagnostics(trace)
+        return trace
+
+
+def import_timing_diagnostics(timing: dict[str, Any]) -> dict[str, Any]:
+    """Build concise diagnostic hints from a timing trace."""
+    phases = timing.get("phases", [])
+    extraction_phase = next(
+        (
+            phase
+            for phase in phases
+            if phase.get("name") == "source_preprocessing_or_extraction"
+        ),
+        None,
+    )
+    over_budget = timing.get("budget", {}).get("over_budget_phases", [])
+    if over_budget:
+        slow_stage_hint = "Inspect over-budget deterministic product phases first."
+    elif extraction_phase and extraction_phase.get("status") == "skipped":
+        slow_stage_hint = (
+            "If the user experienced a slow import, latency likely happened before "
+            "this command in agent-side vision/OCR/CAD extraction."
+        )
+    else:
+        slow_stage_hint = "Deterministic import phases stayed inside the baseline budget."
+
+    return {
+        "mcp_tool_overhead_timed": False,
+        "model_vision_extraction_timed": (
+            extraction_phase is not None and extraction_phase.get("status") != "skipped"
+        ),
+        "live_sketchup_execution_timed": any(
+            phase.get("name") == "live_sketchup_execution"
+            and phase.get("status") != "skipped"
+            for phase in phases
+        ),
+        "slow_stage_hint": slow_stage_hint,
+    }
+
+
+def compact_import_timing(timing: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Return a compact timing summary safe for list responses."""
+    if not isinstance(timing, dict):
+        return None
+    return {
+        "total_ms": timing.get("total_ms"),
+        "within_budget": timing.get("budget", {}).get("within_budget"),
+        "slowest_phase": timing.get("slowest_phase"),
+        "diagnostics": timing.get("diagnostics", {}),
+    }
+
+
+def format_import_timing_summary(timing: dict[str, Any]) -> str:
+    """Return a concise human-readable timing summary."""
+    lines = [
+        (
+            f"Import timing: {timing.get('total_ms', 0)} ms "
+            f"(budget {timing.get('budget', {}).get('total_budget_ms', 0)} ms, "
+            f"within_budget={timing.get('budget', {}).get('within_budget')})"
+        )
+    ]
+    for phase in timing.get("phases", []):
+        budget = (
+            f", budget={phase['budget_ms']} ms, within_budget={phase.get('within_budget')}"
+            if "budget_ms" in phase
+            else ""
+        )
+        reason = (
+            f", skipped={phase.get('skip_reason')}"
+            if phase.get("status") == "skipped"
+            else ""
+        )
+        lines.append(
+            "- "
+            f"{phase.get('name')}: {phase.get('duration_ms')} ms "
+            f"[{phase.get('classification')}, {phase.get('status')}{budget}{reason}]"
+        )
+    diagnostics = timing.get("diagnostics", {})
+    if diagnostics.get("slow_stage_hint"):
+        lines.append(f"Hint: {diagnostics['slow_stage_hint']}")
+    return "\n".join(lines)
 
 
 def import_safe_id(value: str) -> str:
@@ -3301,35 +3548,40 @@ def import_floorplan_to_model(
     overwrite: bool = False,
 ) -> dict[str, Any]:
     """Generate editable working truth from an imported source file."""
+    timing = ImportTimingTrace()
     root = Path(project_path).expanduser().resolve()
     if source_path is not None and source_reference is not None:
         raise ValueError("Use either source_path or source_reference, not both.")
-    if source_path is not None:
-        registered = register_import_source(
-            root,
-            source_path,
-            import_id=import_id,
-            label=label,
-            overwrite=overwrite,
-        )
-        chosen_id = registered["import_id"]
-        manifest, manifest_file = load_project_import_manifest(root, chosen_id)
-    elif source_reference is not None:
-        registered = register_import_source_reference(
-            root,
-            source_reference,
-            import_id=import_id,
-            label=label,
-            source_reference_type=source_reference_type,
-            overwrite=overwrite,
-        )
-        chosen_id = registered["import_id"]
-        manifest, manifest_file = load_project_import_manifest(root, chosen_id)
-    elif import_id is not None:
-        chosen_id = import_safe_id(import_id)
-        manifest, manifest_file = load_project_import_manifest(root, chosen_id)
-    else:
-        raise ValueError("source_path, source_reference, or import_id is required.")
+    with timing.phase("source_registration") as phase:
+        if source_path is not None:
+            registered = register_import_source(
+                root,
+                source_path,
+                import_id=import_id,
+                label=label,
+                overwrite=overwrite,
+            )
+            chosen_id = registered["import_id"]
+            manifest, manifest_file = load_project_import_manifest(root, chosen_id)
+            phase["details"] = {"mode": "source_path", "import_id": chosen_id}
+        elif source_reference is not None:
+            registered = register_import_source_reference(
+                root,
+                source_reference,
+                import_id=import_id,
+                label=label,
+                source_reference_type=source_reference_type,
+                overwrite=overwrite,
+            )
+            chosen_id = registered["import_id"]
+            manifest, manifest_file = load_project_import_manifest(root, chosen_id)
+            phase["details"] = {"mode": "source_reference", "import_id": chosen_id}
+        elif import_id is not None:
+            chosen_id = import_safe_id(import_id)
+            manifest, manifest_file = load_project_import_manifest(root, chosen_id)
+            phase["details"] = {"mode": "existing_manifest", "import_id": chosen_id}
+        else:
+            raise ValueError("source_path, source_reference, or import_id is required.")
 
     if width is not None and width <= 0:
         raise ValueError("width must be positive when provided.")
@@ -3342,151 +3594,185 @@ def import_floorplan_to_model(
     if negative_space_overlap_tolerance_m2 < 0:
         raise ValueError("negative_space_overlap_tolerance_m2 must be non-negative.")
 
-    source_type = str(manifest["source"].get("source_type", "unknown"))
-    file_backed_source = source_is_file_backed(manifest)
-    has_explicit_dimensions = width is not None and depth is not None
-    model_width = float(width if width is not None else DEFAULT_IMPORTED_WIDTH)
-    model_depth = float(depth if depth is not None else DEFAULT_IMPORTED_DEPTH)
+    with timing.phase("project_state_read") as phase:
+        source_type = str(manifest["source"].get("source_type", "unknown"))
+        file_backed_source = source_is_file_backed(manifest)
+        has_explicit_dimensions = width is not None and depth is not None
+        model_width = float(width if width is not None else DEFAULT_IMPORTED_WIDTH)
+        model_depth = float(depth if depth is not None else DEFAULT_IMPORTED_DEPTH)
 
-    design_model_path = find_design_model_path(root)
-    design_model, model_errors = load_design_model(str(design_model_path))
-    if model_errors or design_model is None:
-        raise ValueError("; ".join(model_errors))
+        design_model_path = find_design_model_path(root)
+        design_model, model_errors = load_design_model(str(design_model_path))
+        if model_errors or design_model is None:
+            raise ValueError("; ".join(model_errors))
 
-    removed = remove_previous_import_entities(design_model, chosen_id)
-    source_interpretation = (
-        load_source_interpretation(source_interpretation_path)
-        if source_interpretation_path is not None
-        else None
+        removed = remove_previous_import_entities(design_model, chosen_id)
+        phase["details"] = {
+            "source_type": source_type,
+            "file_backed_source": file_backed_source,
+            "removed_previous_entities": removed,
+        }
+
+    timing.skip_phase(
+        "source_preprocessing_or_extraction",
+        (
+            "import-floorplan consumes a registered source and optional "
+            "source_interpretation_path; agent vision/OCR/CAD extraction happens "
+            "before this command unless a future extractor is wired in."
+        ),
     )
+
+    source_interpretation = None
     coordinate_transform = None
     coordinate_quality_flags: list[str] = []
-    if source_interpretation is not None:
-        require_known_source_for_interpretation(source_type, manifest)
-        (
-            source_interpretation,
-            coordinate_transform,
-            coordinate_quality_flags,
-        ) = normalize_source_interpretation_coordinates(
-            source_interpretation,
-            source_type=source_type,
+    if source_interpretation_path is not None:
+        with timing.phase("source_interpretation_loading_normalization") as phase:
+            source_interpretation = load_source_interpretation(source_interpretation_path)
+            require_known_source_for_interpretation(source_type, manifest)
+            (
+                source_interpretation,
+                coordinate_transform,
+                coordinate_quality_flags,
+            ) = normalize_source_interpretation_coordinates(
+                source_interpretation,
+                source_type=source_type,
+            )
+            phase["details"] = {
+                "source_interpretation_path": str(source_interpretation_path),
+                "coordinate_transform_applied": coordinate_transform is not None,
+            }
+    else:
+        timing.skip_phase(
+            "source_interpretation_loading_normalization",
+            "No source_interpretation_path was provided.",
         )
 
-    if source_interpretation is not None:
-        payloads = build_interpreted_import_payloads(
-            chosen_id,
-            source_interpretation,
-            source_type=source_type,
-            wall_height=wall_height,
-            wall_thickness=wall_thickness,
-            area_tolerance_ratio=area_tolerance_ratio,
-            negative_space_overlap_tolerance_m2=negative_space_overlap_tolerance_m2,
-        )
-        spaces = payloads["spaces"]
-        walls = payloads["walls"]
-        openings = payloads["openings"]
-        generated_model = payloads["generated_model"]
-        assumptions = payloads["assumptions"]
-        flags = dedupe_quality_flags([*payloads["quality_flags"], *coordinate_quality_flags])
-        summary = {
-            **payloads["summary"],
-            "scale_source": "source_interpretation",
-        }
-        interpretation = payloads["interpretation"]
-        if coordinate_transform is not None:
-            interpretation["coordinate_transform"] = coordinate_transform
-            summary["coordinate_transform"] = coordinate_transform
-        scale_payload = {
-            "units": "mm",
-            "source": "source_interpretation",
-            "confidence": float(source_interpretation.get("scale", {}).get("confidence", 0.65)),
-            **{
-                key: value
-                for key, value in source_interpretation.get("scale", {}).items()
-                if key not in {"units", "source", "confidence"}
-            },
-        }
-        if coordinate_transform is not None:
-            scale_payload["coordinate_transform"] = coordinate_transform
-        if width is not None:
-            scale_payload["width"] = model_width
-        if depth is not None:
-            scale_payload["depth"] = model_depth
-    else:
-        confidence = source_confidence(source_type, has_explicit_dimensions)
-        assumptions = [
-            "Generated as an editable working model, not a verified survey.",
-            "Outer shell interpreted as a rectangular floor plan.",
-        ]
-        if not has_explicit_dimensions:
-            assumptions.append(
-                f"Scale estimated as {model_width:g} mm by {model_depth:g} mm."
+    with timing.phase("model_generation") as phase:
+        if source_interpretation is not None:
+            payloads = build_interpreted_import_payloads(
+                chosen_id,
+                source_interpretation,
+                source_type=source_type,
+                wall_height=wall_height,
+                wall_thickness=wall_thickness,
+                area_tolerance_ratio=area_tolerance_ratio,
+                negative_space_overlap_tolerance_m2=negative_space_overlap_tolerance_m2,
             )
-        ids = imported_entity_ids(chosen_id)
-        generated_model = {
-            "design_model": DESIGN_MODEL_FILENAME,
-            "space_ids": [ids["space_id"]],
-            "wall_ids": ids["wall_ids"],
-            "opening_ids": ids["opening_ids"],
-            "changed_model_ids": [
-                ids["space_id"],
-                *ids["wall_ids"],
-                *ids["opening_ids"],
-            ],
-        }
-        flags = imported_quality_flags(
-            source_type,
-            has_explicit_dimensions=has_explicit_dimensions,
-        )
-        spaces = {
-            ids["space_id"]: space_payload(
+            spaces = payloads["spaces"]
+            walls = payloads["walls"]
+            openings = payloads["openings"]
+            generated_model = payloads["generated_model"]
+            assumptions = payloads["assumptions"]
+            flags = dedupe_quality_flags(
+                [*payloads["quality_flags"], *coordinate_quality_flags]
+            )
+            summary = {
+                **payloads["summary"],
+                "scale_source": "source_interpretation",
+            }
+            interpretation = payloads["interpretation"]
+            if coordinate_transform is not None:
+                interpretation["coordinate_transform"] = coordinate_transform
+                summary["coordinate_transform"] = coordinate_transform
+            scale_payload = {
+                "units": "mm",
+                "source": "source_interpretation",
+                "confidence": float(
+                    source_interpretation.get("scale", {}).get("confidence", 0.65)
+                ),
+                **{
+                    key: value
+                    for key, value in source_interpretation.get("scale", {}).items()
+                    if key not in {"units", "source", "confidence"}
+                },
+            }
+            if coordinate_transform is not None:
+                scale_payload["coordinate_transform"] = coordinate_transform
+            if width is not None:
+                scale_payload["width"] = model_width
+            if depth is not None:
+                scale_payload["depth"] = model_depth
+        else:
+            confidence = source_confidence(source_type, has_explicit_dimensions)
+            assumptions = [
+                "Generated as an editable working model, not a verified survey.",
+                "Outer shell interpreted as a rectangular floor plan.",
+            ]
+            if not has_explicit_dimensions:
+                assumptions.append(
+                    f"Scale estimated as {model_width:g} mm by {model_depth:g} mm."
+                )
+            ids = imported_entity_ids(chosen_id)
+            generated_model = {
+                "design_model": DESIGN_MODEL_FILENAME,
+                "space_ids": [ids["space_id"]],
+                "wall_ids": ids["wall_ids"],
+                "opening_ids": ids["opening_ids"],
+                "changed_model_ids": [
+                    ids["space_id"],
+                    *ids["wall_ids"],
+                    *ids["opening_ids"],
+                ],
+            }
+            flags = imported_quality_flags(
+                source_type,
+                has_explicit_dimensions=has_explicit_dimensions,
+            )
+            spaces = {
+                ids["space_id"]: space_payload(
+                    chosen_id,
+                    width=model_width,
+                    depth=model_depth,
+                    wall_height=wall_height,
+                    confidence=confidence,
+                    assumptions=assumptions,
+                )
+            }
+            walls = wall_payloads(
                 chosen_id,
                 width=model_width,
                 depth=model_depth,
                 wall_height=wall_height,
+                wall_thickness=wall_thickness,
                 confidence=confidence,
                 assumptions=assumptions,
             )
-        }
-        walls = wall_payloads(
-            chosen_id,
-            width=model_width,
-            depth=model_depth,
-            wall_height=wall_height,
-            wall_thickness=wall_thickness,
-            confidence=confidence,
-            assumptions=assumptions,
-        )
-        openings = opening_payloads(
-            chosen_id,
-            width=model_width,
-            depth=model_depth,
-            confidence=confidence,
-            assumptions=assumptions,
-        )
-        interpretation = {
-            "version": "1.0",
-            "import_id": chosen_id,
-            "created_at": utc_now(),
-            "autonomous_first": True,
-            "source_interpretation_used": False,
-            "assumptions": assumptions,
-            "quality_flags": flags,
-            "generated_model": generated_model,
-        }
-        scale_payload = {
-            "units": "mm",
-            "source": "user_dimensions" if has_explicit_dimensions else "estimated",
-            "confidence": 1.0 if has_explicit_dimensions else 0.35,
-            "width": model_width,
-            "depth": model_depth,
-        }
-        summary = {
-            "space_count": 1,
-            "wall_count": len(ids["wall_ids"]),
-            "opening_count": len(ids["opening_ids"]),
-            "scale_source": scale_payload["source"],
-            "confidence": confidence,
+            openings = opening_payloads(
+                chosen_id,
+                width=model_width,
+                depth=model_depth,
+                confidence=confidence,
+                assumptions=assumptions,
+            )
+            interpretation = {
+                "version": "1.0",
+                "import_id": chosen_id,
+                "created_at": utc_now(),
+                "autonomous_first": True,
+                "source_interpretation_used": False,
+                "assumptions": assumptions,
+                "quality_flags": flags,
+                "generated_model": generated_model,
+            }
+            scale_payload = {
+                "units": "mm",
+                "source": "user_dimensions" if has_explicit_dimensions else "estimated",
+                "confidence": 1.0 if has_explicit_dimensions else 0.35,
+                "width": model_width,
+                "depth": model_depth,
+            }
+            summary = {
+                "space_count": 1,
+                "wall_count": len(ids["wall_ids"]),
+                "opening_count": len(ids["opening_ids"]),
+                "scale_source": scale_payload["source"],
+                "confidence": confidence,
+            }
+        phase["details"] = {
+            "source_interpretation_used": source_interpretation is not None,
+            "space_count": len(spaces),
+            "wall_count": len(walls),
+            "opening_count": len(openings),
         }
 
     raw_interpretation_path = None
@@ -3581,60 +3867,100 @@ def import_floorplan_to_model(
         },
     )
 
-    saved, save_errors = save_design_model(str(design_model_path), design_model)
-    if not saved:
-        raise ValueError("; ".join(save_errors))
+    with timing.phase("manifest_report_persistence") as phase:
+        saved, save_errors = save_design_model(str(design_model_path), design_model)
+        if not saved:
+            raise ValueError("; ".join(save_errors))
 
-    extracted_path.parent.mkdir(parents=True, exist_ok=True)
-    if source_interpretation_path is not None:
-        raw_interpretation_path = extracted_path.parent / "source_interpretation.json"
-        source_file = Path(source_interpretation_path).expanduser().resolve()
-        if source_file != raw_interpretation_path:
-            shutil.copyfile(source_file, raw_interpretation_path)
-        interpretation["source_interpretation_path"] = project_relative_path(
-            root,
-            raw_interpretation_path,
+        extracted_path.parent.mkdir(parents=True, exist_ok=True)
+        if source_interpretation_path is not None:
+            raw_interpretation_path = extracted_path.parent / "source_interpretation.json"
+            source_file = Path(source_interpretation_path).expanduser().resolve()
+            if source_file != raw_interpretation_path:
+                shutil.copyfile(source_file, raw_interpretation_path)
+            interpretation["source_interpretation_path"] = project_relative_path(
+                root,
+                raw_interpretation_path,
+            )
+            if constraints_path_from_interpretation:
+                interpretation["source_constraints_path"] = constraints_path_from_interpretation
+                if constraints_derived_from_interpretation:
+                    interpretation["source_constraints_derived_from_interpretation"] = True
+        extracted_path.write_text(
+            json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
         )
-        if constraints_path_from_interpretation:
-            interpretation["source_constraints_path"] = constraints_path_from_interpretation
-            if constraints_derived_from_interpretation:
-                interpretation["source_constraints_derived_from_interpretation"] = True
-    extracted_path.write_text(
-        json.dumps(interpretation, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
 
-    manifest["status"] = "imported"
-    manifest["scale"] = design_model["import_sessions"][chosen_id]["scale"]
-    manifest["generated_model"] = generated_model
-    manifest["quality_flags"] = dedupe_quality_flags(flags)
-    append_processing_step(
-        manifest,
-        "import_floorplan_to_model",
-        details={
-            "autonomous_first": True,
-            "removed_previous_entities": removed,
+        manifest["status"] = "imported"
+        manifest["scale"] = design_model["import_sessions"][chosen_id]["scale"]
+        manifest["generated_model"] = generated_model
+        manifest["quality_flags"] = dedupe_quality_flags(flags)
+        append_processing_step(
+            manifest,
+            "import_floorplan_to_model",
+            details={
+                "autonomous_first": True,
+                "removed_previous_entities": removed,
+                "interpretation_path": extracted_relative_path,
+                "source_interpretation_path": (
+                    project_relative_path(root, raw_interpretation_path)
+                    if raw_interpretation_path is not None
+                    else None
+                ),
+                "source_constraints_path": constraints_path_from_interpretation,
+                "dynamic_runtime_skill": dynamic_runtime_skill,
+            },
+        )
+        saved_manifest, manifest_errors = save_import_manifest(manifest_file, manifest)
+        if not saved_manifest:
+            raise ValueError("; ".join(manifest_errors))
+        phase["details"] = {
+            "design_model_path": str(design_model_path),
+            "manifest_path": str(manifest_file),
             "interpretation_path": extracted_relative_path,
-            "source_interpretation_path": (
-                project_relative_path(root, raw_interpretation_path)
-                if raw_interpretation_path is not None
-                else None
-            ),
-            "source_constraints_path": constraints_path_from_interpretation,
-            "dynamic_runtime_skill": dynamic_runtime_skill,
-        },
-    )
-    saved_manifest, manifest_errors = save_import_manifest(manifest_file, manifest)
-    if not saved_manifest:
-        raise ValueError("; ".join(manifest_errors))
+        }
 
     source_fidelity = None
     if import_constraints_path(root, chosen_id).exists():
-        source_fidelity = validate_import_source_constraints(
-            root,
-            chosen_id,
-            update_state=True,
+        with timing.phase("source_constraint_validation") as phase:
+            source_fidelity = validate_import_source_constraints(
+                root,
+                chosen_id,
+                update_state=True,
+            )
+            phase["details"] = {
+                "status": source_fidelity.get("status"),
+                "violation_count": source_fidelity.get("violation_count"),
+            }
+    else:
+        timing.skip_phase(
+            "source_constraint_validation",
+            "No source-scoped import constraints were present.",
         )
+
+    timing.skip_phase(
+        "plan_execution",
+        "import-floorplan writes design_model.json; bridge plan execution is a separate command.",
+    )
+    timing.skip_phase(
+        "live_sketchup_execution",
+        "No live SketchUp bridge execution was requested by import-floorplan.",
+    )
+    timing.skip_phase(
+        "snapshot_report_generation",
+        "No snapshot or visual report generation was requested by import-floorplan.",
+    )
+    timing_trace = timing.finish()
+    manifest_for_timing, manifest_errors = load_import_manifest(manifest_file)
+    if manifest_for_timing is None:
+        raise ValueError("; ".join(manifest_errors))
+    manifest_for_timing["timing"] = timing_trace
+    saved_manifest, manifest_errors = save_import_manifest(
+        manifest_file,
+        manifest_for_timing,
+    )
+    if not saved_manifest:
+        raise ValueError("; ".join(manifest_errors))
 
     return {
         "project_path": str(root),
@@ -3652,6 +3978,7 @@ def import_floorplan_to_model(
         "dynamic_runtime_skill": dynamic_runtime_skill,
         "source_fidelity": source_fidelity,
         "summary": summary,
+        "timing": timing_trace,
     }
 
 
@@ -3684,6 +4011,7 @@ def list_import_sessions(project_path: str | Path) -> list[dict[str, Any]]:
                 "scale": manifest.get("scale", {}),
                 "quality_flags": manifest.get("quality_flags", []),
                 "generated_model": manifest.get("generated_model", {}),
+                "timing": compact_import_timing(manifest.get("timing")),
             }
         )
     return result

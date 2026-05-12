@@ -602,6 +602,35 @@ def test_cli_import_floorplan_summary_and_rescale(tmp_path, capsys):
     assert rescale_output["scale_x"] == 1.5
 
 
+def test_cli_import_floorplan_can_emit_timing_summary(tmp_path, capsys):
+    project = tmp_path / "project"
+    init_project(project, template="empty")
+    source = make_source(tmp_path)
+
+    exit_code = main(
+        [
+            "import-floorplan",
+            str(project),
+            str(source),
+            "--import-id",
+            "import_001",
+            "--timing-summary",
+        ]
+    )
+    output = capsys.readouterr().out
+    manifest = json.loads(
+        (project / "imports" / "import_001" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert exit_code == 0
+    assert "Import timing:" in output
+    assert "- source_registration:" in output
+    assert "agent-side vision/OCR/CAD extraction" in output
+    assert manifest["timing"]["trace_type"] == "import_floorplan"
+
+
 def test_cli_import_floorplan_accepts_source_reference(tmp_path, capsys):
     project = tmp_path / "project"
     init_project(project, template="empty")

@@ -395,10 +395,15 @@ file or an explicit non-file-backed source-reference draft, plus
    generated project-local dynamic import skills when a source interpretation
    or unfiled source reference is used, without promoting those facts into
    shipped runtime skills.
-9. Produce a headless bridge trace for imported walls and hosted opening
+9. Record structured timing metadata in the import manifest. The trace separates
+   deterministic CLI work, external model/vision/CAD/OCR extraction, source
+   interpretation loading, constraint validation, plan execution, live SketchUp
+   execution, and snapshot/report generation so maintainers can identify where
+   latency actually occurred.
+10. Produce a headless bridge trace for imported walls and hosted opening
    operations that create wall pieces, sills, headers, and thin door/window
    markers.
-10. Expose list, summary, rescale, wall-alignment normalization, corner-notch
+11. Expose list, summary, rescale, wall-alignment normalization, corner-notch
    repair, boundary coverage review/repair, review, and repair tools through MCP
    and CLI.
 

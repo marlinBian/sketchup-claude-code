@@ -30,6 +30,7 @@ from mcp_server.tools.project_executor import (
     execute_project_execution_plan,
 )
 from mcp_server.tools.import_pipeline import (
+    format_import_timing_summary,
     get_import_summary,
     import_floorplan_to_model,
     list_import_sessions,
@@ -394,6 +395,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--force",
         action="store_true",
         help="Overwrite the import session and regenerated entities",
+    )
+    import_floorplan_parser.add_argument(
+        "--timing-summary",
+        action="store_true",
+        help="Print a concise timing summary instead of the full JSON result",
     )
 
     import_summary_parser = subparsers.add_parser(
@@ -1015,7 +1021,10 @@ def main(argv: list[str] | None = None) -> int:
                 wall_thickness=args.wall_thickness,
                 overwrite=args.force,
             )
-            print(json.dumps(result, ensure_ascii=False, indent=2))
+            if args.timing_summary:
+                print(format_import_timing_summary(result["timing"]))
+            else:
+                print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
         if args.command == "import-summary":
             result = get_import_summary(

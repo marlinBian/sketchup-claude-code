@@ -1107,11 +1107,25 @@ def test_import_floorplan_to_model_writes_working_truth_and_trace(tmp_path):
     design_model, errors = load_design_model(str(project / "design_model.json"))
     plan = build_project_execution_plan(project)
     validation = validate_project(project)
+    manifest = json.loads(
+        (project / "imports" / "import_001" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
 
     assert errors == []
     assert result["autonomous_first"] is True
     assert result["summary"]["wall_count"] == 4
     assert result["summary"]["opening_count"] == 2
+    assert result["timing"]["trace_type"] == "import_floorplan"
+    assert result["timing"]["budget"]["total_within_budget"] is True
+    assert manifest["timing"]["total_ms"] == result["timing"]["total_ms"]
+    assert "project_state_read" in {
+        phase["name"] for phase in result["timing"]["phases"]
+    }
+    assert "source_preprocessing_or_extraction" in {
+        phase["name"] for phase in result["timing"]["phases"]
+    }
     assert design_model["import_sessions"]["import_001"]["status"] == "imported"
     assert design_model["spaces"]["import_001_space_001"]["footprint"][2] == [
         7200.0,
@@ -3111,6 +3125,7 @@ def test_get_import_summary_reads_manifest_and_model_session(tmp_path):
 
     assert summary["count"] == 1
     assert summary["imports"][0]["import_id"] == "import_001"
+    assert summary["imports"][0]["timing"]["slowest_phase"]["name"]
     assert summary["model_import_sessions"]["import_001"]["status"] == "imported"
 
 
